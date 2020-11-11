@@ -1,5 +1,6 @@
 use err_derive::Error;
 use hyper::StatusCode;
+use hyper::{Body, Response};
 
 use garage_util::error::Error as GarageError;
 
@@ -50,6 +51,12 @@ impl Error {
 			}
 			_ => StatusCode::BAD_REQUEST,
 		}
+	}
+	pub fn into_http_response(&self) -> Response<Body> {
+		let body: Body = Body::from(format!("{}\n", self));
+		let mut http_error = Response::new(body);
+		*http_error.status_mut() = self.http_status_code();
+		http_error
 	}
 }
 

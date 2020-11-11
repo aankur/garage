@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -50,25 +51,18 @@ async fn handler(
 	garage: Arc<Garage>,
 	req: Request<Body>,
 	addr: SocketAddr,
-) -> Result<Response<Body>, GarageError> {
+) -> Result<Response<Body>, Infallible> {
 	info!("{} {} {}", addr, req.method(), req.uri());
 	debug!("{:?}", req);
-	match handler_inner(garage, req).await {
-		Ok(x) => {
-			debug!("{} {:?}", x.status(), x.headers());
-			Ok(x)
-		}
-		Err(e) => {
-			let body: Body = Body::from(format!("{}\n", e));
-			let mut http_error = Response::new(body);
-			*http_error.status_mut() = e.http_status_code();
-			warn!("Response: error {}, {}", e.http_status_code(), e);
-			Ok(http_error)
-		}
-	}
+	let res = controller(garage, req).await;
+	match &res {
+		Ok(x) => debug!("{} {:?}", x.status(), x.headers()),
+		Err(e) => warn!("Response: error {}, {}", e.http_status_code(), e),
+	};
+	res.or_else(|e| Ok(e.into_http_response()))
 }
 
-async fn handler_inner(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, Error> {
+async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, Error> {
 	let path = req.uri().path().to_string();
 	let path = percent_encoding::percent_decode_str(&path).decode_utf8()?;
 
