@@ -1,20 +1,20 @@
+use hyper::{Body, Response};
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use hyper::{Body, Response};
 
-use garage_util::error::Error as GarageError;
+use crate::error::*;
 
 pub trait InfallibleResult {
 	fn make_infallible(self) -> Result<Response<Body>, Infallible>;
 }
 
-impl InfallibleResult for Result<Response<Body>, GarageError> {
+impl InfallibleResult for Result<Response<Body>, Error> {
 	fn make_infallible(self) -> Result<Response<Body>, Infallible> {
 		match self {
 			Ok(x) => {
-			  debug!("{} {:?}", x.status(), x.headers());
+				debug!("{} {:?}", x.status(), x.headers());
 				Ok(x)
-			},
+			}
 			Err(e) => {
 				let body: Body = Body::from(format!("{}\n", e));
 				let mut http_error = Response::new(body);

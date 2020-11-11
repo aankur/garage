@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::convert::Infallible;
 
 use futures::future::Future;
 use hyper::server::conn::AddrStream;
@@ -15,12 +15,12 @@ use garage_model::garage::Garage;
 use crate::error::*;
 use crate::signature::check_signature;
 
+use crate::helpers::*;
 use crate::s3_copy::*;
 use crate::s3_delete::*;
 use crate::s3_get::*;
 use crate::s3_list::*;
 use crate::s3_put::*;
-use crate::helpers::*;
 
 pub async fn run_api_server(
 	garage: Arc<Garage>,
@@ -48,16 +48,18 @@ pub async fn run_api_server(
 	Ok(())
 }
 
-async fn handler(garage: Arc<Garage>, req: Request<Body>, client_addr: SocketAddr) -> Result<Response<Body>, Infallible> {
+async fn handler(
+	garage: Arc<Garage>,
+	req: Request<Body>,
+	client_addr: SocketAddr,
+) -> Result<Response<Body>, Infallible> {
 	info!("{} {} {}", client_addr, req.method(), req.uri());
 	debug!("{:?}", req);
 
-	controller(garage, req)
-		.await
-		.make_infallible()
+	controller(garage, req).await.make_infallible()
 }
 
-async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, GarageError> {
+async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, Error> {
 	let path = req.uri().path().to_string();
 	let path = percent_encoding::percent_decode_str(&path).decode_utf8()?;
 
