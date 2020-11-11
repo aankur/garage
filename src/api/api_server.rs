@@ -8,10 +8,11 @@ use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server};
 
-use garage_util::error::Error;
+use garage_util::error::Error as GarageError;
 
 use garage_model::garage::Garage;
 
+use crate::error::*;
 use crate::signature::check_signature;
 
 use crate::s3_copy::*;
@@ -24,14 +25,14 @@ use crate::helpers::*;
 pub async fn run_api_server(
 	garage: Arc<Garage>,
 	shutdown_signal: impl Future<Output = ()>,
-) -> Result<(), Error> {
+) -> Result<(), GarageError> {
 	let addr = &garage.config.s3_api.api_bind_addr;
 
 	let service = make_service_fn(|conn: &AddrStream| {
 		let garage = garage.clone();
 		let client_addr = conn.remote_addr();
 		async move {
-			Ok::<_, Error>(service_fn(move |req: Request<Body>| {
+			Ok::<_, GarageError>(service_fn(move |req: Request<Body>| {
 				let garage = garage.clone();
 				handler(garage, req, client_addr)
 			}))
@@ -56,7 +57,7 @@ async fn handler(garage: Arc<Garage>, req: Request<Body>, client_addr: SocketAdd
 		.make_infallible()
 }
 
-async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, Error> {
+async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, GarageError> {
 	let path = req.uri().path().to_string();
 	let path = percent_encoding::percent_decode_str(&path).decode_utf8()?;
 
@@ -120,10 +121,7 @@ async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<
 							source_bucket
 						)));
 					}
-					let source_key = match source_key {
-						None => return Err(Error::BadRequest(format!("No source key specified"))),
-						Some(x) => x,
-					};
+					let source_key = source_key.ok_or_bad_request("No source key specified")?;
 					Ok(handle_copy(garage, &bucket, &key, &source_bucket, &source_key).await?)
 				} else {
 					// PutObject query
@@ -194,9 +192,8 @@ async fn controller(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<
 				let max_keys = params
 					.get("max-keys")
 					.map(|x| {
-						x.parse::<usize>().map_err(|e| {
-							Error::BadRequest(format!("Invalid value for max-keys: {}", e))
-						})
+						x.parse::<usize>()
+							.ok_or_bad_request("Invalid value for max-keys")
 					})
 					.unwrap_or(Ok(1000))?;
 				let prefix = params.get("prefix").map(|x| x.as_str()).unwrap_or(&"");
