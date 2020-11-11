@@ -11,3 +11,4 @@ pub mod s3_delete;
 pub mod s3_get;
 pub mod s3_list;
 pub mod s3_put;
+pub mod helpers;
