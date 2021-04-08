@@ -36,8 +36,19 @@ steps:
       branch:
       - nonexistent_skip_this_step
 
+  - name: code quality
+    image: superboum/garage_builder_amd64:4
+    volumes:
+    - name: cargo_home
+      path: /drone/cargo
+    environment:
+      CARGO_HOME: /drone/cargo
+    commands:
+      - cargo fmt -- --check
+      - cargo clippy -- --deny warnings
+
   - name: build
-    image: superboum/garage_builder_amd64:3
+    image: superboum/garage_builder_amd64:4
     volumes:
     - name: cargo_home
       path: /drone/cargo
@@ -45,11 +56,10 @@ steps:
       CARGO_HOME: /drone/cargo
     commands:
       - pwd
-      - cargo fmt -- --check
       - cargo build
 
   - name: cargo-test
-    image: superboum/garage_builder_amd64:3
+    image: superboum/garage_builder_amd64:4
     volumes:
     - name: cargo_home
       path: /drone/cargo
@@ -85,7 +95,7 @@ steps:
       - nonexistent_skip_this_step
 
   - name: smoke-test
-    image: superboum/garage_builder_amd64:3
+    image: superboum/garage_builder_amd64:4
     volumes:
     - name: cargo_home
       path: /drone/cargo
