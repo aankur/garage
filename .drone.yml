@@ -1,12 +1,20 @@
+---
 kind: pipeline
 name: default
 
 workspace:
   base: /drone/garage
 
+volumes:
+- name: cargo_home
+  temp: {}
+
 steps:
   - name: restore-cache
     image: meltwater/drone-cache:dev
+    volumes:
+    - name: cargo_home
+      path: /drone/cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: cache_aws_access_key_id
@@ -20,35 +28,41 @@ steps:
       cache_key: '{{ .Repo.Name }}_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}_gzip'
       region: garage
       mount:
+        - '/drone/cargo'
         - 'target'
-        - '/drone/cargo/registry/index'
-        - '/drone/cargo/registry/cache'
-        - '/drone/cargo/bin'
-        - '/drone/cargo/git/db'
       path_style: true
       endpoint: https://garage.deuxfleurs.fr
+    when:
+      branch:
+      - nonexistent_skip_this_step
 
   - name: build
-    image: rust:buster
+    image: lxpz/garage_builder_amd64:1
+    volumes:
+    - name: cargo_home
+      path: /drone/cargo
     environment:
       CARGO_HOME: /drone/cargo
     commands:
-      - apt-get update
-      - apt-get install --yes libsodium-dev
       - pwd
+      - cargo fmt -- --check
       - cargo build
 
   - name: cargo-test
-    image: rust:buster
+    image: lxpz/garage_builder_amd64:1
+    volumes:
+    - name: cargo_home
+      path: /drone/cargo
     environment:
       CARGO_HOME: /drone/cargo
     commands:
-      - apt-get update
-      - apt-get install --yes libsodium-dev
       - cargo test
 
   - name: rebuild-cache
     image: meltwater/drone-cache:dev
+    volumes:
+    - name: cargo_home
+      path: /drone/cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: cache_aws_access_key_id
@@ -62,22 +76,22 @@ steps:
       cache_key: '{{ .Repo.Name }}_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}_gzip'
       region: garage
       mount:
+        - '/drone/cargo'
         - 'target'
-        - '/drone/cargo/registry/index'
-        - '/drone/cargo/registry/cache'
-        - '/drone/cargo/git/db'
-        - '/drone/cargo/bin'
       path_style: true
       endpoint: https://garage.deuxfleurs.fr
+    when:
+      branch:
+      - nonexistent_skip_this_step
 
   - name: smoke-test
-    image: rust:buster
+    image: lxpz/garage_builder_amd64:1
+    volumes:
+    - name: cargo_home
+      path: /drone/cargo
     environment:
       CARGO_HOME: /drone/cargo
     commands:
-      - apt-get update
-      - apt-get install --yes libsodium-dev awscli python-pip
-      - pip install s3cmd
       - ./script/test-smoke.sh || (cat /tmp/garage.log; false)
 
 ---
@@ -106,8 +120,15 @@ steps:
       endpoint: https://garage.deuxfleurs.fr
       region: garage
     when:
+      event:
+        - push
       branch:
         - main
       repo:
         - Deuxfleurs/garage
 
+---
+kind: signature
+hmac: de82026387bd09e547dbc9cc5d232fd865204b4f393d32508c50b58f8e60611d
+
+...
