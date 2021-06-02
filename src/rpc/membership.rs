@@ -544,10 +544,11 @@ impl System {
 			}
 		}
 
-		if self.replication_factor < max_replication_factor {
-			warn!("Some node have a higher replication factor ({}) than this one ({}). This is not supported and might lead to bugs", 
+		if self.replication_factor < max_replication_factor  {
+			error!("Some node have a higher replication factor ({}) than this one ({}). This is not supported and might lead to bugs", 
 					max_replication_factor,
 					self.replication_factor);
+			std::process::exit(1);
 		}
 		if has_changed {
 			status.recalculate_hash();
