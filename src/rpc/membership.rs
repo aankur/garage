@@ -544,7 +544,7 @@ impl System {
 			}
 		}
 
-		if self.replication_factor < max_replication_factor  {
+		if self.replication_factor < max_replication_factor {
 			error!("Some node have a higher replication factor ({}) than this one ({}). This is not supported and might lead to bugs", 
 					max_replication_factor,
 					self.replication_factor);
