@@ -262,7 +262,7 @@ pub struct RepairOpt {
 	pub all_nodes: bool,
 
 	/// Confirm the launch of the repair operation
-	#[structopt(long = "yes")]
+	#[structopt(short = "y", long = "yes")]
 	pub yes: bool,
 
 	#[structopt(subcommand)]
@@ -285,7 +285,11 @@ pub enum RepairWhat {
 	BlockRefs,
 	/// Verify integrity of all blocks on disc (extremely slow, i/o intensive)
 	#[structopt(name = "blocks_integrity")]
-	BlockIntegrity,
+	BlockIntegrity {
+		/// Limit on i/o speed, in B/s
+		#[structopt(name = "limit")]
+		limit: Option<usize>,
+	},
 }
 
 #[derive(Serialize, Deserialize, StructOpt, Debug, Clone)]

@@ -199,7 +199,7 @@ impl BlockManager {
 				hash
 			);
 			let mut path2 = path.clone();
-			path2.set_extension(".corrupted");
+			path2.set_extension("corrupted");
 			fs::rename(path, path2).await?;
 			self.put_to_resync(&hash, Duration::from_millis(0))?;
 			return Err(Error::CorruptData(*hash));

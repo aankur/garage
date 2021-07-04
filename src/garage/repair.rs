@@ -63,11 +63,11 @@ impl Repair {
 				.await?;
 		}
 
-		if todo(RepairWhat::BlockIntegrity) {
-			info!("Verifyin integrity of stored blocks");
+		if let Some(RepairWhat::BlockIntegrity { limit }) = opt.what {
+			info!("Verifying integrity of stored blocks");
 			self.garage
 				.block_manager
-				.verify_data_store_integrity(&must_exit, None)
+				.verify_data_store_integrity(&must_exit, limit)
 				.await?;
 		}
 
