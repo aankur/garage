@@ -97,7 +97,7 @@ If you encounter a specific bug in Garage or plan to patch it, you may jump dire
 
 We love to talk and hear about Garage, that's why we keep a log here:
 
-  - [(fr, 2021-11-13, video) Garage : Mille et une façons de stocker vos données](https://video.tedomum.net/w/moYKcv198dyMrT8hCS5jz9) - during [RFID#1](https://rfid.deuxfleurs.fr/programme/2021-11-13/)
+  - [(fr, 2021-11-13, video) Garage : Mille et une façons de stocker vos données](https://video.tedomum.net/w/moYKcv198dyMrT8hCS5jz9) and [slides (html)](https://rfid.deuxfleurs.fr/presentations/2021-11-13/garage/) - during [RFID#1](https://rfid.deuxfleurs.fr/programme/2021-11-13/) event
 
   - [(en, 2021-04-28, pdf) Distributed object storage is centralised](https://git.deuxfleurs.fr/Deuxfleurs/garage/raw/commit/b1f60579a13d3c5eba7f74b1775c84639ea9b51a/doc/talks/2021-04-28_spirals-team/talk.pdf)
 
