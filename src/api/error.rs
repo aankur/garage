@@ -90,6 +90,7 @@ impl Error {
 			Error::InternalError(_) | Error::Hyper(_) | Error::Http(_) => {
 				StatusCode::INTERNAL_SERVER_ERROR
 			}
+			Error::InvalidRange(_) => StatusCode::RANGE_NOT_SATISFIABLE,
 			_ => StatusCode::BAD_REQUEST,
 		}
 	}
