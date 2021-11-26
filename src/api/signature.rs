@@ -97,13 +97,13 @@ pub async fn check_signature(
 
 	let content_sha256 = if authorization.content_sha256 == "UNSIGNED-PAYLOAD" {
 		None
+	} else if authorization.content_sha256 == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" {
+		let bytes = hex::decode(authorization.signature).ok_or_bad_request("Invalid signature")?;
+		Some(Hash::try_from(&bytes).ok_or_bad_request("Invalid signature")?)
 	} else {
 		let bytes = hex::decode(authorization.content_sha256)
 			.ok_or_bad_request("Invalid content sha256 hash")?;
-		Some(
-			Hash::try_from(&bytes[..])
-				.ok_or_else(|| Error::BadRequest("Invalid content sha256 hash".to_string()))?,
-		)
+		Some(Hash::try_from(&bytes).ok_or_bad_request("Invalid content sha256 hash")?)
 	};
 
 	Ok((key, content_sha256))

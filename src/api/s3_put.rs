@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, VecDeque};
+use std::pin::Pin;
 use std::sync::Arc;
 
-use futures::prelude::*;
+use futures::task;
+use futures::{prelude::*, TryFutureExt};
 use hyper::body::{Body, Bytes};
 use hyper::{Request, Response};
 use md5::{digest::generic_array::*, Digest as Md5Digest, Md5};
@@ -27,7 +29,7 @@ pub async fn handle_put(
 	req: Request<Body>,
 	bucket_id: Uuid,
 	key: &str,
-	content_sha256: Option<Hash>,
+	mut content_sha256: Option<Hash>,
 ) -> Result<Response<Body>, Error> {
 	// Generate identity of new version
 	let version_uuid = gen_uuid();
@@ -41,9 +43,23 @@ pub async fn handle_put(
 		Some(x) => Some(x.to_str()?.to_string()),
 		None => None,
 	};
+	let payload_seed_signature = match req.headers().get("x-amz-content-sha256") {
+		Some(header) if header == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" => {
+			let content_sha256 = content_sha256
+				.take()
+				.ok_or_bad_request("No signature provided")?;
+			Some(content_sha256)
+		}
+		_ => None,
+	};
 
 	// Parse body of uploaded file
 	let body = req.into_body();
+
+	let body = match payload_seed_signature {
+		Some(_) => SignedPayloadChunker::new(body).map_err(Error::from).boxed(),
+		None => body.map_err(Error::from).boxed(),
+	};
 
 	let mut chunker = StreamChunker::new(body, garage.config.block_size);
 	let first_block = chunker.next().await?.unwrap_or_default();
@@ -179,7 +195,7 @@ fn ensure_checksum_matches(
 	Ok(())
 }
 
-async fn read_and_put_blocks<E: Into<GarageError>, S: Stream<Item = Result<Bytes, E>> + Unpin>(
+async fn read_and_put_blocks<E: Into<Error>, S: Stream<Item = Result<Bytes, E>> + Unpin>(
 	garage: &Garage,
 	version: &Version,
 	part_number: u64,
@@ -207,9 +223,9 @@ async fn read_and_put_blocks<E: Into<GarageError>, S: Stream<Item = Result<Bytes
 
 	loop {
 		let (_, _, next_block) = futures::try_join!(
-			put_curr_block,
-			put_curr_version_block,
-			chunker.next().map_err(Into::into),
+			put_curr_block.map_err(Into::into),
+			put_curr_version_block.map_err(Into::into),
+			chunker.next().map_err(Into::into)
 		)?;
 		if let Some(block) = next_block {
 			md5hasher.update(&block[..]);
@@ -270,6 +286,152 @@ async fn put_block_meta(
 	Ok(())
 }
 
+mod payload {
+	#[derive(Debug)]
+	pub struct Header {
+		pub size: usize,
+		pub signature: Box<[u8]>,
+	}
+
+	impl Header {
+		pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Self> {
+			use nom::bytes::complete::tag;
+			use nom::character::complete::hex_digit1;
+			use nom::combinator::map_res;
+			use nom::number::complete::hex_u32;
+
+			let (input, size) = hex_u32(input)?;
+			let (input, _) = tag(";")(input)?;
+
+			let (input, _) = tag("chunk-signature=")(input)?;
+			let (input, data) = map_res(hex_digit1, hex::decode)(input)?;
+
+			let (input, _) = tag("\r\n")(input)?;
+
+			let header = Header {
+				size: size as usize,
+				signature: data.into_boxed_slice(),
+			};
+
+			Ok((input, header))
+		}
+	}
+}
+
+enum SignedPayloadChunkerError<StreamE> {
+	Stream(StreamE),
+	Message(String),
+}
+
+impl<StreamE> From<SignedPayloadChunkerError<StreamE>> for Error
+where
+	StreamE: Into<Error>,
+{
+	fn from(err: SignedPayloadChunkerError<StreamE>) -> Self {
+		match err {
+			SignedPayloadChunkerError::Stream(e) => e.into(),
+			SignedPayloadChunkerError::Message(e) => {
+				Error::BadRequest(format!("Chunk format error: {}", e))
+			}
+		}
+	}
+}
+
+impl<E, I> From<nom::error::Error<I>> for SignedPayloadChunkerError<E> {
+	fn from(err: nom::error::Error<I>) -> Self {
+		Self::Message(err.code.description().into())
+	}
+}
+
+#[pin_project::pin_project]
+struct SignedPayloadChunker<S, E>
+where
+	S: Stream<Item = Result<Bytes, E>>,
+{
+	#[pin]
+	stream: S,
+	buf: bytes::BytesMut,
+}
+
+impl<S, E> SignedPayloadChunker<S, E>
+where
+	S: Stream<Item = Result<Bytes, E>>,
+{
+	fn new(stream: S) -> Self {
+		Self {
+			stream,
+			buf: bytes::BytesMut::new(),
+		}
+	}
+}
+
+impl<S, E> Stream for SignedPayloadChunker<S, E>
+where
+	S: Stream<Item = Result<Bytes, E>> + Unpin,
+{
+	type Item = Result<Bytes, SignedPayloadChunkerError<E>>;
+
+	fn poll_next(
+		self: Pin<&mut Self>,
+		cx: &mut task::Context<'_>,
+	) -> task::Poll<Option<Self::Item>> {
+		use std::task::Poll;
+
+		use nom::bytes::complete::{tag, take};
+
+		let mut this = self.project();
+
+		macro_rules! parse_try {
+			($expr:expr) => {
+				match $expr {
+					Ok(value) => value,
+					Err(nom::Err::Incomplete(_)) => continue,
+					Err(nom::Err::Error(e @ nom::error::Error { .. }))
+					| Err(nom::Err::Failure(e)) => return Poll::Ready(Some(Err(e.into()))),
+				}
+			};
+		}
+
+		loop {
+			match futures::ready!(this.stream.as_mut().poll_next(cx)) {
+				Some(Ok(bytes)) => {
+					this.buf.extend(bytes);
+				}
+				Some(Err(e)) => {
+					return Poll::Ready(Some(Err(SignedPayloadChunkerError::Stream(e))))
+				}
+				None => {
+					if this.buf.is_empty() {
+						return Poll::Ready(None);
+					}
+				}
+			}
+
+			let input: &[u8] = this.buf;
+
+			let (input, header) = parse_try!(payload::Header::parse(input));
+
+			// 0-sized chunk is the last
+			if header.size == 0 {
+				this.buf.clear();
+				return Poll::Ready(None);
+			}
+
+			let (input, data) = parse_try!(take(header.size)(input));
+			let (input, _) = parse_try!(tag("\r\n")(input));
+
+			let data = Bytes::from(data.to_vec());
+
+			*this.buf = input.into();
+			return Poll::Ready(Some(Ok(data)));
+		}
+	}
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		self.stream.size_hint()
+	}
+}
+
 struct StreamChunker<S: Stream<Item = Result<Bytes, E>>, E> {
 	stream: S,
 	read_all: bool,
@@ -292,7 +454,7 @@ impl<S: Stream<Item = Result<Bytes, E>> + Unpin, E> StreamChunker<S, E> {
 			if let Some(block) = self.stream.next().await {
 				let bytes = block?;
 				trace!("Body next: {} bytes", bytes.len());
-				self.buf.extend(&bytes[..]);
+				self.buf.extend(bytes);
 			} else {
 				self.read_all = true;
 			}
