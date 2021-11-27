@@ -156,7 +156,8 @@ pub async fn handle_get(
 	let range = match req.headers().get("range") {
 		Some(range) => {
 			let range_str = range.to_str()?;
-			let mut ranges = http_range::HttpRange::parse(range_str, last_v_meta.size)?;
+			let mut ranges = http_range::HttpRange::parse(range_str, last_v_meta.size)
+				.map_err(|e| (e, last_v_meta.size))?;
 			if ranges.len() > 1 {
 				// garage does not support multi-range requests yet, so we respond with the entire
 				// object when multiple ranges are requested
