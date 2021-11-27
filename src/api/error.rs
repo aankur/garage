@@ -134,6 +134,7 @@ impl Error {
 
 	pub fn add_headers(&self, header_map: &mut HeaderMap<HeaderValue>) {
 		use hyper::header;
+		#[allow(clippy::single_match)]
 		match self {
 			Error::InvalidRange((_, len)) => {
 				header_map.append(
