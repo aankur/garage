@@ -3,7 +3,7 @@ use crate::error::{Error, OkOrBadRequest};
 use std::borrow::Cow;
 
 use hyper::header::HeaderValue;
-use hyper::{HeaderMap, Method, Uri};
+use hyper::{HeaderMap, Method, Request};
 
 macro_rules! s3_match {
     (@extract $enum:expr , $param:ident, [ $($endpoint:ident,)* ]) => {{
@@ -16,8 +16,8 @@ macro_rules! s3_match {
         }
     }};
     (@gen_parser ($keyword:expr, $key:expr, $bucket:expr, $query:expr, $header:expr),
-        key: [$($kw_k:ident $(if $required_k:ident)? $(header $header_k:expr)? => $api_k:ident $(($($conv_k:ident :: $what_k:ident),*))?,)*],
-        no_key: [$($kw_nk:ident $(if $required_nk:ident)? $(if_header $header_nk:expr)? => $api_nk:ident $(($($conv_nk:ident :: $what_nk:ident),*))?,)*]) => {{
+        key: [$($kw_k:ident $(if $required_k:ident)? $(header $header_k:expr)? => $api_k:ident $(($($conv_k:ident :: $param_k:ident),*))?,)*],
+        no_key: [$($kw_nk:ident $(if $required_nk:ident)? $(if_header $header_nk:expr)? => $api_nk:ident $(($($conv_nk:ident :: $param_nk:ident),*))?,)*]) => {{
         use Endpoint::*;
         use keywords::*;
         match ($keyword, !$key.is_empty()){
@@ -26,7 +26,7 @@ macro_rules! s3_match {
                 bucket: $bucket,
                 key: $key,
                 $($(
-                    $what_k: s3_match!(@@parse_param $query, $conv_k, $what_k),
+                    $param_k: s3_match!(@@parse_param $query, $conv_k, $param_k),
                 )*)?
             }),
             )*
@@ -34,11 +34,11 @@ macro_rules! s3_match {
             ($kw_nk, false) $(if $query.$required_nk.is_some())? $(if $header.contains($header_nk))? => Ok($api_nk {
                 bucket: $bucket,
                 $($(
-                    $what_nk: s3_match!(@@parse_param $query, $conv_nk, $what_nk),
+                    $param_nk: s3_match!(@@parse_param $query, $conv_nk, $param_nk),
                 )*)?
             }),
             )*
-			_ => Err(Error::BadRequest("Invalid endpoint".to_string())),
+			_ => Err(Error::BadRequest("Invalid endpoint".to_owned())),
         }
     }};
 
@@ -46,24 +46,24 @@ macro_rules! s3_match {
 		$query.$param.take().map(|param| param.into_owned())
     }};
     (@@parse_param $query:expr, query, $param:ident) => {{
-        $query.$param.take().ok_or_bad_request("Invalid endpoint")?.into_owned()
+        $query.$param.take().ok_or_bad_request("Missing argument for endpoint")?.into_owned()
     }};
     (@@parse_param $query:expr, opt_parse, $param:ident) => {{
 		$query.$param
             .take()
             .map(|param| param.parse())
             .transpose()
-            .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_string()))?
+            .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_owned()))?
     }};
     (@@parse_param $query:expr, parse, $param:ident) => {{
-        $query.$param.take().ok_or_bad_request("Invalid endpoint")?
+        $query.$param.take().ok_or_bad_request("Missing argument for endpoint")?
             .parse()
-            .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_string()))?
+            .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_owned()))?
     }};
 }
 
 /// List of all S3 API endpoints.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Endpoint {
 	AbortMultipartUpload {
 		bucket: String,
@@ -214,7 +214,7 @@ pub enum Endpoint {
 	GetObject {
 		bucket: String,
 		key: String,
-		part_number: Option<u16>,
+		part_number: Option<u64>,
 		version_id: Option<String>,
 	},
 	GetObjectAcl {
@@ -253,7 +253,7 @@ pub enum Endpoint {
 	HeadObject {
 		bucket: String,
 		key: String,
-		part_number: Option<u16>,
+		part_number: Option<u64>,
 		version_id: Option<String>,
 	},
 	ListBucketAnalyticsConfigurations {
@@ -278,7 +278,7 @@ pub enum Endpoint {
 		delimiter: Option<char>,
 		encoding_type: Option<String>,
 		key_marker: Option<String>,
-		max_uploads: Option<u16>,
+		max_uploads: Option<u64>,
 		prefix: Option<String>,
 		upload_id_marker: Option<String>,
 	},
@@ -287,7 +287,7 @@ pub enum Endpoint {
 		delimiter: Option<char>,
 		encoding_type: Option<String>,
 		marker: Option<String>,
-		max_keys: Option<u16>,
+		max_keys: Option<usize>,
 		prefix: Option<String>,
 	},
 	ListObjectsV2 {
@@ -297,7 +297,7 @@ pub enum Endpoint {
 		delimiter: Option<char>,
 		encoding_type: Option<String>,
 		fetch_owner: Option<bool>,
-		max_keys: Option<u16>,
+		max_keys: Option<usize>,
 		prefix: Option<String>,
 		start_after: Option<String>,
 	},
@@ -306,15 +306,15 @@ pub enum Endpoint {
 		delimiter: Option<char>,
 		encoding_type: Option<String>,
 		key_marker: Option<String>,
-		max_keys: Option<u16>,
+		max_keys: Option<u64>,
 		prefix: Option<String>,
 		version_id_marker: Option<String>,
 	},
 	ListParts {
 		bucket: String,
 		key: String,
-		max_parts: Option<u16>,
-		part_number_marker: Option<u16>,
+		max_parts: Option<u64>,
+		part_number_marker: Option<u64>,
 		upload_id: String,
 	},
 	PutBucketAccelerateConfiguration {
@@ -418,56 +418,52 @@ pub enum Endpoint {
 	UploadPart {
 		bucket: String,
 		key: String,
-		part_number: u16,
+		part_number: u64,
 		upload_id: String,
 	},
 	UploadPartCopy {
 		bucket: String,
 		key: String,
-		part_number: u16,
+		part_number: u64,
 		upload_id: String,
 	},
 }
 
 impl Endpoint {
-	pub fn from_request(
-		bucket: Option<String>,
-		uri: &Uri,
-		method: &Method,
-		headers: &HeaderMap<HeaderValue>,
-	) -> Result<Self, Error> {
+	pub fn from_request<T>(req: &Request<T>, bucket: Option<String>) -> Result<Self, Error> {
+		let uri = req.uri();
 		let path = uri.path().trim_start_matches('/');
 		let query = uri.query();
 		if bucket.is_none() && path.is_empty() {
 			if query.is_none() {
 				return Ok(Self::ListBuckets);
 			} else {
-				return Err(Error::BadRequest("Invalid endpoint".to_string()));
+				return Err(Error::BadRequest("Invalid ListBuckets query".to_owned()));
 			}
 		}
 
 		let (bucket, key) = if let Some(bucket) = bucket {
-			(bucket, path.to_string())
+			(bucket, path.to_owned())
 		} else {
 			path.split_once('/')
-				.map(|(b, p)| (b.to_string(), p.trim_start_matches('/').to_string()))
-				.unwrap_or((path.to_string(), String::new()))
+				.map(|(b, p)| (b.to_owned(), p.trim_start_matches('/').to_owned()))
+				.unwrap_or((path.to_owned(), String::new()))
 		};
 
 		let mut query = QueryParameters::from_query(query.unwrap_or_default())?;
 
-		let res = match method {
-			&Method::GET => Self::from_get(bucket, key, &mut query)?,
-            &Method::HEAD => Self::from_head(bucket, key, &mut query)?,
-			&Method::POST => Self::from_post(bucket, key, &mut query)?,
-			&Method::PUT => Self::from_put(bucket, key, &mut query, headers)?,
-			&Method::DELETE => Self::from_delete(bucket, key, &mut query)?,
-			_ => return Err(Error::BadRequest("Invalid endpoint".to_string())),
+		let res = match *req.method() {
+			Method::GET => Self::from_get(bucket, key, &mut query)?,
+			Method::HEAD => Self::from_head(bucket, key, &mut query)?,
+			Method::POST => Self::from_post(bucket, key, &mut query)?,
+			Method::PUT => Self::from_put(bucket, key, &mut query, req.headers())?,
+			Method::DELETE => Self::from_delete(bucket, key, &mut query)?,
+			_ => return Err(Error::BadRequest("Unknown method".to_owned())),
 		};
 
 		if let Some(message) = query.nonempty_message() {
 			// maybe this should just be a warn! ?
-			Err(Error::BadRequest(message.to_string()))
+			Err(Error::BadRequest(message.to_owned()))
 		} else {
 			Ok(res)
 		}
@@ -542,11 +538,11 @@ impl Endpoint {
 			@gen_parser
 			(query.keyword.take().unwrap_or_default().as_ref(), key, bucket, query, None),
 			key: [
-                EMPTY => HeadObject(opt_parse::part_number, query_opt::version_id),
+				EMPTY => HeadObject(opt_parse::part_number, query_opt::version_id),
 			],
 			no_key: [
 				EMPTY => HeadBucket,
-            ]
+			]
 		}
 	}
 
@@ -565,8 +561,8 @@ impl Endpoint {
 				UPLOADS => CreateMultipartUpload,
 			],
 			no_key: [
-                DELETE => DeleteObjects,
-            ]
+				DELETE => DeleteObjects,
+			]
 		}
 	}
 
@@ -574,45 +570,45 @@ impl Endpoint {
 		bucket: String,
 		key: String,
 		query: &mut QueryParameters<'_>,
-        headers: &HeaderMap<HeaderValue>,
+		headers: &HeaderMap<HeaderValue>,
 	) -> Result<Self, Error> {
 		s3_match! {
 			@gen_parser
 			(query.keyword.take().unwrap_or_default().as_ref(), key, bucket, query, headers),
 			key: [
-                EMPTY if part_number header "x-amz-copy-source" => UploadPartCopy (parse::part_number, query::upload_id),
+				EMPTY if part_number header "x-amz-copy-source" => UploadPartCopy (parse::part_number, query::upload_id),
 				EMPTY header "x-amz-copy-source" => CopyObject,
-                EMPTY if part_number => UploadPart (parse::part_number, query::upload_id),
+				EMPTY if part_number => UploadPart (parse::part_number, query::upload_id),
 				EMPTY => PutObject,
-                ACL => PutObjectAcl (query_opt::version_id),
-                LEGAL_HOLD => PutObjectLegalHold (query_opt::version_id),
-                RETENTION => PutObjectRetention (query_opt::version_id),
-                TAGGING => PutObjectTagging (query_opt::version_id),
+				ACL => PutObjectAcl (query_opt::version_id),
+				LEGAL_HOLD => PutObjectLegalHold (query_opt::version_id),
+				RETENTION => PutObjectRetention (query_opt::version_id),
+				TAGGING => PutObjectTagging (query_opt::version_id),
 
 			],
 			no_key: [
-                EMPTY => CreateBucket,
-                ACCELERATE => PutBucketAccelerateConfiguration,
-                ACL => PutBucketAcl,
-                ANALYTICS => PutBucketAnalyticsConfiguration (query::id),
-                CORS => PutBucketCors,
-                ENCRYPTION => PutBucketEncryption,
-                INTELLIGENT_TIERING => PutBucketIntelligentTieringConfiguration(query::id),
-                INVENTORY => PutBucketInventoryConfiguration(query::id),
-                LIFECYCLE => PutBucketLifecycleConfiguration,
-                LOGGING => PutBucketLogging,
-                METRICS => PutBucketMetricsConfiguration(query::id),
-                NOTIFICATION => PutBucketNotificationConfiguration,
-                OBJECT_LOCK => PutObjectLockConfiguration,
-                OWNERSHIP_CONTROLS => PutBucketOwnershipControls,
-                POLICY => PutBucketPolicy,
-                PUBLIC_ACCESS_BLOCK => PutPublicAccessBlock,
-                REPLICATION => PutBucketReplication,
-                REQUEST_PAYMENT => PutBucketRequestPayment,
-                TAGGING => PutBucketTagging,
-                VERSIONING => PutBucketVersioning,
-                WEBSITE => PutBucketWebsite,
-            ]
+				EMPTY => CreateBucket,
+				ACCELERATE => PutBucketAccelerateConfiguration,
+				ACL => PutBucketAcl,
+				ANALYTICS => PutBucketAnalyticsConfiguration (query::id),
+				CORS => PutBucketCors,
+				ENCRYPTION => PutBucketEncryption,
+				INTELLIGENT_TIERING => PutBucketIntelligentTieringConfiguration(query::id),
+				INVENTORY => PutBucketInventoryConfiguration(query::id),
+				LIFECYCLE => PutBucketLifecycleConfiguration,
+				LOGGING => PutBucketLogging,
+				METRICS => PutBucketMetricsConfiguration(query::id),
+				NOTIFICATION => PutBucketNotificationConfiguration,
+				OBJECT_LOCK => PutObjectLockConfiguration,
+				OWNERSHIP_CONTROLS => PutBucketOwnershipControls,
+				POLICY => PutBucketPolicy,
+				PUBLIC_ACCESS_BLOCK => PutPublicAccessBlock,
+				REPLICATION => PutBucketReplication,
+				REQUEST_PAYMENT => PutBucketRequestPayment,
+				TAGGING => PutBucketTagging,
+				VERSIONING => PutBucketVersioning,
+				WEBSITE => PutBucketWebsite,
+			]
 		}
 	}
 
@@ -748,6 +744,7 @@ impl Endpoint {
 		}
 	}
 
+	#[allow(dead_code)]
 	pub fn get_key(&self) -> Option<&str> {
 		s3_match! {
 			@extract
@@ -780,6 +777,73 @@ impl Endpoint {
 			]
 		}
 	}
+
+	pub fn authorization_type(&self) -> Authorization<'_> {
+		let bucket = if let Some(bucket) = self.get_bucket() {
+			bucket
+		} else {
+			return Authorization::None;
+		};
+		let readonly = s3_match! {
+			@extract
+			self,
+			bucket,
+			[
+				GetBucketAccelerateConfiguration,
+				GetBucketAcl,
+				GetBucketAnalyticsConfiguration,
+				GetBucketCors,
+				GetBucketEncryption,
+				GetBucketIntelligentTieringConfiguration,
+				GetBucketInventoryConfiguration,
+				GetBucketLifecycleConfiguration,
+				GetBucketLocation,
+				GetBucketLogging,
+				GetBucketMetricsConfiguration,
+				GetBucketNotificationConfiguration,
+				GetBucketOwnershipControls,
+				GetBucketPolicy,
+				GetBucketPolicyStatus,
+				GetBucketReplication,
+				GetBucketRequestPayment,
+				GetBucketTagging,
+				GetBucketVersioning,
+				GetBucketWebsite,
+				GetObject,
+				GetObjectAcl,
+				GetObjectLegalHold,
+				GetObjectLockConfiguration,
+				GetObjectRetention,
+				GetObjectTagging,
+				GetObjectTorrent,
+				GetPublicAccessBlock,
+				HeadBucket,
+				HeadObject,
+				ListBucketAnalyticsConfigurations,
+				ListBucketIntelligentTieringConfigurations,
+				ListBucketInventoryConfigurations,
+				ListBucketMetricsConfigurations,
+				ListMultipartUploads,
+				ListObjects,
+				ListObjectsV2,
+				ListObjectVersions,
+				ListParts,
+				SelectObjectContent,
+			]
+		}
+		.is_some();
+		if readonly {
+			Authorization::Read(bucket)
+		} else {
+			Authorization::Write(bucket)
+		}
+	}
+}
+
+pub enum Authorization<'a> {
+	None,
+	Read(&'a str),
+	Write(&'a str),
 }
 
 macro_rules! generateQueryParameters {
@@ -797,19 +861,18 @@ macro_rules! generateQueryParameters {
             fn from_query(query: &'a str) -> Result<Self, Error> {
                 let mut res: Self = Default::default();
                 for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
-                    if v.as_ref().is_empty() {
-                        if res.keyword.replace(k).is_some() {
-                            return Err(Error::BadRequest("Multiple keywords".to_string()));
-                        }
-                        continue;
-                    }
                     let repeated = match k.as_ref() {
                         $(
-                            $rest => res.$name.replace(v).is_none(),
+                            $rest => res.$name.replace(v).is_some(),
                         )*
                         _ => {
                             if k.starts_with("response-") {
-                                true
+                                false
+                            } else if v.as_ref().is_empty() {
+                                if res.keyword.replace(k).is_some() {
+                                    return Err(Error::BadRequest("Multiple keywords".to_owned()));
+                                }
+                                continue;
                             } else {
                                 return Err(Error::BadRequest(format!(
                                     "Unknown query parameter '{}'",
@@ -873,7 +936,7 @@ mod keywords {
 	pub const ACL: &str = "acl";
 	pub const ANALYTICS: &str = "analytics";
 	pub const CORS: &str = "cors";
-    pub const DELETE: &str = "delete";
+	pub const DELETE: &str = "delete";
 	pub const ENCRYPTION: &str = "encryption";
 	pub const INTELLIGENT_TIERING: &str = "intelligent-tiering";
 	pub const INVENTORY: &str = "inventory";
