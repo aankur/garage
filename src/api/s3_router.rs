@@ -38,7 +38,7 @@ macro_rules! s3_match {
                 )*)?
             }),
             )*
-			_ => Err(Error::BadRequest("Invalid endpoint".to_owned())),
+            (kw, _) => Err(Error::BadRequest(format!("Invalid endpoint: {}", kw)))
         }
     }};
 
@@ -443,12 +443,16 @@ impl Endpoint {
 		}
 
 		let (bucket, key) = if let Some(bucket) = bucket {
-			(bucket, path.to_owned())
+			(bucket, path)
 		} else {
 			path.split_once('/')
-				.map(|(b, p)| (b.to_owned(), p.trim_start_matches('/').to_owned()))
-				.unwrap_or((path.to_owned(), String::new()))
+				.map(|(b, p)| (b.to_owned(), p.trim_start_matches('/')))
+				.unwrap_or((path.to_owned(), ""))
 		};
+
+		let key = percent_encoding::percent_decode_str(key)
+			.decode_utf8()?
+			.into_owned();
 
 		let mut query = QueryParameters::from_query(query.unwrap_or_default())?;
 
@@ -863,10 +867,14 @@ macro_rules! generateQueryParameters {
                 for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
                     let repeated = match k.as_ref() {
                         $(
-                            $rest => res.$name.replace(v).is_some(),
+                            $rest => if !v.is_empty() {
+                                res.$name.replace(v).is_some()
+                            } else {
+                                false
+                            },
                         )*
                         _ => {
-                            if k.starts_with("response-") {
+                            if k.starts_with("response-") || k.starts_with("X-Amz-") {
                                 false
                             } else if v.as_ref().is_empty() {
                                 if res.keyword.replace(k).is_some() {
