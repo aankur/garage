@@ -5,8 +5,12 @@ use std::borrow::Cow;
 use hyper::header::HeaderValue;
 use hyper::{HeaderMap, Method, Request};
 
+/// This macro is used to generate very repetitive match {} blocks in this module
+/// It is _not_ made to be used anywhere else
 macro_rules! s3_match {
     (@extract $enum:expr , $param:ident, [ $($endpoint:ident,)* ]) => {{
+        // usage: s3_match {@extract my_enum, field_name, [ VariantWithField1, VariantWithField2 ..] }
+        // returns Some(field_value), or None if the variant was not one of the listed variants.
         use Endpoint::*;
         match $enum {
             $(
@@ -18,6 +22,17 @@ macro_rules! s3_match {
     (@gen_parser ($keyword:expr, $key:expr, $bucket:expr, $query:expr, $header:expr),
         key: [$($kw_k:ident $(if $required_k:ident)? $(header $header_k:expr)? => $api_k:ident $(($($conv_k:ident :: $param_k:ident),*))?,)*],
         no_key: [$($kw_nk:ident $(if $required_nk:ident)? $(if_header $header_nk:expr)? => $api_nk:ident $(($($conv_nk:ident :: $param_nk:ident),*))?,)*]) => {{
+        // usage: s3_match {@gen_parser (keyword, key, bucket, query, header),
+        //   key: [
+        //      SOME_KEYWORD => VariantWithKey,
+        //      ...
+        //   ],
+        //   no_key: [
+        //      SOME_KEYWORD => VariantWithoutKey,
+        //      ...
+        //   ]
+        // }
+        // See in from_{method} for more detailed usage.
         use Endpoint::*;
         use keywords::*;
         match ($keyword, !$key.is_empty()){
@@ -43,12 +58,16 @@ macro_rules! s3_match {
     }};
 
     (@@parse_param $query:expr, query_opt, $param:ident) => {{
+        // extract optional query parameter
 		$query.$param.take().map(|param| param.into_owned())
     }};
     (@@parse_param $query:expr, query, $param:ident) => {{
+        // extract mendatory query parameter
         $query.$param.take().ok_or_bad_request("Missing argument for endpoint")?.into_owned()
     }};
     (@@parse_param $query:expr, opt_parse, $param:ident) => {{
+        // extract and parse optional query parameter
+        // missing parameter is file, however parse error is reported as an error
 		$query.$param
             .take()
             .map(|param| param.parse())
@@ -56,6 +75,8 @@ macro_rules! s3_match {
             .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_owned()))?
     }};
     (@@parse_param $query:expr, parse, $param:ident) => {{
+        // extract and parse mandatory query parameter
+        // both missing and un-parseable parameters are reported as errors
         $query.$param.take().ok_or_bad_request("Missing argument for endpoint")?
             .parse()
             .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_owned()))?
@@ -63,6 +84,11 @@ macro_rules! s3_match {
 }
 
 /// List of all S3 API endpoints.
+///
+/// For each endpoint, it contains the parameters this endpoint receive by url (bucket, key and
+/// query parameters). Parameters it may receive by header are left out, however headers are
+/// considered when required to determine between one endpoint or another (for CopyObject and
+/// UploadObject, for instance).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Endpoint {
 	AbortMultipartUpload {
@@ -209,8 +235,8 @@ pub enum Endpoint {
 	GetBucketWebsite {
 		bucket: String,
 	},
-	// There are actually many more query parameters, used to add headers to the answer. They were
-	// not added here as they are best handled in a dedicated route.
+	/// There are actually many more query parameters, used to add headers to the answer. They were
+	/// not added here as they are best handled in a dedicated route.
 	GetObject {
 		bucket: String,
 		key: String,
@@ -292,7 +318,8 @@ pub enum Endpoint {
 	},
 	ListObjectsV2 {
 		bucket: String,
-		list_type: String, // must be 2
+		/// This value should always be 2. It is not checked when constructing the struct
+		list_type: String,
 		continuation_token: Option<String>,
 		delimiter: Option<char>,
 		encoding_type: Option<String>,
@@ -413,7 +440,8 @@ pub enum Endpoint {
 	SelectObjectContent {
 		bucket: String,
 		key: String,
-		select_type: String, // should always be 2
+		/// This value should always be 2. It is not checked when constructing the struct
+		select_type: String,
 	},
 	UploadPart {
 		bucket: String,
@@ -430,6 +458,8 @@ pub enum Endpoint {
 }
 
 impl Endpoint {
+	/// Determine which S3 endpoint a request is for using the request, and a bucket which was
+	/// possibly extracted from the Host header.
 	pub fn from_request<T>(req: &Request<T>, bucket: Option<String>) -> Result<Self, Error> {
 		let uri = req.uri();
 		let path = uri.path().trim_start_matches('/');
@@ -473,6 +503,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Determine which endpoint a request is for, knowing it is a GET.
 	fn from_get(
 		bucket: String,
 		key: String,
@@ -533,6 +564,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Determine which endpoint a request is for, knowing it is a HEAD.
 	fn from_head(
 		bucket: String,
 		key: String,
@@ -550,6 +582,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Determine which endpoint a request is for, knowing it is a POST.
 	fn from_post(
 		bucket: String,
 		key: String,
@@ -570,6 +603,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Determine which endpoint a request is for, knowing it is a PUT.
 	fn from_put(
 		bucket: String,
 		key: String,
@@ -616,6 +650,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Determine which endpoint a request is for, knowing it is a DELETE.
 	fn from_delete(
 		bucket: String,
 		key: String,
@@ -648,6 +683,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Get the bucket the request target. Returns None for requests not related to a bucket.
 	pub fn get_bucket(&self) -> Option<&str> {
 		s3_match! {
 			@extract
@@ -748,6 +784,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Get the key the request target. Returns None for requests which don't use a key.
 	#[allow(dead_code)]
 	pub fn get_key(&self) -> Option<&str> {
 		s3_match! {
@@ -782,6 +819,7 @@ impl Endpoint {
 		}
 	}
 
+	/// Get the kind of authorization which is required to perform the operation.
 	pub fn authorization_type(&self) -> Authorization<'_> {
 		let bucket = if let Some(bucket) = self.get_bucket() {
 			bucket
@@ -844,15 +882,23 @@ impl Endpoint {
 	}
 }
 
+/// What kind of authorization is required to perform a given action
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authorization<'a> {
+	/// No authorization is required
 	None,
+	/// Having Read permission on bucket .0 is required
 	Read(&'a str),
+	/// Having Write permission on bucket .0 is required
 	Write(&'a str),
 }
 
+/// This macro is used to generate part of the code in this module. It must be called only one, and
+/// is useless outside of this module.
 macro_rules! generateQueryParameters {
     ( $($rest:expr => $name:ident),* ) => {
-        #[allow(non_snake_case)]
+        /// Struct containing all query parameters used in endpoints. Think of it as an HashMap,
+        /// but with keys statically known.
         #[derive(Debug, Default)]
         struct QueryParameters<'a> {
             keyword: Option<Cow<'a, str>>,
@@ -862,6 +908,7 @@ macro_rules! generateQueryParameters {
         }
 
         impl<'a> QueryParameters<'a> {
+            /// Build this struct from the query part of an URI.
             fn from_query(query: &'a str) -> Result<Self, Error> {
                 let mut res: Self = Default::default();
                 for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
@@ -899,6 +946,8 @@ macro_rules! generateQueryParameters {
                 Ok(res)
             }
 
+            /// Get an error message in case not all parameters where used when extracting them to
+            /// build an Enpoint variant
             fn nonempty_message(&self) -> Option<&str> {
                 if self.keyword.is_some() {
                     Some("Keyword not used")
@@ -914,6 +963,7 @@ macro_rules! generateQueryParameters {
     }
 }
 
+// parameter name => struct field
 generateQueryParameters! {
 	"continuation-token" => continuation_token,
 	"delimiter" => delimiter,
@@ -938,6 +988,8 @@ generateQueryParameters! {
 }
 
 mod keywords {
+	//! This module contain all query parameters with no associated value S3 uses to differentiate
+	//! endpoints.
 	pub const EMPTY: &str = "";
 
 	pub const ACCELERATE: &str = "accelerate";
@@ -970,4 +1022,364 @@ mod keywords {
 	pub const VERSIONING: &str = "versioning";
 	pub const VERSIONS: &str = "versions";
 	pub const WEBSITE: &str = "website";
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn parse(
+		method: &str,
+		uri: &str,
+		bucket: Option<String>,
+		header: Option<(&str, &str)>,
+	) -> Endpoint {
+		let mut req = Request::builder().method(method).uri(uri);
+		if let Some((k, v)) = header {
+			req = req.header(k, v)
+		}
+		let req = req.body(()).unwrap();
+
+		Endpoint::from_request(&req, bucket).unwrap()
+	}
+
+	macro_rules! test_cases {
+        ($($method:ident $uri:expr => $variant:ident )*) => {{
+            $(
+            assert!(
+                matches!(
+                    parse(stringify!($method), $uri, Some("my_bucket".to_owned()), None),
+                    Endpoint::$variant { .. }
+                )
+            );
+            assert!(
+                matches!(
+                    parse(stringify!($method), concat!("/my_bucket", $uri), None, None),
+                    Endpoint::$variant { .. }
+                )
+            );
+
+            test_cases!{@auth $method $uri}
+            )*
+        }};
+        (@auth HEAD $uri:expr) => {{
+            assert_eq!(parse("HEAD", concat!("/my_bucket", $uri), None, None).authorization_type(),
+                Authorization::Read("my_bucket"))
+        }};
+        (@auth GET $uri:expr) => {{
+            assert_eq!(parse("GET", concat!("/my_bucket", $uri), None, None).authorization_type(),
+                Authorization::Read("my_bucket"))
+        }};
+        (@auth PUT $uri:expr) => {{
+            assert_eq!(parse("PUT", concat!("/my_bucket", $uri), None, None).authorization_type(),
+                Authorization::Write("my_bucket"))
+        }};
+        (@auth POST $uri:expr) => {{
+            assert_eq!(parse("POST", concat!("/my_bucket", $uri), None, None).authorization_type(),
+                Authorization::Write("my_bucket"))
+        }};
+        (@auth DELETE $uri:expr) => {{
+            assert_eq!(parse("DELETE", concat!("/my_bucket", $uri), None, None).authorization_type(),
+                Authorization::Write("my_bucket"))
+        }};
+    }
+
+	#[test]
+	fn test_bucket_extraction() {
+		assert_eq!(
+			parse("GET", "/my/key", Some("my_bucket".to_owned()), None).get_bucket(),
+			parse("GET", "/my_bucket/my/key", None, None).get_bucket()
+		);
+		assert_eq!(
+			parse("GET", "/my_bucket/my/key", None, None)
+				.get_bucket()
+				.unwrap(),
+			"my_bucket"
+		);
+		assert!(parse("GET", "/", None, None).get_bucket().is_none());
+	}
+
+	#[test]
+	fn test_key() {
+		assert_eq!(
+			parse("GET", "/my/key", Some("my_bucket".to_owned()), None).get_key(),
+			parse("GET", "/my_bucket/my/key", None, None).get_key()
+		);
+		assert_eq!(
+			parse("GET", "/my_bucket/my/key", None, None)
+				.get_key()
+				.unwrap(),
+			"my/key"
+		);
+		assert_eq!(
+			parse("GET", "/my_bucket/my/key?acl", None, None)
+				.get_key()
+				.unwrap(),
+			"my/key"
+		);
+		assert!(parse("GET", "/my_bucket/?list-type=2", None, None)
+			.get_key()
+			.is_none());
+
+		assert_eq!(
+			parse("GET", "/my_bucket/%26%2B%3F%25%C3%A9/something", None, None)
+				.get_key()
+				.unwrap(),
+			"&+?%é/something"
+		);
+
+		/*
+		 * this case is failing. We should verify how clients encode space in url
+		assert_eq!(
+			parse("GET", "/my_bucket/+", None, None).get_key().unwrap(),
+			" ");
+		 */
+	}
+
+	#[test]
+	fn invalid_endpoint() {
+		let req = Request::builder()
+			.method("GET")
+			.uri("/bucket/key?website")
+			.body(())
+			.unwrap();
+
+		assert!(Endpoint::from_request(&req, None).is_err())
+	}
+
+	#[test]
+	fn test_aws_doc_examples() {
+		test_cases!(
+			DELETE "/example-object?uploadId=VXBsb2FkIElEIGZvciBlbHZpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZ" => AbortMultipartUpload
+			DELETE "/Key+?uploadId=UploadId" => AbortMultipartUpload
+			POST "/example-object?uploadId=AAAsb2FkIElEIGZvciBlbHZpbmcncyWeeS1tb3ZpZS5tMnRzIRRwbG9hZA" => CompleteMultipartUpload
+			POST "/Key+?uploadId=UploadId" => CompleteMultipartUpload
+			PUT "/" => CreateBucket
+			POST "/example-object?uploads" => CreateMultipartUpload
+			POST "/{Key+}?uploads" => CreateMultipartUpload
+			DELETE "/" => DeleteBucket
+			DELETE "/?analytics&id=list1" => DeleteBucketAnalyticsConfiguration
+			DELETE "/?analytics&id=Id" => DeleteBucketAnalyticsConfiguration
+			DELETE "/?cors" => DeleteBucketCors
+			DELETE "/?encryption" => DeleteBucketEncryption
+			DELETE "/?intelligent-tiering&id=Id" => DeleteBucketIntelligentTieringConfiguration
+			DELETE "/?inventory&id=list1" => DeleteBucketInventoryConfiguration
+			DELETE "/?inventory&id=Id" => DeleteBucketInventoryConfiguration
+			DELETE "/?lifecycle" => DeleteBucketLifecycle
+			DELETE "/?metrics&id=ExampleMetrics" => DeleteBucketMetricsConfiguration
+			DELETE "/?metrics&id=Id" => DeleteBucketMetricsConfiguration
+			DELETE "/?ownershipControls" => DeleteBucketOwnershipControls
+			DELETE "/?policy" => DeleteBucketPolicy
+			DELETE "/?replication" => DeleteBucketReplication
+			DELETE "/?tagging" => DeleteBucketTagging
+			DELETE "/?website" => DeleteBucketWebsite
+			DELETE "/my-second-image.jpg" => DeleteObject
+			DELETE "/my-third-image.jpg?versionId=UIORUnfndfiufdisojhr398493jfdkjFJjkndnqUifhnw89493jJFJ" => DeleteObject
+			DELETE "/Key+?versionId=VersionId" => DeleteObject
+			POST "/?delete" => DeleteObjects
+			DELETE "/exampleobject?tagging" => DeleteObjectTagging
+			DELETE "/{Key+}?tagging&versionId=VersionId" => DeleteObjectTagging
+			DELETE "/?publicAccessBlock" => DeletePublicAccessBlock
+			GET "/?accelerate" => GetBucketAccelerateConfiguration
+			GET "/?acl" => GetBucketAcl
+			GET "/?analytics&id=Id" => GetBucketAnalyticsConfiguration
+			GET "/?cors" => GetBucketCors
+			GET "/?encryption" => GetBucketEncryption
+			GET "/?intelligent-tiering&id=Id" => GetBucketIntelligentTieringConfiguration
+			GET "/?inventory&id=list1" => GetBucketInventoryConfiguration
+			GET "/?inventory&id=Id" => GetBucketInventoryConfiguration
+			GET "/?lifecycle" => GetBucketLifecycleConfiguration
+			GET "/?location" => GetBucketLocation
+			GET "/?logging" => GetBucketLogging
+			GET "/?metrics&id=Documents" => GetBucketMetricsConfiguration
+			GET "/?metrics&id=Id" => GetBucketMetricsConfiguration
+			GET "/?notification" => GetBucketNotificationConfiguration
+			GET "/?ownershipControls" => GetBucketOwnershipControls
+			GET "/?policy" => GetBucketPolicy
+			GET "/?policyStatus" => GetBucketPolicyStatus
+			GET "/?replication" => GetBucketReplication
+			GET "/?requestPayment" => GetBucketRequestPayment
+			GET "/?tagging" => GetBucketTagging
+			GET "/?versioning" => GetBucketVersioning
+			GET "/?website" => GetBucketWebsite
+			GET "/my-image.jpg" => GetObject
+			GET "/myObject?versionId=3/L4kqtJlcpXroDTDmpUMLUo" => GetObject
+			GET "/Junk3.txt?response-cache-control=No-cache&response-content-disposition=attachment%3B%20filename%3Dtesting.txt&response-content-encoding=x-gzip&response-content-language=mi%2C%20en&response-expires=Thu%2C%2001%20Dec%201994%2016:00:00%20GMT" => GetObject
+			GET "/Key+?partNumber=1&response-cache-control=ResponseCacheControl&response-content-disposition=ResponseContentDisposition&response-content-encoding=ResponseContentEncoding&response-content-language=ResponseContentLanguage&response-content-type=ResponseContentType&response-expires=ResponseExpires&versionId=VersionId" => GetObject
+			GET "/my-image.jpg?acl" => GetObjectAcl
+			GET "/my-image.jpg?versionId=3/L4kqtJlcpXroDVBH40Nr8X8gdRQBpUMLUo&acl" => GetObjectAcl
+			GET "/{Key+}?acl&versionId=VersionId" => GetObjectAcl
+			GET "/{Key+}?legal-hold&versionId=VersionId" => GetObjectLegalHold
+			GET "/?object-lock" => GetObjectLockConfiguration
+			GET "/{Key+}?retention&versionId=VersionId" => GetObjectRetention
+			GET "/example-object?tagging" => GetObjectTagging
+			GET "/{Key+}?tagging&versionId=VersionId" => GetObjectTagging
+			GET "/quotes/Nelson?torrent" => GetObjectTorrent
+			GET "/{Key+}?torrent" => GetObjectTorrent
+			GET "/?publicAccessBlock" => GetPublicAccessBlock
+			HEAD "/" => HeadBucket
+			HEAD "/my-image.jpg" => HeadObject
+			HEAD "/my-image.jpg?versionId=3HL4kqCxf3vjVBH40Nrjfkd" => HeadObject
+			HEAD "/Key+?partNumber=3&versionId=VersionId" => HeadObject
+			GET "/?analytics" => ListBucketAnalyticsConfigurations
+			GET "/?analytics&continuation-token=ContinuationToken" => ListBucketAnalyticsConfigurations
+			GET "/?intelligent-tiering" => ListBucketIntelligentTieringConfigurations
+			GET "/?intelligent-tiering&continuation-token=ContinuationToken" => ListBucketIntelligentTieringConfigurations
+			GET "/?inventory" => ListBucketInventoryConfigurations
+			GET "/?inventory&continuation-token=ContinuationToken" => ListBucketInventoryConfigurations
+			GET "/?metrics" => ListBucketMetricsConfigurations
+			GET "/?metrics&continuation-token=ContinuationToken" => ListBucketMetricsConfigurations
+			GET "/?uploads&max-uploads=3" => ListMultipartUploads
+			GET "/?uploads&delimiter=/" => ListMultipartUploads
+			GET "/?uploads&delimiter=/&prefix=photos/2006/" => ListMultipartUploads
+			GET "/?uploads&delimiter=D&encoding-type=EncodingType&key-marker=KeyMarker&max-uploads=1&prefix=Prefix&upload-id-marker=UploadIdMarker" => ListMultipartUploads
+			GET "/" => ListObjects
+			GET "/?prefix=N&marker=Ned&max-keys=40" => ListObjects
+			GET "/?delimiter=/" => ListObjects
+			GET "/?prefix=photos/2006/&delimiter=/" => ListObjects
+
+			GET "/?delimiter=D&encoding-type=EncodingType&marker=Marker&max-keys=1&prefix=Prefix" => ListObjects
+			GET "/?list-type=2" => ListObjectsV2
+			GET "/?list-type=2&max-keys=3&prefix=E&start-after=ExampleGuide.pdf" => ListObjectsV2
+			GET "/?list-type=2&delimiter=/" => ListObjectsV2
+			GET "/?list-type=2&prefix=photos/2006/&delimiter=/" => ListObjectsV2
+			GET "/?list-type=2" => ListObjectsV2
+			GET "/?list-type=2&continuation-token=1ueGcxLPRx1Tr/XYExHnhbYLgveDs2J/wm36Hy4vbOwM=" => ListObjectsV2
+			GET "/?list-type=2&continuation-token=ContinuationToken&delimiter=D&encoding-type=EncodingType&fetch-owner=true&max-keys=1&prefix=Prefix&start-after=StartAfter" => ListObjectsV2
+			GET "/?versions" => ListObjectVersions
+			GET "/?versions&key-marker=key2" => ListObjectVersions
+			GET "/?versions&key-marker=key3&version-id-marker=t46ZenlYTZBnj" => ListObjectVersions
+			GET "/?versions&key-marker=key3&version-id-marker=t46Z0menlYTZBnj&max-keys=3" => ListObjectVersions
+			GET "/?versions&delimiter=/" => ListObjectVersions
+			GET "/?versions&prefix=photos/2006/&delimiter=/" => ListObjectVersions
+			GET "/?versions&delimiter=D&encoding-type=EncodingType&key-marker=KeyMarker&max-keys=2&prefix=Prefix&version-id-marker=VersionIdMarker" => ListObjectVersions
+			GET "/example-object?uploadId=XXBsb2FkIElEIGZvciBlbHZpbmcncyVcdS1tb3ZpZS5tMnRzEEEwbG9hZA&max-parts=2&part-number-marker=1" => ListParts
+			GET "/Key+?max-parts=2&part-number-marker=2&uploadId=UploadId" => ListParts
+			PUT "/?accelerate" => PutBucketAccelerateConfiguration
+			PUT "/?acl" => PutBucketAcl
+			PUT "/?analytics&id=report1" => PutBucketAnalyticsConfiguration
+			PUT "/?analytics&id=Id" => PutBucketAnalyticsConfiguration
+			PUT "/?cors" => PutBucketCors
+			PUT "/?encryption" => PutBucketEncryption
+			PUT "/?intelligent-tiering&id=Id" => PutBucketIntelligentTieringConfiguration
+			PUT "/?inventory&id=report1" => PutBucketInventoryConfiguration
+			PUT "/?inventory&id=Id" => PutBucketInventoryConfiguration
+			PUT "/?lifecycle" => PutBucketLifecycleConfiguration
+			PUT "/?logging" => PutBucketLogging
+			PUT "/?metrics&id=EntireBucket" => PutBucketMetricsConfiguration
+			PUT "/?metrics&id=Id" => PutBucketMetricsConfiguration
+			PUT "/?notification" => PutBucketNotificationConfiguration
+			PUT "/?ownershipControls" => PutBucketOwnershipControls
+			PUT "/?policy" => PutBucketPolicy
+			PUT "/?replication" => PutBucketReplication
+			PUT "/?requestPayment" => PutBucketRequestPayment
+			PUT "/?tagging" => PutBucketTagging
+			PUT "/?versioning" => PutBucketVersioning
+			PUT "/?website" => PutBucketWebsite
+			PUT "/my-image.jpg" => PutObject
+			PUT "/Key+" => PutObject
+			PUT "/my-image.jpg?acl" => PutObjectAcl
+			PUT "/my-image.jpg?acl&versionId=3HL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nrjfkd" => PutObjectAcl
+			PUT "/{Key+}?acl&versionId=VersionId" => PutObjectAcl
+			PUT "/{Key+}?legal-hold&versionId=VersionId" => PutObjectLegalHold
+			PUT "/?object-lock" => PutObjectLockConfiguration
+			PUT "/{Key+}?retention&versionId=VersionId" => PutObjectRetention
+			PUT "/object-key?tagging" => PutObjectTagging
+			PUT "/{Key+}?tagging&versionId=VersionId" => PutObjectTagging
+			PUT "/?publicAccessBlock" => PutPublicAccessBlock
+			POST "/object-one.csv?restore" => RestoreObject
+			POST "/{Key+}?restore&versionId=VersionId" => RestoreObject
+			PUT "/my-movie.m2ts?partNumber=1&uploadId=VCVsb2FkIElEIGZvciBlbZZpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZR" => UploadPart
+			PUT "/Key+?partNumber=2&uploadId=UploadId" => UploadPart
+		);
+		// no bucket, won't work with the rest of the test suite
+		assert!(matches!(
+			parse("GET", "/", None, None),
+			Endpoint::ListBuckets { .. }
+		));
+		assert!(matches!(
+			parse("GET", "/", None, None).authorization_type(),
+			Authorization::None
+		));
+
+		// require a header
+		assert!(matches!(
+			parse(
+				"PUT",
+				"/Key+",
+				Some("my_bucket".to_owned()),
+				Some(("x-amz-copy-source", "some/key"))
+			),
+			Endpoint::CopyObject { .. }
+		));
+		assert!(matches!(
+			parse(
+				"PUT",
+				"/my_bucket/Key+",
+				None,
+				Some(("x-amz-copy-source", "some/key"))
+			),
+			Endpoint::CopyObject { .. }
+		));
+		assert!(matches!(
+			parse(
+				"PUT",
+				"/my_bucket/Key+",
+				None,
+				Some(("x-amz-copy-source", "some/key"))
+			)
+			.authorization_type(),
+			Authorization::Write("my_bucket")
+		));
+
+		// require a header
+		assert!(matches!(
+			parse(
+				"PUT",
+				"/Key+?partNumber=2&uploadId=UploadId",
+				Some("my_bucket".to_owned()),
+				Some(("x-amz-copy-source", "some/key"))
+			),
+			Endpoint::UploadPartCopy { .. }
+		));
+		assert!(matches!(
+			parse(
+				"PUT",
+				"/my_bucket/Key+?partNumber=2&uploadId=UploadId",
+				None,
+				Some(("x-amz-copy-source", "some/key"))
+			),
+			Endpoint::UploadPartCopy { .. }
+		));
+		assert!(matches!(
+			parse(
+				"PUT",
+				"/my_bucket/Key+?partNumber=2&uploadId=UploadId",
+				None,
+				Some(("x-amz-copy-source", "some/key"))
+			)
+			.authorization_type(),
+			Authorization::Write("my_bucket")
+		));
+
+		// POST request, but with GET semantic for permissions purpose
+		assert!(matches!(
+			parse(
+				"POST",
+				"/{Key+}?select&select-type=2",
+				Some("my_bucket".to_owned()),
+				None
+			),
+			Endpoint::SelectObjectContent { .. }
+		));
+		assert!(matches!(
+			parse("POST", "/my_bucket/{Key+}?select&select-type=2", None, None),
+			Endpoint::SelectObjectContent { .. }
+		));
+		assert!(matches!(
+			parse("POST", "/my_bucket/{Key+}?select&select-type=2", None, None)
+				.authorization_type(),
+			Authorization::Read("my_bucket")
+		));
+	}
 }
