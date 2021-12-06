@@ -228,26 +228,33 @@ async fn handler_inner(garage: Arc<Garage>, req: Request<Body>) -> Result<Respon
 			list_type,
 			..
 		} => {
-			handle_list(
-				garage,
-				&ListObjectsQuery {
-					is_v2: list_type == "v2",
-					bucket,
-					delimiter: delimiter.map(|d| d.to_string()),
-					max_keys: max_keys.unwrap_or(1000),
-					prefix: prefix.unwrap_or_default(),
-					marker: None,
-					continuation_token,
-					start_after,
-					urlencode_resp: encoding_type.map(|e| e == "url").unwrap_or(false),
-				},
-			)
-			.await
+			if list_type == "2" {
+				handle_list(
+					garage,
+					&ListObjectsQuery {
+						is_v2: true,
+						bucket,
+						delimiter: delimiter.map(|d| d.to_string()),
+						max_keys: max_keys.unwrap_or(1000),
+						prefix: prefix.unwrap_or_default(),
+						marker: None,
+						continuation_token,
+						start_after,
+						urlencode_resp: encoding_type.map(|e| e == "url").unwrap_or(false),
+					},
+				)
+				.await
+			} else {
+				Err(Error::BadRequest(format!(
+					"Invalid endpoint: list-type={}",
+					list_type
+				)))
+			}
 		}
 		Endpoint::DeleteObjects { bucket } => {
 			handle_delete_objects(garage, &bucket, req, content_sha256).await
 		}
-		_ => Err(Error::BadRequest("Unsupported call".to_string())),
+		endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
 	}
 }
 

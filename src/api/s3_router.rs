@@ -81,7 +81,53 @@ macro_rules! s3_match {
             .parse()
             .map_err(|_| Error::BadRequest("Failed to parse query parameter".to_owned()))?
     }};
+    (@func
+    $(#[$doc:meta])*
+     pub enum Endpoint {
+        $(
+            $(#[$outer:meta])*
+            $variant:ident $({
+                bucket: String,
+                $($name:ident: $ty:ty,)*
+            })?,
+        )*
+    }) => {
+    $(#[$doc])*
+        pub enum Endpoint {
+            $(
+                $(#[$outer])*
+                $variant $({
+                    bucket: String,
+                    $($name: $ty, )*
+                })?,
+            )*
+        }
+        impl Endpoint {
+            pub fn name(&self) -> &'static str {
+                match self {
+                    $(Endpoint::$variant $({ $($name: _,)* .. })? => stringify!($variant),)*
+                }
+            }
+
+            /// Get the bucket the request target. Returns None for requests not related to a bucket.
+            pub fn get_bucket(&self) -> Option<&str> {
+                match self {
+                    $(
+                        Endpoint::$variant $({ bucket, $($name: _,)* .. })? => s3_match!{@if ($(bucket $($name)*)?) then (Some(bucket)) else (None)},
+                    )*
+                }
+            }
+        }
+    };
+    (@if ($($cond:tt)+) then ($($then:tt)*) else ($($else:tt)*)) => {
+        $($then)*
+    };
+    (@if () then ($($then:tt)*) else ($($else:tt)*)) => {
+        $($else)*
+    };
 }
+
+s3_match! {@func
 
 /// List of all S3 API endpoints.
 ///
@@ -318,7 +364,7 @@ pub enum Endpoint {
 	},
 	ListObjectsV2 {
 		bucket: String,
-		/// This value should always be 2. It is not checked when constructing the struct
+		// This value should always be 2. It is not checked when constructing the struct
 		list_type: String,
 		continuation_token: Option<String>,
 		delimiter: Option<char>,
@@ -440,7 +486,7 @@ pub enum Endpoint {
 	SelectObjectContent {
 		bucket: String,
 		key: String,
-		/// This value should always be 2. It is not checked when constructing the struct
+		// This value should always be 2. It is not checked when constructing the struct
 		select_type: String,
 	},
 	UploadPart {
@@ -455,7 +501,7 @@ pub enum Endpoint {
 		part_number: u64,
 		upload_id: String,
 	},
-}
+}}
 
 impl Endpoint {
 	/// Determine which S3 endpoint a request is for using the request, and a bucket which was
@@ -496,11 +542,9 @@ impl Endpoint {
 		};
 
 		if let Some(message) = query.nonempty_message() {
-			// maybe this should just be a warn! ?
-			Err(Error::BadRequest(message.to_owned()))
-		} else {
-			Ok(res)
+			debug!("Unused query parameter: {}", message)
 		}
+		Ok(res)
 	}
 
 	/// Determine which endpoint a request is for, knowing it is a GET.
@@ -683,107 +727,6 @@ impl Endpoint {
 		}
 	}
 
-	/// Get the bucket the request target. Returns None for requests not related to a bucket.
-	pub fn get_bucket(&self) -> Option<&str> {
-		s3_match! {
-			@extract
-			self,
-			bucket,
-			[
-				AbortMultipartUpload,
-				CompleteMultipartUpload,
-				CopyObject,
-				CreateBucket,
-				CreateMultipartUpload,
-				DeleteBucket,
-				DeleteBucketAnalyticsConfiguration,
-				DeleteBucketCors,
-				DeleteBucketEncryption,
-				DeleteBucketIntelligentTieringConfiguration,
-				DeleteBucketInventoryConfiguration,
-				DeleteBucketLifecycle,
-				DeleteBucketMetricsConfiguration,
-				DeleteBucketOwnershipControls,
-				DeleteBucketPolicy,
-				DeleteBucketReplication,
-				DeleteBucketTagging,
-				DeleteBucketWebsite,
-				DeleteObject,
-				DeleteObjects,
-				DeleteObjectTagging,
-				DeletePublicAccessBlock,
-				GetBucketAccelerateConfiguration,
-				GetBucketAcl,
-				GetBucketAnalyticsConfiguration,
-				GetBucketCors,
-				GetBucketEncryption,
-				GetBucketIntelligentTieringConfiguration,
-				GetBucketInventoryConfiguration,
-				GetBucketLifecycleConfiguration,
-				GetBucketLocation,
-				GetBucketLogging,
-				GetBucketMetricsConfiguration,
-				GetBucketNotificationConfiguration,
-				GetBucketOwnershipControls,
-				GetBucketPolicy,
-				GetBucketPolicyStatus,
-				GetBucketReplication,
-				GetBucketRequestPayment,
-				GetBucketTagging,
-				GetBucketVersioning,
-				GetBucketWebsite,
-				GetObject,
-				GetObjectAcl,
-				GetObjectLegalHold,
-				GetObjectLockConfiguration,
-				GetObjectRetention,
-				GetObjectTagging,
-				GetObjectTorrent,
-				GetPublicAccessBlock,
-				HeadBucket,
-				HeadObject,
-				ListBucketAnalyticsConfigurations,
-				ListBucketIntelligentTieringConfigurations,
-				ListBucketInventoryConfigurations,
-				ListBucketMetricsConfigurations,
-				ListMultipartUploads,
-				ListObjects,
-				ListObjectsV2,
-				ListObjectVersions,
-				ListParts,
-				PutBucketAccelerateConfiguration,
-				PutBucketAcl,
-				PutBucketAnalyticsConfiguration,
-				PutBucketCors,
-				PutBucketEncryption,
-				PutBucketIntelligentTieringConfiguration,
-				PutBucketInventoryConfiguration,
-				PutBucketLifecycleConfiguration,
-				PutBucketLogging,
-				PutBucketMetricsConfiguration,
-				PutBucketNotificationConfiguration,
-				PutBucketOwnershipControls,
-				PutBucketPolicy,
-				PutBucketReplication,
-				PutBucketRequestPayment,
-				PutBucketTagging,
-				PutBucketVersioning,
-				PutBucketWebsite,
-				PutObject,
-				PutObjectAcl,
-				PutObjectLegalHold,
-				PutObjectLockConfiguration,
-				PutObjectRetention,
-				PutObjectTagging,
-				PutPublicAccessBlock,
-				RestoreObject,
-				SelectObjectContent,
-				UploadPart,
-				UploadPartCopy,
-			]
-		}
-	}
-
 	/// Get the key the request target. Returns None for requests which don't use a key.
 	#[allow(dead_code)]
 	pub fn get_key(&self) -> Option<&str> {
@@ -929,10 +872,8 @@ macro_rules! generateQueryParameters {
                                 }
                                 continue;
                             } else {
-                                return Err(Error::BadRequest(format!(
-                                    "Unknown query parameter '{}'",
-                                    k
-                                )));
+                                debug!("Received an unknown query parameter: '{}'", k);
+                                false
                             }
                         }
                     };
@@ -953,7 +894,7 @@ macro_rules! generateQueryParameters {
                     Some("Keyword not used")
                 } $(
                     else if self.$name.is_some() {
-                        Some(concat!("Query parameter not needed: '", $rest, "'" ))
+                        Some(concat!("'", $rest, "'"))
                     }
                 )* else {
                     None
