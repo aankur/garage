@@ -43,6 +43,9 @@ pub async fn handle_put_website(
 	req: Request<Body>,
 	content_sha256: Option<Hash>,
 ) -> Result<Response<Body>, Error> {
+	let content_sha256 =
+		content_sha256.ok_or_bad_request("Request content hash not signed, aborting.")?;
+
 	let body = hyper::body::to_bytes(req.into_body()).await?;
 	verify_signed_content(content_sha256, &body[..])?;
 

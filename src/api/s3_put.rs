@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::pin::Pin;
 use std::sync::Arc;
 
+use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::task;
 use futures::{prelude::*, TryFutureExt};
 use hyper::body::{Body, Bytes};
@@ -17,18 +18,21 @@ use garage_util::time::*;
 use garage_model::block::INLINE_THRESHOLD;
 use garage_model::block_ref_table::*;
 use garage_model::garage::Garage;
+use garage_model::key_table::Key;
 use garage_model::object_table::*;
 use garage_model::version_table::*;
 
 use crate::error::*;
 use crate::s3_xml;
-use crate::signature::verify_signed_content;
+use crate::signature::LONG_DATETIME;
+use crate::signature::{streaming::check_streaming_payload_signature, verify_signed_content};
 
 pub async fn handle_put(
 	garage: Arc<Garage>,
 	req: Request<Body>,
 	bucket_id: Uuid,
 	key: &str,
+	api_key: &Key,
 	mut content_sha256: Option<Hash>,
 ) -> Result<Response<Body>, Error> {
 	// Generate identity of new version
@@ -54,11 +58,29 @@ pub async fn handle_put(
 	};
 
 	// Parse body of uploaded file
-	let body = req.into_body();
+	let (head, body) = req.into_parts();
 
-	let body = match payload_seed_signature {
-		Some(_) => SignedPayloadChunker::new(body).map_err(Error::from).boxed(),
-		None => body.map_err(Error::from).boxed(),
+	let body = if let Some(signature) = payload_seed_signature {
+		let secret_key = &api_key
+			.state
+			.as_option()
+			.ok_or_internal_error("Deleted key state")?
+			.secret_key;
+
+		let date = head
+			.headers
+			.get("x-amz-date")
+			.ok_or_bad_request("Missing X-Amz-Date field")?
+			.to_str()?;
+		let date: NaiveDateTime =
+			NaiveDateTime::parse_from_str(date, LONG_DATETIME).ok_or_bad_request("Invalid date")?;
+		let date: DateTime<Utc> = DateTime::from_utc(date, Utc);
+
+		SignedPayloadChunker::new(body, garage.clone(), date, secret_key, signature)
+			.map_err(Error::from)
+			.boxed()
+	} else {
+		body.map_err(Error::from).boxed()
 	};
 
 	let mut chunker = StreamChunker::new(body, garage.config.block_size);
@@ -287,7 +309,8 @@ async fn put_block_meta(
 }
 
 mod payload {
-	#[derive(Debug)]
+	use std::fmt;
+
 	pub struct Header {
 		pub size: usize,
 		pub signature: Box<[u8]>,
@@ -295,10 +318,10 @@ mod payload {
 
 	impl Header {
 		pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Self> {
-			use nom::bytes::complete::tag;
-			use nom::character::complete::hex_digit1;
+			use nom::bytes::streaming::tag;
+			use nom::character::streaming::hex_digit1;
 			use nom::combinator::map_res;
-			use nom::number::complete::hex_u32;
+			use nom::number::streaming::hex_u32;
 
 			let (input, size) = hex_u32(input)?;
 			let (input, _) = tag(";")(input)?;
@@ -316,11 +339,27 @@ mod payload {
 			Ok((input, header))
 		}
 	}
+
+	impl fmt::Debug for Header {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			f.debug_struct("Header")
+				.field("size", &self.size)
+				.field("signature", &hex::encode(&self.signature))
+				.finish()
+		}
+	}
 }
 
 enum SignedPayloadChunkerError<StreamE> {
 	Stream(StreamE),
+	InvalidSignature,
 	Message(String),
+}
+
+impl<StreamE> SignedPayloadChunkerError<StreamE> {
+	fn message(msg: &str) -> Self {
+		SignedPayloadChunkerError::Message(msg.into())
+	}
 }
 
 impl<StreamE> From<SignedPayloadChunkerError<StreamE>> for Error
@@ -330,6 +369,9 @@ where
 	fn from(err: SignedPayloadChunkerError<StreamE>) -> Self {
 		match err {
 			SignedPayloadChunkerError::Stream(e) => e.into(),
+			SignedPayloadChunkerError::InvalidSignature => {
+				Error::BadRequest("Invalid payload signature".into())
+			}
 			SignedPayloadChunkerError::Message(e) => {
 				Error::BadRequest(format!("Chunk format error: {}", e))
 			}
@@ -339,7 +381,7 @@ where
 
 impl<E, I> From<nom::error::Error<I>> for SignedPayloadChunkerError<E> {
 	fn from(err: nom::error::Error<I>) -> Self {
-		Self::Message(err.code.description().into())
+		Self::message(err.code.description())
 	}
 }
 
@@ -351,16 +393,30 @@ where
 	#[pin]
 	stream: S,
 	buf: bytes::BytesMut,
+	garage: Arc<Garage>,
+	datetime: DateTime<Utc>,
+	secret_key: String,
+	previous_signature: Hash,
 }
 
 impl<S, E> SignedPayloadChunker<S, E>
 where
 	S: Stream<Item = Result<Bytes, E>>,
 {
-	fn new(stream: S) -> Self {
+	fn new(
+		stream: S,
+		garage: Arc<Garage>,
+		datetime: DateTime<Utc>,
+		secret_key: &str,
+		seed_signature: Hash,
+	) -> Self {
 		Self {
 			stream,
 			buf: bytes::BytesMut::new(),
+			garage,
+			datetime,
+			secret_key: secret_key.into(),
+			previous_signature: seed_signature,
 		}
 	}
 }
@@ -377,18 +433,18 @@ where
 	) -> task::Poll<Option<Self::Item>> {
 		use std::task::Poll;
 
-		use nom::bytes::complete::{tag, take};
+		use nom::bytes::streaming::{tag, take};
 
 		let mut this = self.project();
 
-		macro_rules! parse_try {
+		macro_rules! try_parse {
 			($expr:expr) => {
 				match $expr {
-					Ok(value) => value,
+					Ok(value) => Ok(value),
 					Err(nom::Err::Incomplete(_)) => continue,
 					Err(nom::Err::Error(e @ nom::error::Error { .. }))
-					| Err(nom::Err::Failure(e)) => return Poll::Ready(Some(Err(e.into()))),
-				}
+					| Err(nom::Err::Failure(e)) => Err(e),
+				}?
 			};
 		}
 
@@ -409,7 +465,9 @@ where
 
 			let input: &[u8] = this.buf;
 
-			let (input, header) = parse_try!(payload::Header::parse(input));
+			let (input, header) = try_parse!(payload::Header::parse(input));
+			let signature = Hash::try_from(&*header.signature)
+				.ok_or_else(|| SignedPayloadChunkerError::message("Invalid signature"))?;
 
 			// 0-sized chunk is the last
 			if header.size == 0 {
@@ -417,12 +475,30 @@ where
 				return Poll::Ready(None);
 			}
 
-			let (input, data) = parse_try!(take(header.size)(input));
-			let (input, _) = parse_try!(tag("\r\n")(input));
+			let (input, data) = try_parse!(take(header.size)(input));
+			let (input, _) = try_parse!(tag("\r\n")(input));
 
 			let data = Bytes::from(data.to_vec());
+			let data_sha256sum = sha256sum(&data);
+
+			let expected_signature = check_streaming_payload_signature(
+				this.garage,
+				this.secret_key,
+				*this.datetime,
+				*this.previous_signature,
+				data_sha256sum,
+			)
+			.map_err(|e| {
+				SignedPayloadChunkerError::Message(format!("Could not build signature: {}", e))
+			})?;
+
+			if signature != expected_signature {
+				return Poll::Ready(Some(Err(SignedPayloadChunkerError::InvalidSignature)));
+			}
 
 			*this.buf = input.into();
+			*this.previous_signature = signature;
+
 			return Poll::Ready(Some(Ok(data)));
 		}
 	}
@@ -611,6 +687,9 @@ pub async fn handle_complete_multipart_upload(
 	upload_id: &str,
 	content_sha256: Option<Hash>,
 ) -> Result<Response<Body>, Error> {
+	let content_sha256 =
+		content_sha256.ok_or_bad_request("Request content hash not signed, aborting.")?;
+
 	let body = hyper::body::to_bytes(req.into_body()).await?;
 	verify_signed_content(content_sha256, &body[..])?;
 
