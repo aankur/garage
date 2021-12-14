@@ -134,15 +134,14 @@ pub struct Redirect {
 
 impl WebsiteConfiguration {
 	pub fn validate(&self) -> Result<(), Error> {
-		if self.redirect_all_requests_to.is_some() {
-			if self.error_document.is_some()
+		if self.redirect_all_requests_to.is_some()
+			&& (self.error_document.is_some()
 				|| self.index_document.is_some()
-				|| self.routing_rules.is_some()
-			{
-				return Err(Error::BadRequest(
-					"Bad XML: can't have RedirectAllRequestsTo and other fields".to_owned(),
-				));
-			}
+				|| self.routing_rules.is_some())
+		{
+			return Err(Error::BadRequest(
+				"Bad XML: can't have RedirectAllRequestsTo and other fields".to_owned(),
+			));
 		}
 		if let Some(ref ed) = self.error_document {
 			ed.validate()?;
