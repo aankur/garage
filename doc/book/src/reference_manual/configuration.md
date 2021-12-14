@@ -10,6 +10,8 @@ block_size = 1048576
 
 replication_mode = "3"
 
+compression_level = 1
+
 rpc_secret = "4425f5c26c5e11581d3223904324dcb5b5d5dfb14e5e7f35e38c595424f5f1e6"
 rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "[fc00:1::1]:3901"
@@ -97,6 +99,18 @@ Never run a Garage cluster where that is not the case.**
 
 Changing the `replication_mode` of a cluster might work (make sure to shut down all nodes
 and changing it everywhere at the time), but is not officially supported.
+
+### `compression_level`
+
+Zstd compression level to use for storing blocks. Can be a positive or negative integer, or 
+"none" to disable compression. Default value is 1, which consume low amount of cpu and should
+work faster than line speed in most situations, while saving some space and intra-cluster
+bandwidth.
+Higher values allow for more compression, at the cost of more cpu usage. Compression is done
+synchronously, setting a value too high will add latency to write queries.
+
+This value can be different between nodes, compression is done by the node which receive the
+API call.
 
 #### `rpc_secret`
 
