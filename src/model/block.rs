@@ -697,6 +697,7 @@ impl BlockManager {
 				};
 				let ent_type = data_dir_ent.file_type().await?;
 
+				let name = name.strip_suffix(".zst").unwrap_or(&name);
 				if name.len() == 2 && hex::decode(&name).is_ok() && ent_type.is_dir() {
 					state = self
 						.for_each_file_rec(&data_dir_ent.path(), state, f, must_exit)
