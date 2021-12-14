@@ -107,12 +107,12 @@ impl DataBlock {
 		}
 	}
 
-	/// Verify data integrity. Allocate less than [`verify_get`] and don't consume self, but
+	/// Verify data integrity. Allocate less than [`DataBlock::verify_get`] and don't consume self, but
 	/// does not return the buffer content.
 	pub fn verify(&self, hash: Hash) -> Result<(), Error> {
 		match self {
 			DataBlock::Plain(data) => {
-				if blake2sum(&data) == hash {
+				if blake2sum(data) == hash {
 					Ok(())
 				} else {
 					Err(Error::CorruptData(hash))
@@ -236,7 +236,14 @@ impl BlockManager {
 	/// Send block to nodes that should have it
 	pub async fn rpc_put_block(&self, hash: Hash, data: Vec<u8>) -> Result<(), Error> {
 		let who = self.replication.write_nodes(&hash);
-		let data = DataBlock::from_buffer(data, None); // TODO get compression level from somewhere
+		let compression_level = self
+			.garage
+			.load()
+			.as_ref()
+			.unwrap()
+			.config
+			.compression_level;
+		let data = DataBlock::from_buffer(data, compression_level);
 		self.system
 			.rpc
 			.try_call_many(
