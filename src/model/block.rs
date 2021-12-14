@@ -764,15 +764,21 @@ impl BlockManagerLocked {
 		fs::create_dir_all(&path).await?;
 
 		path.push(hex::encode(hash));
-		match mgr.is_block_compressed(hash).await {
-			Ok(true) => return Ok(BlockRpc::Ok),
-			Ok(false) if !compressed => return Ok(BlockRpc::Ok),
-			_ => {
+		let to_delete = match (mgr.is_block_compressed(hash).await, compressed) {
+			(Ok(true), _) => return Ok(BlockRpc::Ok),
+			(Ok(false), false) => return Ok(BlockRpc::Ok),
+			(Ok(false), true) => {
+				let path_to_delete = path.clone();
+				path.set_extension("zst");
+				Some(path_to_delete)
+			}
+			(Err(_), compressed) => {
 				if compressed {
 					path.set_extension("zst");
 				}
+				None
 			}
-		}
+		};
 
 		let mut path2 = path.clone();
 		path2.set_extension("tmp");
@@ -781,6 +787,9 @@ impl BlockManagerLocked {
 		drop(f);
 
 		fs::rename(path2, path).await?;
+		if let Some(to_delete) = to_delete {
+			fs::remove_file(to_delete).await?;
+		}
 
 		Ok(BlockRpc::Ok)
 	}
@@ -793,7 +802,6 @@ impl BlockManagerLocked {
 		let mut path = mgr.block_path(hash);
 		let mut path2 = path.clone();
 		if mgr.is_block_compressed(hash).await? {
-			// block marked as corrupted, and absent? That should not happen
 			path.set_extension("zst");
 			path2.set_extension("zst.corrupted");
 		} else {
