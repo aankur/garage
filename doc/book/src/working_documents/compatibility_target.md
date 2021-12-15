@@ -50,12 +50,14 @@ your motivations for doing so in the PR message.
 | 							 | ListObjectVersions |
 | 							 | GetObjectAcl |
 | 							 | PutObjectAcl |
+| 							 | GetBucketLifecycleConfiguration |
+| 							 | PutBucketLifecycleConfiguration |
+| 							 | DeleteBucketLifecycle |
 | **garbage-tier**   | |
 | 							 | DeleteBucketEncryption |
 | 							 | DeleteBucketAnalyticsConfiguration |
 | 							 | DeleteBucketIntelligentTieringConfiguration |
 | 							 | DeleteBucketInventoryConfiguration |
-| 							 | DeleteBucketLifecycle |
 | 							 | DeleteBucketMetricsConfiguration |
 | 							 | DeleteBucketOwnershipControls |
 | 							 | DeleteBucketPolicy |
@@ -68,7 +70,6 @@ your motivations for doing so in the PR message.
 | 							 | GetBucketEncryption |
 | 							 | GetBucketIntelligentTieringConfiguration |
 | 							 | GetBucketInventoryConfiguration |
-| 							 | GetBucketLifecycleConfiguration |
 | 							 | GetBucketLogging |
 | 							 | GetBucketMetricsConfiguration |
 | 							 | GetBucketNotificationConfiguration |
@@ -90,7 +91,6 @@ your motivations for doing so in the PR message.
 | 							 | PutBucketEncryption |
 | 							 | PutBucketIntelligentTieringConfiguration |
 | 							 | PutBucketInventoryConfiguration |
-| 							 | PutBucketLifecycleConfiguration |
 | 							 | PutBucketLogging |
 | 							 | PutBucketMetricsConfiguration |
 | 							 | PutBucketNotificationConfiguration |
