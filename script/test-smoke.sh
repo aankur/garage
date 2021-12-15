@@ -30,6 +30,7 @@ dd if=/dev/urandom of=/tmp/garage.1.rnd bs=1k count=2 # No multipart, inline sto
 dd if=/dev/urandom of=/tmp/garage.2.rnd bs=1M count=5 # No multipart but file will be chunked
 dd if=/dev/urandom of=/tmp/garage.3.rnd bs=1M count=10 # by default, AWS starts using multipart at 8MB
 
+# data of lower entropy, to test compression
 dd if=/dev/urandom bs=1k count=2  | base64 -w0 > /tmp/garage.1.b64
 dd if=/dev/urandom bs=1M count=5  | base64 -w0 > /tmp/garage.2.b64
 dd if=/dev/urandom bs=1M count=10 | base64 -w0 > /tmp/garage.3.b64
