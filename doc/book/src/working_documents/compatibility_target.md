@@ -9,8 +9,8 @@ your motivations for doing so in the PR message.
 | **S-tier** (high priority) | |
 | 							 | HeadBucket |
 | 							 | GetBucketLocation |
-| 							 | *CreateBucket* |
-| 							 | *DeleteBucket* |
+| 							 | [*CreateBucket*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/97) |
+| 							 | [*DeleteBucket*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/97) |
 | 							 | ListBuckets |
 | 							 | ListObjects |
 | 							 | ListObjectsV2 |
@@ -24,16 +24,16 @@ your motivations for doing so in the PR message.
 | 							 | CompleteMultipartUpload |
 | 							 | AbortMultipartUpload |
 | 							 | UploadPart |
-| 							 | *ListMultipartUploads* |
-| 							 | *ListParts* |
+| 							 | [*ListMultipartUploads*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/103) |
+| 							 | [*ListParts*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/103) |
 | **A-tier** (will implement)     | |
-| 							 | *GetBucketCors* |
-| 							 | *PutBucketCors* |
-| 							 | *DeleteBucketCors* |
-| 							 | *UploadPartCopy* |
-| 							 | *GetBucketWebsite* |
-| 							 | *PutBucketWebsite* |
-| 							 | *DeleteBucketWebsite* |
+| 							 | [*GetBucketCors*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/138) |
+| 							 | [*PutBucketCors*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/138) |
+| 							 | [*DeleteBucketCors*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/138) |
+| 							 | [*UploadPartCopy*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/160) |
+| 							 | [*GetBucketWebsite*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/77) |
+| 							 | [*PutBucketWebsite*](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/77) |
+| 							 | DeleteBucketWebsite |
 | ~~~~~~~~~~~~~~~~~~~~~~~~~~ | ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ |
 | **B-tier** | |
 | 							 | GetBucketAcl |
