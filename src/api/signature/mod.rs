@@ -23,7 +23,7 @@ pub fn verify_signed_content(expected_sha256: Hash, body: &[u8]) -> Result<(), E
 	Ok(())
 }
 
-fn signing_hmac(
+pub fn signing_hmac(
 	datetime: &DateTime<Utc>,
 	secret_key: &str,
 	region: &str,
@@ -40,4 +40,8 @@ fn signing_hmac(
 	signing_hmac.update(b"aws4_request");
 	let hmac = HmacSha256::new_varkey(&signing_hmac.finalize().into_bytes())?;
 	Ok(hmac)
+}
+
+pub fn compute_scope(datetime: &DateTime<Utc>, region: &str) -> String {
+	format!("{}/{}/s3/aws4_request", datetime.format(SHORT_DATE), region,)
 }

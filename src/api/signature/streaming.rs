@@ -1,18 +1,16 @@
 use std::pin::Pin;
-use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use futures::task;
 use hyper::body::Bytes;
 
-use garage_model::garage::Garage;
 use garage_util::data::Hash;
 use hmac::Mac;
 
 use super::sha256sum;
 use super::HmacSha256;
-use super::{LONG_DATETIME, SHORT_DATE};
+use super::LONG_DATETIME;
 
 use crate::error::*;
 
@@ -21,22 +19,16 @@ const EMPTY_STRING_HEX_DIGEST: &str =
 	"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 fn compute_streaming_payload_signature(
-	garage: &Garage,
 	signing_hmac: &HmacSha256,
 	date: DateTime<Utc>,
+	scope: &str,
 	previous_signature: Hash,
 	content_sha256: Hash,
 ) -> Result<Hash, Error> {
-	let scope = format!(
-		"{}/{}/s3/aws4_request",
-		date.format(SHORT_DATE),
-		garage.config.s3_api.s3_region
-	);
-
 	let string_to_sign = [
 		"AWS4-HMAC-SHA256-PAYLOAD",
 		&date.format(LONG_DATETIME).to_string(),
-		&scope,
+		scope,
 		&hex::encode(previous_signature),
 		EMPTY_STRING_HEX_DIGEST,
 		&hex::encode(content_sha256),
@@ -104,6 +96,7 @@ mod payload {
 	}
 }
 
+#[derive(Debug)]
 pub enum SignedPayloadStreamError {
 	Stream(Error),
 	InvalidSignature,
@@ -150,8 +143,8 @@ where
 	#[pin]
 	stream: S,
 	buf: bytes::BytesMut,
-	garage: Arc<Garage>,
 	datetime: DateTime<Utc>,
+	scope: String,
 	signing_hmac: HmacSha256,
 	previous_signature: Hash,
 }
@@ -162,20 +155,20 @@ where
 {
 	pub fn new(
 		stream: S,
-		garage: Arc<Garage>,
+		signing_hmac: HmacSha256,
 		datetime: DateTime<Utc>,
-		secret_key: &str,
+		scope: &str,
 		seed_signature: Hash,
 	) -> Result<Self, Error> {
-		let signing_hmac =
-			super::signing_hmac(&datetime, secret_key, &garage.config.s3_api.s3_region, "s3")
-				.ok_or_internal_error("Could not compute signing HMAC")?;
+		// let signing_hmac =
+		// 	super::signing_hmac(&datetime, secret_key, &garage.config.s3_api.s3_region, "s3")
+		// 		.ok_or_internal_error("Could not compute signing HMAC")?;
 
 		Ok(Self {
 			stream,
 			buf: bytes::BytesMut::new(),
-			garage,
 			datetime,
+			scope: scope.into(),
 			signing_hmac,
 			previous_signature: seed_signature,
 		})
@@ -217,6 +210,10 @@ where
 				None => {
 					if this.buf.is_empty() {
 						return Poll::Ready(None);
+					} else {
+						return Poll::Ready(Some(Err(SignedPayloadStreamError::message(
+							"Unexpected EOF",
+						))));
 					}
 				}
 			}
@@ -238,9 +235,9 @@ where
 			let data_sha256sum = sha256sum(&data);
 
 			let expected_signature = compute_streaming_payload_signature(
-				this.garage,
 				this.signing_hmac,
 				*this.datetime,
+				this.scope,
 				*this.previous_signature,
 				data_sha256sum,
 			)
@@ -261,5 +258,45 @@ where
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		self.stream.size_hint()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use futures::prelude::*;
+
+	use super::{SignedPayloadStream, SignedPayloadStreamError};
+
+	#[tokio::test]
+	async fn test_interrupted_signed_payload_stream() {
+		use chrono::{DateTime, Utc};
+
+		use garage_util::data::Hash;
+
+		let datetime = DateTime::parse_from_rfc3339("2021-12-13T13:12:42+01:00") // TODO UNIX 0
+			.unwrap()
+			.with_timezone(&Utc);
+		let secret_key = "test";
+		let region = "test";
+		let scope = crate::signature::compute_scope(&datetime, region);
+		let signing_hmac =
+			crate::signature::signing_hmac(&datetime, secret_key, region, "s3").unwrap();
+
+		let data: &[&[u8]] = &[b"1"];
+		let body = futures::stream::iter(data.iter().map(|block| Ok(block.as_ref().into())));
+
+		let seed_signature = Hash::default();
+
+		let mut stream =
+			SignedPayloadStream::new(body, signing_hmac, datetime, &scope, seed_signature).unwrap();
+
+		assert!(stream.try_next().await.is_err());
+		match stream.try_next().await {
+			Err(SignedPayloadStreamError::Message(msg)) if msg == "Unexpected EOF" => {}
+			item => panic!(
+				"Unexpected result, expected early EOF error, got {:?}",
+				item
+			),
+		}
 	}
 }

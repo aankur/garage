@@ -23,8 +23,8 @@ use garage_model::version_table::*;
 use crate::error::*;
 use crate::s3_xml;
 use crate::signature::streaming::SignedPayloadStream;
-use crate::signature::verify_signed_content;
 use crate::signature::LONG_DATETIME;
+use crate::signature::{compute_scope, verify_signed_content};
 
 pub async fn handle_put(
 	garage: Arc<Garage>,
@@ -76,7 +76,16 @@ pub async fn handle_put(
 			NaiveDateTime::parse_from_str(date, LONG_DATETIME).ok_or_bad_request("Invalid date")?;
 		let date: DateTime<Utc> = DateTime::from_utc(date, Utc);
 
-		SignedPayloadStream::new(body, garage.clone(), date, secret_key, signature)?
+		let scope = compute_scope(&date, &garage.config.s3_api.s3_region);
+		let signing_hmac = crate::signature::signing_hmac(
+			&date,
+			secret_key,
+			&garage.config.s3_api.s3_region,
+			"s3",
+		)
+		.ok_or_internal_error("Unable to build signing HMAC")?;
+
+		SignedPayloadStream::new(body, signing_hmac, date, &scope, signature)?
 			.map_err(Error::from)
 			.boxed()
 	} else {
