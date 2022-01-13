@@ -233,10 +233,6 @@ where
 							return Poll::Ready(Some(Err(SignedPayloadStreamError::Stream(e))))
 						}
 						None => {
-							if this.buf.is_empty() {
-								return Poll::Ready(None);
-							}
-
 							return Poll::Ready(Some(Err(SignedPayloadStreamError::message(
 								"Unexpected EOF",
 							))));
