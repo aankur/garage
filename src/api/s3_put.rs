@@ -504,11 +504,11 @@ pub async fn handle_complete_multipart_upload(
 	upload_id: &str,
 	content_sha256: Option<Hash>,
 ) -> Result<Response<Body>, Error> {
-	let content_sha256 =
-		content_sha256.ok_or_bad_request("Request content hash not signed, aborting.")?;
-
 	let body = hyper::body::to_bytes(req.into_body()).await?;
-	verify_signed_content(content_sha256, &body[..])?;
+
+	if let Some(content_sha256) = content_sha256 {
+		verify_signed_content(content_sha256, &body[..])?;
+	}
 
 	let body_xml = roxmltree::Document::parse(std::str::from_utf8(&body)?)?;
 	let body_list_of_parts = parse_complete_multpart_upload_body(&body_xml)
