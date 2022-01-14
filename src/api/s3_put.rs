@@ -511,7 +511,7 @@ pub async fn handle_complete_multipart_upload(
 	}
 
 	let body_xml = roxmltree::Document::parse(std::str::from_utf8(&body)?)?;
-	let body_list_of_parts = parse_complete_multpart_upload_body(&body_xml)
+	let body_list_of_parts = parse_complete_multipart_upload_body(&body_xml)
 		.ok_or_bad_request("Invalid CompleteMultipartUpload XML")?;
 	debug!(
 		"CompleteMultipartUpload list of parts: {:?}",
@@ -703,7 +703,7 @@ struct CompleteMultipartUploadPart {
 	part_number: u64,
 }
 
-fn parse_complete_multpart_upload_body(
+fn parse_complete_multipart_upload_body(
 	xml: &roxmltree::Document,
 ) -> Option<Vec<CompleteMultipartUploadPart>> {
 	let mut parts = vec![];
