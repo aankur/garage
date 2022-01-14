@@ -715,6 +715,11 @@ fn parse_complete_multpart_upload_body(
 	}
 
 	for item in cmu.children() {
+		// Only parse <Part> nodes
+		if !item.is_element() {
+			continue;
+		}
+
 		if item.has_tag_name("Part") {
 			let etag = item.children().find(|e| e.has_tag_name("ETag"))?.text()?;
 			let part_number = item
