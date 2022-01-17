@@ -20,7 +20,7 @@ use crate::error::*;
 pub async fn check_payload_signature(
 	garage: &Garage,
 	request: &Request<Body>,
-) -> Result<(Key, Option<Hash>), Error> {
+) -> Result<(Option<Key>, Option<Hash>), Error> {
 	let mut headers = HashMap::new();
 	for (key, val) in request.headers() {
 		headers.insert(key.to_string(), val.to_str()?.to_string());
@@ -34,8 +34,19 @@ pub async fn check_payload_signature(
 
 	let authorization = if let Some(authorization) = headers.get("authorization") {
 		parse_authorization(authorization, &headers)?
+	} else if let Some(algorithm) = headers.get("x-amz-algorithm") {
+		parse_query_authorization(algorithm, &headers)?
 	} else {
-		parse_query_authorization(&headers)?
+		let content_sha256 = headers.get("x-amz-content-sha256");
+		if let Some(content_sha256) = content_sha256.filter(|c| "UNSIGNED-PAYLOAD" != c.as_str()) {
+			let sha256 = hex::decode(content_sha256)
+				.ok()
+				.and_then(|bytes| Hash::try_from(&bytes))
+				.ok_or_bad_request("Invalid content sha256 hash")?;
+			return Ok((None, Some(sha256)));
+		} else {
+			return Ok((None, None));
+		}
 	};
 
 	let scope = format!(
@@ -93,7 +104,7 @@ pub async fn check_payload_signature(
 		Some(Hash::try_from(&bytes).ok_or_bad_request("Invalid content sha256 hash")?)
 	};
 
-	Ok((key, content_sha256))
+	Ok((Some(key), content_sha256))
 }
 
 struct Authorization {
@@ -165,11 +176,11 @@ fn parse_authorization(
 	Ok(auth)
 }
 
-fn parse_query_authorization(headers: &HashMap<String, String>) -> Result<Authorization, Error> {
-	let algo = headers
-		.get("x-amz-algorithm")
-		.ok_or_bad_request("X-Amz-Algorithm not found in query parameters")?;
-	if algo != "AWS4-HMAC-SHA256" {
+fn parse_query_authorization(
+	algorithm: &str,
+	headers: &HashMap<String, String>,
+) -> Result<Authorization, Error> {
+	if algorithm != "AWS4-HMAC-SHA256" {
 		return Err(Error::BadRequest(
 			"Unsupported authorization method".to_string(),
 		));
