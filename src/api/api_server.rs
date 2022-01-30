@@ -92,11 +92,6 @@ async fn handler(
 }
 
 async fn handler_inner(garage: Arc<Garage>, req: Request<Body>) -> Result<Response<Body>, Error> {
-	let (api_key, content_sha256) = check_payload_signature(&garage, &req).await?;
-	let api_key = api_key.ok_or_else(|| {
-		Error::Forbidden("Garage does not support anonymous access yet".to_string())
-	})?;
-
 	let authority = req
 		.headers()
 		.get(header::HOST)
@@ -114,6 +109,17 @@ async fn handler_inner(garage: Arc<Garage>, req: Request<Body>) -> Result<Respon
 
 	let (endpoint, bucket_name) = Endpoint::from_request(&req, bucket_name.map(ToOwned::to_owned))?;
 	debug!("Endpoint: {:?}", endpoint);
+
+	if let Endpoint::PostObject {} = endpoint {
+		return Err(Error::NotImplemented(
+			"POST object is not supported yet".to_owned(),
+		));
+	}
+
+	let (api_key, content_sha256) = check_payload_signature(&garage, &req).await?;
+	let api_key = api_key.ok_or_else(|| {
+		Error::Forbidden("Garage does not support anonymous access yet".to_string())
+	})?;
 
 	let bucket_name = match bucket_name {
 		None => return handle_request_without_bucket(garage, req, api_key, endpoint).await,
