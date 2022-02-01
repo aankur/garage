@@ -25,6 +25,7 @@ use crate::s3_cors::*;
 use crate::s3_delete::*;
 use crate::s3_get::*;
 use crate::s3_list::*;
+use crate::s3_post_object::handle_post_object;
 use crate::s3_put::*;
 use crate::s3_router::{Authorization, Endpoint};
 use crate::s3_website::*;
@@ -111,9 +112,7 @@ async fn handler_inner(garage: Arc<Garage>, req: Request<Body>) -> Result<Respon
 	debug!("Endpoint: {:?}", endpoint);
 
 	if let Endpoint::PostObject {} = endpoint {
-		return Err(Error::NotImplemented(
-			"POST object is not supported yet".to_owned(),
-		));
+		return handle_post_object(garage, req, bucket_name.unwrap()).await;
 	}
 
 	let (api_key, content_sha256) = check_payload_signature(&garage, &req).await?;
