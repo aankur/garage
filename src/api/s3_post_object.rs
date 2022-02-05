@@ -113,13 +113,13 @@ pub async fn handle_post_object(
 		let key = if key.contains("${filename}") {
 			let filename = field.file_name();
 			// is this correct? Maybe we should error instead of default?
-			key.replace("${filename}", &filename.unwrap_or_default())
+			key.replace("${filename}", filename.unwrap_or_default())
 		} else {
 			key
 		};
 
 		// TODO verify scope against bucket&date?
-		let (key_id, scope) = parse_credential(&credential)?;
+		let (key_id, _scope) = parse_credential(&credential)?;
 		// TODO duplicated from signature/*
 		let date: NaiveDateTime = NaiveDateTime::parse_from_str(&date, LONG_DATETIME)
 			.ok_or_bad_request("invalid date")?;
@@ -202,9 +202,9 @@ pub async fn handle_post_object(
 		return Ok(resp);
 	}
 
-	return Err(Error::BadRequest(
+	Err(Error::BadRequest(
 		"Request did not contain a file".to_owned(),
-	));
+	))
 }
 
 // TODO remove allow(dead_code) when policy is verified
