@@ -34,10 +34,6 @@ pub async fn handle_put(
 	api_key: &Key,
 	mut content_sha256: Option<Hash>,
 ) -> Result<Response<Body>, Error> {
-	// Generate identity of new version
-	let version_uuid = gen_uuid();
-	let version_timestamp = now_msec();
-
 	// Retrieve interesting headers from request
 	let headers = get_headers(&req)?;
 	debug!("Object headers: {:?}", headers);
@@ -91,6 +87,31 @@ pub async fn handle_put(
 	} else {
 		body.boxed()
 	};
+
+	save_stream(
+		garage,
+		headers,
+		body,
+		bucket_id,
+		key,
+		content_md5,
+		content_sha256,
+	)
+	.await
+}
+
+pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
+	garage: Arc<Garage>,
+	headers: ObjectVersionHeaders,
+	body: S,
+	bucket_id: Uuid,
+	key: &str,
+	content_md5: Option<String>,
+	content_sha256: Option<FixedBytes32>,
+) -> Result<Response<Body>, Error> {
+	// Generate identity of new version
+	let version_uuid = gen_uuid();
+	let version_timestamp = now_msec();
 
 	let mut chunker = StreamChunker::new(body, garage.config.block_size);
 	let first_block = chunker.next().await?.unwrap_or_default();
