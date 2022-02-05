@@ -1,8 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
-use hmac::Mac;
 use hyper::{header, Body, Request, Response, StatusCode};
 use multer::{Constraints, Multipart, SizeLimit};
 use serde::Deserialize;
@@ -12,8 +10,7 @@ use garage_model::garage::Garage;
 use crate::api_server::resolve_bucket;
 use crate::error::*;
 use crate::s3_put::save_stream;
-use crate::signature::payload::parse_credential;
-use crate::signature::{signing_hmac, LONG_DATETIME};
+use crate::signature::payload::{parse_date, verify_v4};
 
 pub async fn handle_post_object(
 	garage: Arc<Garage>,
@@ -118,32 +115,8 @@ pub async fn handle_post_object(
 			key
 		};
 
-		// TODO verify scope against bucket&date?
-		let (key_id, _scope) = parse_credential(&credential)?;
-		// TODO duplicated from signature/*
-		let date: NaiveDateTime = NaiveDateTime::parse_from_str(&date, LONG_DATETIME)
-			.ok_or_bad_request("invalid date")?;
-		let date: DateTime<Utc> = DateTime::from_utc(date, Utc);
-
-		// TODO counldn't this be a garage.get_key?
-		let api_key = garage
-			.key_table
-			.get(&garage_table::EmptyKey, &key_id)
-			.await?
-			.filter(|k| !k.state.is_deleted())
-			.ok_or_else(|| Error::Forbidden(format!("No such key: {}", key_id)))?;
-
-		// TODO duplicated from signature/*
-		let key_p = api_key.params().unwrap();
-		let secret_key = &key_p.secret_key;
-
-		let mut hmac = signing_hmac(&date, secret_key, &garage.config.s3_api.s3_region, "s3")
-			.ok_or_internal_error("Unable to build signing HMAC")?;
-		hmac.update(policy.as_bytes());
-		let our_signature = hex::encode(hmac.finalize().into_bytes());
-		if signature != our_signature {
-			return Err(Error::Forbidden("Invalid signature".to_string()));
-		}
+		let date = parse_date(&date)?;
+		let api_key = verify_v4(&garage, &credential, &date, &signature, policy.as_bytes()).await?;
 
 		let bucket_id = resolve_bucket(&garage, &bucket, &api_key).await?;
 
