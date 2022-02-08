@@ -99,6 +99,7 @@ pub async fn handle_put(
 		content_sha256,
 	)
 	.await
+	.map(|(uuid, md5)| put_response(uuid, md5))
 }
 
 pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
@@ -109,7 +110,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 	key: &str,
 	content_md5: Option<String>,
 	content_sha256: Option<FixedBytes32>,
-) -> Result<Response<Body>, Error> {
+) -> Result<(Uuid, String), Error> {
 	// Generate identity of new version
 	let version_uuid = gen_uuid();
 	let version_timestamp = now_msec();
@@ -150,7 +151,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 		let object = Object::new(bucket_id, key.into(), vec![object_version]);
 		garage.object_table.insert(&object).await?;
 
-		return Ok(put_response(version_uuid, data_md5sum_hex));
+		return Ok((version_uuid, data_md5sum_hex));
 	}
 
 	// Write version identifier in object table so that we have a trace
@@ -216,7 +217,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 	let object = Object::new(bucket_id, key.into(), vec![object_version]);
 	garage.object_table.insert(&object).await?;
 
-	Ok(put_response(version_uuid, md5sum_hex))
+	Ok((version_uuid, md5sum_hex))
 }
 
 /// Validate MD5 sum against content-md5 header
@@ -512,7 +513,7 @@ pub async fn handle_put_part(
 
 	let response = Response::builder()
 		.header("ETag", format!("\"{}\"", data_md5sum_hex))
-		.body(Body::from(vec![]))
+		.body(Body::empty())
 		.unwrap();
 	Ok(response)
 }

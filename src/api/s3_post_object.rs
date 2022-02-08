@@ -39,7 +39,8 @@ pub async fn handle_post_object(
 			.for_field("file", 5 * 1024 * 1024 * 1024),
 	);
 
-	let mut multipart = Multipart::with_constraints(req.into_body(), boundary, constraints);
+	let (_head, body) = req.into_parts();
+	let mut multipart = Multipart::with_constraints(body, boundary, constraints);
 
 	let mut params = HeaderMap::new();
 	while let Some(field) = multipart.next_field().await? {
@@ -56,6 +57,7 @@ pub async fn handle_post_object(
 						params.append("x-amz-acl", content);
 					}
 					_ => {
+						// TODO actually that's illegal to have the same param multiple times
 						params.append(name, content);
 					}
 				}
@@ -122,56 +124,64 @@ pub async fn handle_post_object(
 		let conditions = decoded_policy.into_conditions()?;
 
 		for (param_key, value) in params.iter() {
-			let param_key = param_key.as_str();
-			if param_key.eq_ignore_ascii_case("content-type") {
-				for cond in &conditions.content_type {
-					let ok = match cond {
-						Operation::Equal(s) => value == s,
-						Operation::StartsWith(s) => {
-							value.to_str()?.split(',').all(|v| v.starts_with(s))
+			let mut param_key = param_key.to_string();
+			param_key.make_ascii_lowercase();
+			match param_key.as_str() {
+				"policy" | "x-amz-signature" => (), // this is always accepted, as it's required to validate other fields
+				"content-type" => {
+					for cond in &conditions.content_type {
+						let ok = match cond {
+							Operation::Equal(s) => value == s,
+							Operation::StartsWith(s) => {
+								value.to_str()?.split(',').all(|v| v.starts_with(s))
+							}
+						};
+						if !ok {
+							return Err(Error::BadRequest(format!(
+								"Key '{}' has value not allowed in policy",
+								param_key
+							)));
 						}
-					};
-					if !ok {
-						return Err(Error::BadRequest(format!(
-							"Key '{}' has value not allowed in policy",
-							param_key
-						)));
 					}
 				}
-			} else if param_key == "key" {
-				let conds = conditions.params.get("key").ok_or_else(|| {
-					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
-				})?;
-				for cond in conds {
-					let ok = match cond {
-						Operation::Equal(s) => s == &key,
-						Operation::StartsWith(s) => key.starts_with(s),
-					};
-					if !ok {
-						return Err(Error::BadRequest(format!(
-							"Key '{}' has value not allowed in policy",
-							param_key
-						)));
+				"key" => {
+					let conds = conditions.params.get("key").ok_or_else(|| {
+						Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
+					})?;
+					for cond in conds {
+						let ok = match cond {
+							Operation::Equal(s) => s == &key,
+							Operation::StartsWith(s) => key.starts_with(s),
+						};
+						if !ok {
+							return Err(Error::BadRequest(format!(
+								"Key '{}' has value not allowed in policy",
+								param_key
+							)));
+						}
 					}
 				}
-			} else {
-				let conds = conditions.params.get(param_key).ok_or_else(|| {
-					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
-				})?;
-				for cond in conds {
-					let ok = match cond {
-						Operation::Equal(s) => s == value,
-						Operation::StartsWith(s) => value.to_str()?.starts_with(s),
-					};
-					if !ok {
-						return Err(Error::BadRequest(format!(
-							"Key '{}' has value not allowed in policy",
-							param_key
-						)));
+				_ => {
+					let conds = conditions.params.get(&param_key).ok_or_else(|| {
+						Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
+					})?;
+					for cond in conds {
+						let ok = match cond {
+							Operation::Equal(s) => s == value,
+							Operation::StartsWith(s) => value.to_str()?.starts_with(s),
+						};
+						if !ok {
+							return Err(Error::BadRequest(format!(
+								"Key '{}' has value not allowed in policy",
+								param_key
+							)));
+						}
 					}
 				}
 			}
 		}
+
+		// TODO check that each policy item is used
 
 		let content_type = field
 			.content_type()
@@ -185,7 +195,7 @@ pub async fn handle_post_object(
 		let headers = get_headers(&params)?;
 
 		let stream = field.map(|r| r.map_err(Into::into));
-		let res = save_stream(
+		let (_, md5) = save_stream(
 			garage,
 			headers,
 			StreamLimiter::new(stream, conditions.content_length),
@@ -196,35 +206,45 @@ pub async fn handle_post_object(
 		)
 		.await?;
 
-		let resp = if let Some(target) = params
+		let etag = format!("\"{}\"", md5);
+		// TODO get uri
+		// get Host
+		// append www-form-urlencoded key
+		let location = "todo";
+
+		let resp = if let Some(mut target) = params
 			.get("success_action_redirect")
 			.and_then(|h| h.to_str().ok())
 			.and_then(|u| url::Url::parse(u).ok())
 			.filter(|u| u.scheme() == "https" || u.scheme() == "http")
 		{
+			target
+				.query_pairs_mut()
+				.append_pair("bucket", &bucket)
+				.append_pair("key", &key)
+				.append_pair("etag", &etag);
 			let target = target.to_string();
 			Response::builder()
 				.status(StatusCode::SEE_OTHER)
 				.header(header::LOCATION, target.clone())
+				.header(header::ETAG, etag)
 				.body(target.into())?
 		} else {
 			let action = params
 				.get("success_action_status")
 				.and_then(|h| h.to_str().ok())
 				.unwrap_or("204");
+			let builder = Response::builder()
+				.status(StatusCode::OK)
+				.header(header::LOCATION, location)
+				.header(header::ETAG, etag);
 			match action {
-				"200" => Response::builder()
-					.status(StatusCode::OK)
-					.body(Body::empty())?,
+				"200" => builder.status(StatusCode::OK).body(Body::empty())?,
 				"201" => {
 					// TODO body should be an XML document, not sure which yet
-					Response::builder()
-						.status(StatusCode::CREATED)
-						.body(res.into_body())?
+					builder.status(StatusCode::CREATED).body(Body::from(""))?
 				}
-				_ => Response::builder()
-					.status(StatusCode::NO_CONTENT)
-					.body(Body::empty())?,
+				_ => builder.status(StatusCode::NO_CONTENT).body(Body::empty())?,
 			}
 		};
 
@@ -254,8 +274,9 @@ impl Policy {
 					if map.len() != 1 {
 						return Err(Error::BadRequest("Invalid policy item".to_owned()));
 					}
-					let (k, v) = map.into_iter().next().expect("size was verified");
-					if k.eq_ignore_ascii_case("content-type") {
+					let (mut k, v) = map.into_iter().next().expect("size was verified");
+					k.make_ascii_lowercase();
+					if k == "content-type" {
 						content_type.push(Operation::Equal(v));
 					} else {
 						params.entry(k).or_default().push(Operation::Equal(v));
@@ -265,16 +286,17 @@ impl Policy {
 					if key.remove(0) != '$' {
 						return Err(Error::BadRequest("Invalid policy item".to_owned()));
 					}
+					key.make_ascii_lowercase();
 					match cond.as_str() {
 						"eq" => {
-							if key.eq_ignore_ascii_case("content-type") {
+							if key == "content-type" {
 								content_type.push(Operation::Equal(value));
 							} else {
 								params.entry(key).or_default().push(Operation::Equal(value));
 							}
 						}
 						"starts-with" => {
-							if key.eq_ignore_ascii_case("content-type") {
+							if key == "content-type" {
 								content_type.push(Operation::StartsWith(value));
 							} else {
 								params
