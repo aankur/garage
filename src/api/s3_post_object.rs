@@ -56,21 +56,29 @@ pub async fn handle_post_object(
 		} else {
 			continue;
 		};
-		if name != "file" {
-			if let Ok(content) = HeaderValue::from_str(&field.text().await?) {
-				match name.as_str() {
-					"tag" => (/* tag need to be reencoded, but we don't support them yet anyway */),
-					"acl" => {
-						params.append("x-amz-acl", content);
+		if name == "file" {
+			break field;
+		}
+
+		if let Ok(content) = HeaderValue::from_str(&field.text().await?) {
+			match name.as_str() {
+				"tag" => (/* tag need to be reencoded, but we don't support them yet anyway */),
+				"acl" => {
+					if params.insert("x-amz-acl", content).is_some() {
+						return Err(Error::BadRequest(
+							"Field 'acl' provided more than one time".to_string(),
+						));
 					}
-					_ => {
-						// TODO actually that's illegal to have the same param multiple times
-						params.append(name, content);
+				}
+				_ => {
+					if params.insert(&name, content).is_some() {
+						return Err(Error::BadRequest(format!(
+							"Field '{}' provided more than one time",
+							name
+						)));
 					}
 				}
 			}
-		} else {
-			break field;
 		}
 	};
 
@@ -100,7 +108,7 @@ pub async fn handle_post_object(
 
 	let key = if key.contains("${filename}") {
 		let filename = field.file_name();
-		// is this correct? Maybe we should error instead of default?
+		// TODO is this correct? Maybe we should error instead of default?
 		key.replace("${filename}", filename.unwrap_or_default())
 	} else {
 		key.to_owned()
@@ -130,7 +138,7 @@ pub async fn handle_post_object(
 		));
 	}
 
-	let conditions = decoded_policy.into_conditions()?;
+	let mut conditions = decoded_policy.into_conditions()?;
 
 	for (param_key, value) in params.iter() {
 		let mut param_key = param_key.to_string();
@@ -154,13 +162,13 @@ pub async fn handle_post_object(
 				}
 			}
 			"key" => {
-				let conds = conditions.params.get("key").ok_or_else(|| {
+				let conds = conditions.params.remove("key").ok_or_else(|| {
 					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
 				})?;
 				for cond in conds {
 					let ok = match cond {
-						Operation::Equal(s) => s == &key,
-						Operation::StartsWith(s) => key.starts_with(s),
+						Operation::Equal(s) => s == key,
+						Operation::StartsWith(s) => key.starts_with(&s),
 					};
 					if !ok {
 						return Err(Error::BadRequest(format!(
@@ -171,13 +179,13 @@ pub async fn handle_post_object(
 				}
 			}
 			_ => {
-				let conds = conditions.params.get(&param_key).ok_or_else(|| {
+				let conds = conditions.params.remove(&param_key).ok_or_else(|| {
 					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
 				})?;
 				for cond in conds {
 					let ok = match cond {
-						Operation::Equal(s) => s == value,
-						Operation::StartsWith(s) => value.to_str()?.starts_with(s),
+						Operation::Equal(s) => s.as_str() == value,
+						Operation::StartsWith(s) => value.to_str()?.starts_with(s.as_str()),
 					};
 					if !ok {
 						return Err(Error::BadRequest(format!(
@@ -190,7 +198,12 @@ pub async fn handle_post_object(
 		}
 	}
 
-	// TODO check that each policy item is used
+	if let Some((param_key, _)) = conditions.params.iter().next() {
+		return Err(Error::BadRequest(format!(
+			"Key '{}' is required in policy, but no value was provided",
+			param_key
+		)));
+	}
 
 	let content_type = field
 		.content_type()
