@@ -43,7 +43,14 @@ pub async fn handle_post_object(
 	let mut multipart = Multipart::with_constraints(body, boundary, constraints);
 
 	let mut params = HeaderMap::new();
-	while let Some(field) = multipart.next_field().await? {
+	let field = loop {
+		let field = if let Some(field) = multipart.next_field().await? {
+			field
+		} else {
+			return Err(Error::BadRequest(
+				"Request did not contain a file".to_owned(),
+			));
+		};
 		let name: HeaderName = if let Some(Ok(name)) = field.name().map(TryInto::try_into) {
 			name
 		} else {
@@ -62,198 +69,194 @@ pub async fn handle_post_object(
 					}
 				}
 			}
-			continue;
-		}
-
-		// Current part is file. Do some checks before handling to PutObject code
-		let key = params
-			.get("key")
-			.ok_or_bad_request("No key was provided")?
-			.to_str()?;
-		let credential = params
-			.get("x-amz-credential")
-			.ok_or_else(|| {
-				Error::Forbidden("Garage does not support anonymous access yet".to_string())
-			})?
-			.to_str()?;
-		let policy = params
-			.get("policy")
-			.ok_or_bad_request("No policy was provided")?
-			.to_str()?;
-		let signature = params
-			.get("x-amz-signature")
-			.ok_or_bad_request("No signature was provided")?
-			.to_str()?;
-		let date = params
-			.get("x-amz-date")
-			.ok_or_bad_request("No date was provided")?
-			.to_str()?;
-
-		let key = if key.contains("${filename}") {
-			let filename = field.file_name();
-			// is this correct? Maybe we should error instead of default?
-			key.replace("${filename}", filename.unwrap_or_default())
 		} else {
-			key.to_owned()
-		};
-
-		let date = parse_date(date)?;
-		let api_key = verify_v4(&garage, credential, &date, signature, policy.as_bytes()).await?;
-
-		let bucket_id = resolve_bucket(&garage, &bucket, &api_key).await?;
-
-		if !api_key.allow_write(&bucket_id) {
-			return Err(Error::Forbidden(
-				"Operation is not allowed for this key.".to_string(),
-			));
+			break field;
 		}
+	};
 
-		let decoded_policy = base64::decode(&policy)?;
-		let decoded_policy: Policy =
-			serde_json::from_slice(&decoded_policy).ok_or_bad_request("Invalid policy")?;
+	// Current part is file. Do some checks before handling to PutObject code
+	let key = params
+		.get("key")
+		.ok_or_bad_request("No key was provided")?
+		.to_str()?;
+	let credential = params
+		.get("x-amz-credential")
+		.ok_or_else(|| {
+			Error::Forbidden("Garage does not support anonymous access yet".to_string())
+		})?
+		.to_str()?;
+	let policy = params
+		.get("policy")
+		.ok_or_bad_request("No policy was provided")?
+		.to_str()?;
+	let signature = params
+		.get("x-amz-signature")
+		.ok_or_bad_request("No signature was provided")?
+		.to_str()?;
+	let date = params
+		.get("x-amz-date")
+		.ok_or_bad_request("No date was provided")?
+		.to_str()?;
 
-		let expiration: DateTime<Utc> = DateTime::parse_from_rfc3339(&decoded_policy.expiration)
-			.ok_or_bad_request("Invalid expiration date")?
-			.into();
-		if Utc::now() - expiration > Duration::zero() {
-			return Err(Error::BadRequest(
-				"Expiration date is in the paste".to_string(),
-			));
-		}
+	let key = if key.contains("${filename}") {
+		let filename = field.file_name();
+		// is this correct? Maybe we should error instead of default?
+		key.replace("${filename}", filename.unwrap_or_default())
+	} else {
+		key.to_owned()
+	};
 
-		let conditions = decoded_policy.into_conditions()?;
+	let date = parse_date(date)?;
+	let api_key = verify_v4(&garage, credential, &date, signature, policy.as_bytes()).await?;
 
-		for (param_key, value) in params.iter() {
-			let mut param_key = param_key.to_string();
-			param_key.make_ascii_lowercase();
-			match param_key.as_str() {
-				"policy" | "x-amz-signature" => (), // this is always accepted, as it's required to validate other fields
-				"content-type" => {
-					for cond in &conditions.content_type {
-						let ok = match cond {
-							Operation::Equal(s) => value == s,
-							Operation::StartsWith(s) => {
-								value.to_str()?.split(',').all(|v| v.starts_with(s))
-							}
-						};
-						if !ok {
-							return Err(Error::BadRequest(format!(
-								"Key '{}' has value not allowed in policy",
-								param_key
-							)));
-						}
-					}
-				}
-				"key" => {
-					let conds = conditions.params.get("key").ok_or_else(|| {
-						Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
-					})?;
-					for cond in conds {
-						let ok = match cond {
-							Operation::Equal(s) => s == &key,
-							Operation::StartsWith(s) => key.starts_with(s),
-						};
-						if !ok {
-							return Err(Error::BadRequest(format!(
-								"Key '{}' has value not allowed in policy",
-								param_key
-							)));
-						}
-					}
-				}
-				_ => {
-					let conds = conditions.params.get(&param_key).ok_or_else(|| {
-						Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
-					})?;
-					for cond in conds {
-						let ok = match cond {
-							Operation::Equal(s) => s == value,
-							Operation::StartsWith(s) => value.to_str()?.starts_with(s),
-						};
-						if !ok {
-							return Err(Error::BadRequest(format!(
-								"Key '{}' has value not allowed in policy",
-								param_key
-							)));
-						}
-					}
-				}
-			}
-		}
+	let bucket_id = resolve_bucket(&garage, &bucket, &api_key).await?;
 
-		// TODO check that each policy item is used
-
-		let content_type = field
-			.content_type()
-			.map(AsRef::as_ref)
-			.map(HeaderValue::from_str)
-			.transpose()
-			.ok_or_bad_request("Invalid content type")?
-			.unwrap_or_else(|| HeaderValue::from_static("blob"));
-
-		params.append(header::CONTENT_TYPE, content_type);
-		let headers = get_headers(&params)?;
-
-		let stream = field.map(|r| r.map_err(Into::into));
-		let (_, md5) = save_stream(
-			garage,
-			headers,
-			StreamLimiter::new(stream, conditions.content_length),
-			bucket_id,
-			&key,
-			None,
-			None,
-		)
-		.await?;
-
-		let etag = format!("\"{}\"", md5);
-		// TODO get uri
-		// get Host
-		// append www-form-urlencoded key
-		let location = "todo";
-
-		let resp = if let Some(mut target) = params
-			.get("success_action_redirect")
-			.and_then(|h| h.to_str().ok())
-			.and_then(|u| url::Url::parse(u).ok())
-			.filter(|u| u.scheme() == "https" || u.scheme() == "http")
-		{
-			target
-				.query_pairs_mut()
-				.append_pair("bucket", &bucket)
-				.append_pair("key", &key)
-				.append_pair("etag", &etag);
-			let target = target.to_string();
-			Response::builder()
-				.status(StatusCode::SEE_OTHER)
-				.header(header::LOCATION, target.clone())
-				.header(header::ETAG, etag)
-				.body(target.into())?
-		} else {
-			let action = params
-				.get("success_action_status")
-				.and_then(|h| h.to_str().ok())
-				.unwrap_or("204");
-			let builder = Response::builder()
-				.status(StatusCode::OK)
-				.header(header::LOCATION, location)
-				.header(header::ETAG, etag);
-			match action {
-				"200" => builder.status(StatusCode::OK).body(Body::empty())?,
-				"201" => {
-					// TODO body should be an XML document, not sure which yet
-					builder.status(StatusCode::CREATED).body(Body::from(""))?
-				}
-				_ => builder.status(StatusCode::NO_CONTENT).body(Body::empty())?,
-			}
-		};
-
-		return Ok(resp);
+	if !api_key.allow_write(&bucket_id) {
+		return Err(Error::Forbidden(
+			"Operation is not allowed for this key.".to_string(),
+		));
 	}
 
-	Err(Error::BadRequest(
-		"Request did not contain a file".to_owned(),
-	))
+	let decoded_policy = base64::decode(&policy)?;
+	let decoded_policy: Policy =
+		serde_json::from_slice(&decoded_policy).ok_or_bad_request("Invalid policy")?;
+
+	let expiration: DateTime<Utc> = DateTime::parse_from_rfc3339(&decoded_policy.expiration)
+		.ok_or_bad_request("Invalid expiration date")?
+		.into();
+	if Utc::now() - expiration > Duration::zero() {
+		return Err(Error::BadRequest(
+			"Expiration date is in the paste".to_string(),
+		));
+	}
+
+	let conditions = decoded_policy.into_conditions()?;
+
+	for (param_key, value) in params.iter() {
+		let mut param_key = param_key.to_string();
+		param_key.make_ascii_lowercase();
+		match param_key.as_str() {
+			"policy" | "x-amz-signature" => (), // this is always accepted, as it's required to validate other fields
+			"content-type" => {
+				for cond in &conditions.content_type {
+					let ok = match cond {
+						Operation::Equal(s) => value == s,
+						Operation::StartsWith(s) => {
+							value.to_str()?.split(',').all(|v| v.starts_with(s))
+						}
+					};
+					if !ok {
+						return Err(Error::BadRequest(format!(
+							"Key '{}' has value not allowed in policy",
+							param_key
+						)));
+					}
+				}
+			}
+			"key" => {
+				let conds = conditions.params.get("key").ok_or_else(|| {
+					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
+				})?;
+				for cond in conds {
+					let ok = match cond {
+						Operation::Equal(s) => s == &key,
+						Operation::StartsWith(s) => key.starts_with(s),
+					};
+					if !ok {
+						return Err(Error::BadRequest(format!(
+							"Key '{}' has value not allowed in policy",
+							param_key
+						)));
+					}
+				}
+			}
+			_ => {
+				let conds = conditions.params.get(&param_key).ok_or_else(|| {
+					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
+				})?;
+				for cond in conds {
+					let ok = match cond {
+						Operation::Equal(s) => s == value,
+						Operation::StartsWith(s) => value.to_str()?.starts_with(s),
+					};
+					if !ok {
+						return Err(Error::BadRequest(format!(
+							"Key '{}' has value not allowed in policy",
+							param_key
+						)));
+					}
+				}
+			}
+		}
+	}
+
+	// TODO check that each policy item is used
+
+	let content_type = field
+		.content_type()
+		.map(AsRef::as_ref)
+		.map(HeaderValue::from_str)
+		.transpose()
+		.ok_or_bad_request("Invalid content type")?
+		.unwrap_or_else(|| HeaderValue::from_static("blob"));
+
+	params.append(header::CONTENT_TYPE, content_type);
+	let headers = get_headers(&params)?;
+
+	let stream = field.map(|r| r.map_err(Into::into));
+	let (_, md5) = save_stream(
+		garage,
+		headers,
+		StreamLimiter::new(stream, conditions.content_length),
+		bucket_id,
+		&key,
+		None,
+		None,
+	)
+	.await?;
+
+	let etag = format!("\"{}\"", md5);
+	// TODO get uri
+	// get Host
+	// append www-form-urlencoded key
+	let location = "todo";
+
+	let resp = if let Some(mut target) = params
+		.get("success_action_redirect")
+		.and_then(|h| h.to_str().ok())
+		.and_then(|u| url::Url::parse(u).ok())
+		.filter(|u| u.scheme() == "https" || u.scheme() == "http")
+	{
+		target
+			.query_pairs_mut()
+			.append_pair("bucket", &bucket)
+			.append_pair("key", &key)
+			.append_pair("etag", &etag);
+		let target = target.to_string();
+		Response::builder()
+			.status(StatusCode::SEE_OTHER)
+			.header(header::LOCATION, target.clone())
+			.header(header::ETAG, etag)
+			.body(target.into())?
+	} else {
+		let action = params
+			.get("success_action_status")
+			.and_then(|h| h.to_str().ok())
+			.unwrap_or("204");
+		let builder = Response::builder()
+			.header(header::LOCATION, location)
+			.header(header::ETAG, etag);
+		match action {
+			"200" => builder.status(StatusCode::OK).body(Body::empty())?,
+			"201" => {
+				// TODO body should be an XML document, not sure which yet
+				builder.status(StatusCode::CREATED).body(Body::from(""))?
+			}
+			_ => builder.status(StatusCode::NO_CONTENT).body(Body::empty())?,
+		}
+	};
+
+	Ok(resp)
 }
 
 #[derive(Deserialize)]
