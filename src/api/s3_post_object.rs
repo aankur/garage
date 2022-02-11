@@ -17,6 +17,7 @@ use garage_model::garage::Garage;
 use crate::api_server::resolve_bucket;
 use crate::error::*;
 use crate::s3_put::{get_headers, save_stream};
+use crate::s3_xml;
 use crate::signature::payload::{parse_date, verify_v4};
 
 pub async fn handle_post_object(
@@ -39,7 +40,7 @@ pub async fn handle_post_object(
 			.for_field("file", 5 * 1024 * 1024 * 1024),
 	);
 
-	let (_head, body) = req.into_parts();
+	let (head, body) = req.into_parts();
 	let mut multipart = Multipart::with_constraints(body, boundary, constraints);
 
 	let mut params = HeaderMap::new();
@@ -107,9 +108,11 @@ pub async fn handle_post_object(
 		.to_str()?;
 
 	let key = if key.contains("${filename}") {
-		let filename = field.file_name();
-		// TODO is this correct? Maybe we should error instead of default?
-		key.replace("${filename}", filename.unwrap_or_default())
+		if let Some(filename) = field.file_name() {
+			key.replace("${filename}", filename)
+		} else {
+			key.to_owned()
+		}
 	} else {
 		key.to_owned()
 	};
@@ -229,10 +232,6 @@ pub async fn handle_post_object(
 	.await?;
 
 	let etag = format!("\"{}\"", md5);
-	// TODO get uri
-	// get Host
-	// append www-form-urlencoded key
-	let location = "todo";
 
 	let resp = if let Some(mut target) = params
 		.get("success_action_redirect")
@@ -252,18 +251,49 @@ pub async fn handle_post_object(
 			.header(header::ETAG, etag)
 			.body(target.into())?
 	} else {
+		let path = head
+			.uri
+			.into_parts()
+			.path_and_query
+			.map(|paq| paq.path().to_string())
+			.unwrap_or_else(|| "/".to_string());
+		let authority = head
+			.headers
+			.get(header::HOST)
+			.and_then(|h| h.to_str().ok())
+			.unwrap_or_default();
+		let proto = if !authority.is_empty() {
+			"https://"
+		} else {
+			""
+		};
+
+		let url_key: String = form_urlencoded::byte_serialize(key.as_bytes())
+			.flat_map(str::chars)
+			.collect();
+		let location = format!("{}{}{}{}", proto, authority, path, url_key);
+
 		let action = params
 			.get("success_action_status")
 			.and_then(|h| h.to_str().ok())
 			.unwrap_or("204");
 		let builder = Response::builder()
-			.header(header::LOCATION, location)
-			.header(header::ETAG, etag);
+			.header(header::LOCATION, location.clone())
+			.header(header::ETAG, etag.clone());
 		match action {
 			"200" => builder.status(StatusCode::OK).body(Body::empty())?,
 			"201" => {
-				// TODO body should be an XML document, not sure which yet
-				builder.status(StatusCode::CREATED).body(Body::from(""))?
+				let xml = s3_xml::PostObject {
+					xmlns: (),
+					location: s3_xml::Value(location),
+					bucket: s3_xml::Value(bucket),
+					key: s3_xml::Value(key),
+					etag: s3_xml::Value(etag),
+				};
+				let body = s3_xml::to_xml_with_header(&xml)?;
+				builder
+					.status(StatusCode::CREATED)
+					.body(Body::from(body.into_bytes()))?
 			}
 			_ => builder.status(StatusCode::NO_CONTENT).body(Body::empty())?,
 		}

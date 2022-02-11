@@ -699,6 +699,7 @@ dependencies = [
  "chrono",
  "crypto-mac 0.10.1",
  "err-derive 0.3.0",
+ "form_urlencoded",
  "futures",
  "futures-util",
  "garage_model 0.6.0",
