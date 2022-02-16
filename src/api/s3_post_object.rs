@@ -108,6 +108,7 @@ pub async fn handle_post_object(
 		.to_str()?;
 
 	let key = if key.contains("${filename}") {
+		// if no filename is provided, don't replace. This matches the behavior of AWS.
 		if let Some(filename) = field.file_name() {
 			key.replace("${filename}", filename)
 		} else {
@@ -149,11 +150,14 @@ pub async fn handle_post_object(
 		match param_key.as_str() {
 			"policy" | "x-amz-signature" => (), // this is always accepted, as it's required to validate other fields
 			"content-type" => {
-				for cond in &conditions.content_type {
+				let conds = conditions.params.remove("content-type").ok_or_else(|| {
+					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
+				})?;
+				for cond in conds {
 					let ok = match cond {
-						Operation::Equal(s) => value == s,
+						Operation::Equal(s) => s.as_str() == value,
 						Operation::StartsWith(s) => {
-							value.to_str()?.split(',').all(|v| v.starts_with(s))
+							value.to_str()?.split(',').all(|v| v.starts_with(&s))
 						}
 					};
 					if !ok {
@@ -182,6 +186,12 @@ pub async fn handle_post_object(
 				}
 			}
 			_ => {
+				if param_key.starts_with("x-ignore-") {
+					// if a x-ignore is provided in policy, it's not removed here, so it will be
+					// rejected as provided in policy but not in the request. As odd as it is, it's
+					// how aws seems to behave.
+					continue;
+				}
 				let conds = conditions.params.remove(&param_key).ok_or_else(|| {
 					Error::BadRequest(format!("Key '{}' is not allowed in policy", param_key))
 				})?;
@@ -208,15 +218,6 @@ pub async fn handle_post_object(
 		)));
 	}
 
-	let content_type = field
-		.content_type()
-		.map(AsRef::as_ref)
-		.map(HeaderValue::from_str)
-		.transpose()
-		.ok_or_bad_request("Invalid content type")?
-		.unwrap_or_else(|| HeaderValue::from_static("blob"));
-
-	params.append(header::CONTENT_TYPE, content_type);
 	let headers = get_headers(&params)?;
 
 	let stream = field.map(|r| r.map_err(Into::into));
@@ -311,7 +312,6 @@ struct Policy {
 impl Policy {
 	fn into_conditions(self) -> Result<Conditions, Error> {
 		let mut params = HashMap::<_, Vec<_>>::new();
-		let mut content_type = Vec::new();
 
 		let mut length = (0, u64::MAX);
 		for condition in self.conditions {
@@ -322,11 +322,7 @@ impl Policy {
 					}
 					let (mut k, v) = map.into_iter().next().expect("size was verified");
 					k.make_ascii_lowercase();
-					if k == "content-type" {
-						content_type.push(Operation::Equal(v));
-					} else {
-						params.entry(k).or_default().push(Operation::Equal(v));
-					}
+					params.entry(k).or_default().push(Operation::Equal(v));
 				}
 				PolicyCondition::OtherOp([cond, mut key, value]) => {
 					if key.remove(0) != '$' {
@@ -335,21 +331,13 @@ impl Policy {
 					key.make_ascii_lowercase();
 					match cond.as_str() {
 						"eq" => {
-							if key == "content-type" {
-								content_type.push(Operation::Equal(value));
-							} else {
-								params.entry(key).or_default().push(Operation::Equal(value));
-							}
+							params.entry(key).or_default().push(Operation::Equal(value));
 						}
 						"starts-with" => {
-							if key == "content-type" {
-								content_type.push(Operation::StartsWith(value));
-							} else {
-								params
-									.entry(key)
-									.or_default()
-									.push(Operation::StartsWith(value));
-							}
+							params
+								.entry(key)
+								.or_default()
+								.push(Operation::StartsWith(value));
 						}
 						_ => return Err(Error::BadRequest("Invalid policy item".to_owned())),
 					}
@@ -366,14 +354,13 @@ impl Policy {
 		}
 		Ok(Conditions {
 			params,
-			content_type,
 			content_length: RangeInclusive::new(length.0, length.1),
 		})
 	}
 }
 
 /// A single condition from a policy
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum PolicyCondition {
 	// will contain a single key-value pair
@@ -382,14 +369,13 @@ enum PolicyCondition {
 	SizeRange(String, u64, u64),
 }
 
+#[derive(Debug)]
 struct Conditions {
 	params: HashMap<String, Vec<Operation>>,
-	content_type: Vec<Operation>,
-	#[allow(dead_code)]
 	content_length: RangeInclusive<u64>,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum Operation {
 	Equal(String),
 	StartsWith(String),
@@ -441,5 +427,73 @@ where
 			_ => {}
 		}
 		res
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_policy_1() {
+		let policy_json = br#"
+{ "expiration": "2007-12-01T12:00:00.000Z",
+  "conditions": [
+    {"acl": "public-read" },
+    {"bucket": "johnsmith" },
+    ["starts-with", "$key", "user/eric/"]
+  ]
+}
+		"#;
+		let policy_2: Policy = serde_json::from_slice(&policy_json[..]).unwrap();
+		let mut conditions = policy_2.into_conditions().unwrap();
+
+		assert_eq!(
+			conditions.params.remove(&"acl".to_string()),
+			Some(vec![Operation::Equal("public-read".into())])
+		);
+		assert_eq!(
+			conditions.params.remove(&"bucket".to_string()),
+			Some(vec![Operation::Equal("johnsmith".into())])
+		);
+		assert_eq!(
+			conditions.params.remove(&"key".to_string()),
+			Some(vec![Operation::StartsWith("user/eric/".into())])
+		);
+		assert!(conditions.params.is_empty());
+		assert_eq!(conditions.content_length, 0..=u64::MAX);
+	}
+
+	#[test]
+	fn test_policy_2() {
+		let policy_json = br#"
+{ "expiration": "2007-12-01T12:00:00.000Z",
+  "conditions": [
+	[ "eq", "$acl", "public-read" ],
+	["starts-with", "$Content-Type", "image/"],
+	["starts-with", "$success_action_redirect", ""],
+	["content-length-range", 1048576, 10485760]
+  ]
+}
+		"#;
+		let policy_2: Policy = serde_json::from_slice(&policy_json[..]).unwrap();
+		let mut conditions = policy_2.into_conditions().unwrap();
+
+		assert_eq!(
+			conditions.params.remove(&"acl".to_string()),
+			Some(vec![Operation::Equal("public-read".into())])
+		);
+		assert_eq!(
+			conditions.params.remove("content-type").unwrap(),
+			vec![Operation::StartsWith("image/".into())]
+		);
+		assert_eq!(
+			conditions
+				.params
+				.remove(&"success_action_redirect".to_string()),
+			Some(vec![Operation::StartsWith("".into())])
+		);
+		assert!(conditions.params.is_empty());
+		assert_eq!(conditions.content_length, 1048576..=10485760);
 	}
 }
