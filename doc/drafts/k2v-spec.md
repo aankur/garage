@@ -1,4 +1,3 @@
-²
 # Specification of the Garage K2V API (K2V = Key/Key/Value)
 
 - We are storing triplets of the form `(partition key, sort key, value)` -> no
@@ -23,6 +22,121 @@
   well as [here](https://github.com/ricardobcl/Dotted-Version-Vectors)
 
 
+## Data format
+
+### Triple format
+
+Triples in K2V are constituted of three fields:
+
+- a partition key (`pk`), an utf8 string that defines in what partition the triple is
+  stored; triples in different partitions cannot be listed together, they must
+  be the object of different ReadItem or ReadBatch queries
+
+- a sort key (`sk`), an utf8 string that defines the index of the triple inside its
+  partition; triples are uniquely idendified by their partition key + sort key
+
+- a value (`v`), an opaque binary blob associated to the partition key + sort key;
+  they are transmitted as binary when possible but in most case in the JSON API
+  they will be represented as strings using base64 encoding; a value can also
+  be `null` to indicate a deleted triple (a `null` value is called a tombstone)
+
+### Causality information
+
+K2V supports storing several concurrent values associated to a pk+sk, in the
+case where insertion or deletion operations are detected to be concurrent (i.e.
+there is not one that was aware of the other, they are not causally dependant
+one on the other).  In practice, it even looks more like the opposite: to
+overwrite a previously existing value, the client must give a "causality token"
+that "proves" (not in a cryptographic sense) that it had seen a previous value.
+Otherwise, the value written will not overwrite an existing value, it will just
+create a new concurrent value.
+
+The causality token is a binary/b64-encoded representation of a context,
+specified below.
+
+A set of concurrent values looks like this:
+
+```
+(node1, tdiscard1, (v1, t1), (v2, t2)) ; tdiscard1 < t1 < t2
+(node2, tdiscard2, (v3, t3)            ; tdiscard2 < t3
+```
+
+`tdiscard` for a node `i` means that all values inserted by node `i` with times
+`<= tdiscard` are obsoleted, i.e. have been read by a client that overwrote it
+afterwards.
+
+The associated context would be the following: `[(node1, t2), (node2, t3)]`,
+i.e. if a node reads this set of values and inserts a new values, we will now
+have `tdiscard1 = t2` and `tdiscard2 = t3`, to indicate that values v1, v2 and v3
+are obsoleted by the new write.
+
+**Basic insertion.** To insert a new value `v4` with context `[(node1, t2), (node2, t3)]`, in a
+simple case where there was no insertion in-between reading the value
+mentionned above and writing `v4`, and supposing that node2 receives the
+InsertItem query:
+
+- `node2` generates a timestamp `t4` such that `t4 > t3`.
+- the new state is as follows:
+
+```
+(node1, tdiscard1', ())       ; tdiscard1' = t2
+(node2, tdiscard2', (v4, t4)) ; tdiscard2' = t3
+```
+
+**A more complex insertion example.** In the general case, other intermediate values could have
+been written before `v4` with context `[(node1, t2), (node2, t3)]` is sent to the system.
+For instance, here is a possible sequence of events:
+
+1. First we have the set of values v1, v2 and v3 described above.
+   A node reads it, it obtains values v1, v2 and v3 with context `[(node1, t2), (node2, t3)]`.
+
+2. A node writes a value `v5` with context `[(node1, t1)]`, i.e. `v5` is only a successor of v1 but not of v2 or v3. Suppose node1 receives the write, it will generate a new timestamp `t5` larger than all of the timestamps it knows of, i.e. `t5 > t2`. We will now have: 
+
+```
+(node1, tdiscard1'', (v2, t2), (v5, t5)) ; tdiscard1'' = t1 < t2 < t5
+(node2, tdiscard2, (v3, t3)              ; tdiscard2 < t3
+```
+
+3. Now `v4` is written with context `[(node1, t2), (node2, t3)]`, and node2 processes the query. It will generate `t4 > t3` and the state will become:
+
+```
+(node1, tdiscard1', (v5, t5))       ; tdiscard1' = t2 < t5
+(node2, tdiscard2', (v4, t4))       ; tdiscard2' = t3
+```
+
+**Generic algorithm for handling insertions:** A certain node i handles the InsertItem and is responsible for the correctness of this procedure.
+
+1. Lock the key (or the whole table?) at this node to prevent concurrent updates of the value that would mess things up
+2. Read current set of values
+3. Generate a new timestamp that is larger than the largest timestamp for node i
+4. Add the inserted value in the list of values of node i
+5. Update the discard times to be the times set in the context, and accordingly discard overwritten values
+6. Release lock
+7. Propagate updated value to other nodes
+8. Return to user when propagation achieved the write quorum (propagation to other nodes continues asynchronously)
+
+**Encoding of contexts:**
+
+Contexts consist in a list of (node id, timestamp) pairs.
+They are encoded in binary as follows:
+
+```
+checksum: u64, [ node: u64, timestamp: u64 ]*
+```
+
+The checksum is just the XOR of all of the node IDs and timestamps.
+
+Once encoded in binary, contexts are written and transmitted in base64.
+
+
+### Indexing
+
+K2V keeps an index, a secondary data structure that is updated asynchronously,
+that keeps tracks of the number of triples stored for each partition key.
+This allows easy listing of all of the partition keys for which triples exist
+in a bucket, as the partition key becomes the sort key in the index.
+
+TODO: writeup asynchronous counting strategy
 
 ## API Endpoints
 
