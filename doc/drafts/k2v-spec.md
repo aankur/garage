@@ -104,12 +104,12 @@ For instance, here is a possible sequence of events:
 (node2, tdiscard2', (v4, t4))       ; tdiscard2' = t3
 ```
 
-**Generic algorithm for handling insertions:** A certain node i handles the InsertItem and is responsible for the correctness of this procedure.
+**Generic algorithm for handling insertions:** A certain node n handles the InsertItem and is responsible for the correctness of this procedure.
 
 1. Lock the key (or the whole table?) at this node to prevent concurrent updates of the value that would mess things up
 2. Read current set of values
-3. Generate a new timestamp that is larger than the largest timestamp for node i
-4. Add the inserted value in the list of values of node i
+3. Generate a new timestamp that is larger than the largest timestamp for node n
+4. Add the inserted value in the list of values of node n
 5. Update the discard times to be the times set in the context, and accordingly discard overwritten values
 6. Release lock
 7. Propagate updated value to other nodes
@@ -136,7 +136,28 @@ that keeps tracks of the number of triples stored for each partition key.
 This allows easy listing of all of the partition keys for which triples exist
 in a bucket, as the partition key becomes the sort key in the index.
 
-TODO: writeup asynchronous counting strategy
+How indexing works:
+
+- Each node keeps a local count of how many items it stores for each partition,
+  in a local Sled tree that is updated atomically when an item is modified.
+- These local counters are asynchronously stored in the index table which is
+  a regular Garage table spread in the network. Counters are stored as LWW values,
+  so basically the final table will have the following structure:
+
+```
+- pk: bucket
+- sk: partition key for which we are counting
+- v:  lwwmap (node id -> number of items)
+```
+
+The final number of items present in the partition can be estimated by taking
+the maximum of the values (i.e. the value for the node that announces having
+the most items for that partition). In most cases the values for different node
+IDs should all be the same; more precisely, three node IDs should map to the
+same non-zero value, and all other node IDs that are present are tombstones
+that map to zeroes.  Note that we need to filter out values from nodes that are
+no longer part of the cluster layout, as when nodes are removed they won't
+necessarily have had the time to set their counters to zero.
 
 ## API Endpoints
 
