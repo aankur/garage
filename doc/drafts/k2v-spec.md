@@ -361,7 +361,7 @@ HTTP/1.1 200 OK
   start: null,
   end: null,
   limit: null,
-  partition_keys: [
+  partitionKeys: [
     { pk: "keys", n: 3043 },
     { pk: "mailbox:INBOX", n: 42 },
     { pk: "mailbox:Junk", n: 2991 },
@@ -421,24 +421,24 @@ HTTP/1.1 200 OK
 Batch read of triplets in a bucket.
 
 The request body is a JSON list of searches, that each specify a range of
-items to get (to get single items, set `single_item` to `true`). A search is a
+items to get (to get single items, set `singleItem` to `true`). A search is a
 JSON struct with the following fields:
 
 | name | default value | meaning |
 | - | - | - |
-| `partition_key` | **mandatory** | The partition key in which to search |
+| `partitionKey` | **mandatory** | The partition key in which to search |
 | `start` | `null` | The sort key of the first item to read |
 | `end` | `null` | The sort key of the last item to read (excluded) |
 | `limit` | `null` | The maximum number of items to return |
-| `single_item` | `false` | Whether to return only the item with sort key `start` |
-| `conflicts_only` | `false` | Whether to return only items that have several concurrent values |
+| `singleItem` | `false` | Whether to return only the item with sort key `start` |
+| `conflictsOnly` | `false` | Whether to return only items that have several concurrent values |
 | `tombstones` | `false` | Whether or not to return tombstone lines to indicate the presence of old deleted items |
 
 
 For each of the searches, triplets are listed and returned separately. The
 semantics of `start`, `end` and `limit` is the same as for ReadIndex. The
-additionnal parameter `single_item` allows to get a single item, whose sort key
-is the one given in `start`. Parameters `conflicts_only` and `tombstones`
+additionnal parameter `singleItem` allows to get a single item, whose sort key
+is the one given in `start`. Parameters `conflictsOnly` and `tombstones`
 control additional filters on the items that are returned.
 
 The result is a list of length the number of searches, that consists in for
@@ -471,17 +471,17 @@ POST /my_bucket?search HTTP/1.1
 
 [
   {
-    partition_key: "mailboxes",
+    partitionKey: "mailboxes",
   },
   {
-    partition_key: "mailbox:INBOX",
+    partitionKey: "mailbox:INBOX",
     start: "001892831",
     limit: 3,
   },
   {
-    partition_key: "keys",
+    partitionKey: "keys",
     start: "0",
-    single_item: true,
+    singleItem: true,
   },
 ]
 ```
@@ -493,13 +493,13 @@ HTTP/1.1 200 OK
 
 [
   {
-    partition_key: "mailboxes",
+    partitionKey: "mailboxes",
     start: null,
     end: null,
     limit: null,
-    conflicts_only: false,
+    conflictsOnly: false,
     tombstones: false,
-    single_item: false,
+    singleItem: false,
     items: [
       { sk: "INBOX", ct: "opaquetoken123", v: ["b64cryptoblob123", "b64cryptoblob'123"] },
       { sk: "Trash", ct: "opaquetoken456", v: ["b64cryptoblob456"] },
@@ -509,13 +509,13 @@ HTTP/1.1 200 OK
     nextStart: null,
   },
   {
-    partition_key: "mailbox::INBOX",
+    partitionKey: "mailbox::INBOX",
     start: "001892831",
     end: null,
     limit: 3,
-    conflicts_only: false,
+    conflictsOnly: false,
     tombstones: false,
-    single_item: false,
+    singleItem: false,
     items: [
       { sk: "001892831", ct: "opaquetoken321", v: ["b64cryptoblob321"] },
       { sk: "001892832", ct: "opaquetoken654", v: ["b64cryptoblob654"] },
@@ -525,13 +525,13 @@ HTTP/1.1 200 OK
     nextStart: "001892898",
   },
   {
-    partition_key: "keys",
+    partitionKey: "keys",
     start: "0",
     end: null,
-    conflicts_only: false,
+    conflictsOnly: false,
     tombstones: false,
     limit: null,
-    single_item: true,
+    singleItem: true,
     items: [
       { sk: "0", ct: "opaquetoken999", v: ["b64binarystuff999"] },
     ],
@@ -547,8 +547,8 @@ HTTP/1.1 200 OK
 
 Batch deletion of triplets. The request format is the same for `POST
 /<bucket>?search` to indicate items or range of items, except that here they
-are deleted instead of returned, but only the fields `partition_key`, `start`,
-`end`, and `single_item` are supported. Causality information is not given by
+are deleted instead of returned, but only the fields `partitionKey`, `start`,
+`end`, and `singleItem` are supported. Causality information is not given by
 the user: this request will internally list all triplets and write deletion
 markers that supersede all of the versions that have been read.
 
@@ -562,12 +562,12 @@ POST /my_bucket?delete HTTP/1.1
 
 [
   {
-    partition_key: "mailbox:OldMailbox",
+    partitionKey: "mailbox:OldMailbox",
   },
   {
-    partition_key: "mailbox:INBOX",
+    partitionKey: "mailbox:INBOX",
     start: "0018928321",
-    single_item: true,
+    singleItem: true,
   },
 ]
 ```
@@ -579,18 +579,18 @@ HTTP/1.1 200 OK
 
 [
   {
-    partition_key: "mailbox:OldMailbox",
+    partitionKey: "mailbox:OldMailbox",
     start: null,
     end: null,
-    single_item: false,
-    deleted_items: 35,
+    singleItem: false,
+    deletedItems: 35,
   },
   {
-    partition_key: "mailbox:INBOX",
+    partitionKey: "mailbox:INBOX",
     start: "0018928321",
     end: null,
-    single_item: true,
-    deleted_items: 1,
+    singleItem: true,
+    deletedItems: 1,
   },
 ]
 ```
