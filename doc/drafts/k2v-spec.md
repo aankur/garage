@@ -268,6 +268,31 @@ X-Garage-Causality-Token: opaquetoken123
 Content-Type: application/octet-stream
 ```
 
+
+**PollItem: `GET /<bucket>/<partition key>?sort_key=<sort key>&causality_token=<causality token>`**
+
+This endpoint will block until a new value is written to a key.
+
+The GET parameter `causality_token` should be set to the causality
+token returned with the last read of the key, so that K2V knows
+what values are concurrent or newer than the ones that the
+client previously knew.
+
+This endpoint returns the new value in the same format as ReadItem.
+If no new value is written and the timeout elapses,
+an HTTP 304 NOT MODIFIED is returned.
+
+Query parameters:
+
+| name | default value | meaning |
+| - | - | - |
+| `sort_key` | **mandatory** | The sort key of the item to read |
+| `causality_token` | **mandatory** | The causality token of the last known value or set of values |
+| `timeout` | 300 | The timeout before 304 NOT MODIFIED is returned if the value isn't updated |
+
+The timeout can be set to any number of seconds, with a maximum of 600 seconds (10 minutes).
+
+
 **InsertItem: `PUT /<bucket>/<partition key>?sort_key=<sort_key>`**
 
 Inserts a single item. This request does not use JSON, the body is sent directly as a binary blob.
