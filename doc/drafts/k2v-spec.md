@@ -90,21 +90,26 @@ For instance, here is a possible sequence of events:
 1. First we have the set of values v1, v2 and v3 described above.
    A node reads it, it obtains values v1, v2 and v3 with context `[(node1, t2), (node2, t3)]`.
 
-2. A node writes a value `v5` with context `[(node1, t1)]`, i.e. `v5` is only a successor of v1 but not of v2 or v3. Suppose node1 receives the write, it will generate a new timestamp `t5` larger than all of the timestamps it knows of, i.e. `t5 > t2`. We will now have: 
+2. A node writes a value `v5` with context `[(node1, t1)]`, i.e. `v5` is only a
+   successor of v1 but not of v2 or v3. Suppose node1 receives the write, it
+   will generate a new timestamp `t5` larger than all of the timestamps it
+   knows of, i.e. `t5 > t2`. We will now have:
 
 ```
 (node1, tdiscard1'', (v2, t2), (v5, t5)) ; tdiscard1'' = t1 < t2 < t5
 (node2, tdiscard2, (v3, t3)              ; tdiscard2 < t3
 ```
 
-3. Now `v4` is written with context `[(node1, t2), (node2, t3)]`, and node2 processes the query. It will generate `t4 > t3` and the state will become:
+3. Now `v4` is written with context `[(node1, t2), (node2, t3)]`, and node2
+   processes the query. It will generate `t4 > t3` and the state will become:
 
 ```
 (node1, tdiscard1', (v5, t5))       ; tdiscard1' = t2 < t5
 (node2, tdiscard2', (v4, t4))       ; tdiscard2' = t3
 ```
 
-**Generic algorithm for handling insertions:** A certain node n handles the InsertItem and is responsible for the correctness of this procedure.
+**Generic algorithm for handling insertions:** A certain node n handles the
+InsertItem and is responsible for the correctness of this procedure.
 
 1. Lock the key (or the whole table?) at this node to prevent concurrent updates of the value that would mess things up
 2. Read current set of values
@@ -352,20 +357,20 @@ Example response:
 ```json
 HTTP/1.1 200 OK
 
-{ 
+{
   start: null,
   end: null,
   limit: null,
   partition_keys: [
-    [ "keys", 3043 ],
-    [ "mailbox:INBOX", 42 ],
-    [ "mailbox:Junk", 2991 ],
-    [ "mailbox:Trash", 10 ],
-    [ "mailboxes", 3 ],
+    { pk: "keys", n: 3043 },
+    { pk: "mailbox:INBOX", n: 42 },
+    { pk: "mailbox:Junk", n: 2991 },
+    { pk: "mailbox:Trash", n: 10 },
+    { pk: "mailboxes", n: 3 },
   ],
   more: false,
   nextStart: null,
-} 
+}
 ```
 
 
@@ -374,8 +379,8 @@ HTTP/1.1 200 OK
 **InsertBatch: `POST /<bucket>`**
 
 Simple insertion and deletion of triplets. The body is just a list of items to
-insert in the following format: `[ "<partition key>", "<sort key>", "<causality
-token>"|null, "<value>"|null ]`. 
+insert in the following format:
+`{ pk: "<partition key>", sk: "<sort key>", ct: "<causality token>"|null, v: "<value>"|null }`.
 
 The causality token should be the one returned in a previous read request (e.g.
 by ReadItem or ReadBatch), to indicate that this write takes into account the
@@ -397,9 +402,9 @@ Example query:
 POST /my_bucket HTTP/1.1
 
 [
-  [ "mailbox:INBOX", "001892831", "opaquetoken321", "b64cryptoblob321updated" ],
-  [ "mailbox:INBOX", "001892912", null, "b64cryptoblob444" ],
-  [ "mailbox:INBOX", "001892932", "opaquetoken654", null ],
+  { pk: "mailbox:INBOX", sk: "001892831", ct: "opaquetoken321", v: "b64cryptoblob321updated" },
+  { pk: "mailbox:INBOX", sk: "001892912", ct: null, v: "b64cryptoblob444" },
+  { pk: "mailbox:INBOX", sk: "001892932", ct: "opaquetoken654", v: null },
 ]
 ```
 
@@ -429,7 +434,7 @@ JSON struct with the following fields:
 | `conflicts_only` | `false` | Whether to return only items that have several concurrent values |
 | `tombstones` | `false` | Whether or not to return tombstone lines to indicate the presence of old deleted items |
 
- 
+
 For each of the searches, triplets are listed and returned separately. The
 semantics of `start`, `end` and `limit` is the same as for ReadIndex. The
 additionnal parameter `single_item` allows to get a single item, whose sort key
@@ -440,17 +445,16 @@ The result is a list of length the number of searches, that consists in for
 each search a JSON object specified similarly to the result of ReadIndex, but
 that lists triples within a partition key.
 
-The format of returned tuples is as follows: `[ "<sort key>", "<causality
-token>", "<value1>", ...]`, with the following fields:
+The format of returned tuples is as follows: `{ sk: "<sort key>", ct: "<causality
+token>", v: ["<value1>", ...] }`, with the following fields:
 
-- sort key: any unicode string used as a sort key
+- `sk` (sort key): any unicode string used as a sort key
 
-- causality token: an opaque token served by the server (generally
+- `ct` (causality token): an opaque token served by the server (generally
   base64-encoded) to be used in subsequent writes to this key
 
-- value: binary blob, always base64-encoded
-
-- if several concurrent values exist, they are appended at the end
+- `v` (list of values): each value is a binary blob, always base64-encoded;
+  contains multiple items when concurrent values exists
 
 - in case of concurrent update and deletion, a `null` is added to the list of concurrent values
 
@@ -497,9 +501,9 @@ HTTP/1.1 200 OK
     tombstones: false,
     single_item: false,
     items: [
-      [ "INBOX", "opaquetoken123", "b64cryptoblob123", "b64cryptoblob'123" ],
-      [ "Trash", "opaquetoken456", "b64cryptoblob456" ],
-      [ "Junk", "opaquetoken789", "b64cryptoblob789" ],
+      { sk: "INBOX", ct: "opaquetoken123", v: ["b64cryptoblob123", "b64cryptoblob'123"] },
+      { sk: "Trash", ct: "opaquetoken456", v: ["b64cryptoblob456"] },
+      { sk: "Junk", ct: "opaquetoken789", v: ["b64cryptoblob789"] },
     ],
     more: false,
     nextStart: null,
@@ -513,9 +517,9 @@ HTTP/1.1 200 OK
     tombstones: false,
     single_item: false,
     items: [
-      [ "001892831", "opaquetoken321", "b64cryptoblob321" ],
-      [ "001892832", "opaquetoken654", "b64cryptoblob654" ],
-      [ "001892874", "opaquetoken987", "b64cryptoblob987" ], 
+      { sk: "001892831", ct: "opaquetoken321", v: ["b64cryptoblob321"] },
+      { sk: "001892832", ct: "opaquetoken654", v: ["b64cryptoblob654"] },
+      { sk: "001892874", ct: "opaquetoken987", v: ["b64cryptoblob987"] },
     ],
     more: true,
     nextStart: "001892898",
@@ -529,7 +533,7 @@ HTTP/1.1 200 OK
     limit: null,
     single_item: true,
     items: [
-      [ "0", "opaquetoken999", "b64binarystuff999" ],
+      { sk: "0", ct: "opaquetoken999", v: ["b64binarystuff999"] },
     ],
     more: false,
     nextStart: null,
@@ -579,7 +583,7 @@ HTTP/1.1 200 OK
     start: null,
     end: null,
     single_item: false,
-    deleted_items: 35,    
+    deleted_items: 35,
   },
   {
     partition_key: "mailbox:INBOX",
