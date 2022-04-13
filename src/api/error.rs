@@ -7,7 +7,7 @@ use hyper::{HeaderMap, StatusCode};
 use garage_model::helper::error::Error as HelperError;
 use garage_util::error::Error as GarageError;
 
-use crate::s3_xml;
+use crate::s3::xml as s3_xml;
 
 /// Errors of this crate
 #[derive(Debug, Error)]

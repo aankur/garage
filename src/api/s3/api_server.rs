@@ -32,16 +32,16 @@ use crate::signature::streaming::SignedPayloadStream;
 use crate::signature::LONG_DATETIME;
 
 use crate::helpers::*;
-use crate::s3_bucket::*;
-use crate::s3_copy::*;
-use crate::s3_cors::*;
-use crate::s3_delete::*;
-use crate::s3_get::*;
-use crate::s3_list::*;
-use crate::s3_post_object::handle_post_object;
-use crate::s3_put::*;
-use crate::s3_router::{Authorization, Endpoint};
-use crate::s3_website::*;
+use crate::s3::bucket::*;
+use crate::s3::copy::*;
+use crate::s3::cors::*;
+use crate::s3::delete::*;
+use crate::s3::get::*;
+use crate::s3::list::*;
+use crate::s3::post_object::handle_post_object;
+use crate::s3::put::*;
+use crate::s3::router::{Authorization, Endpoint};
+use crate::s3::website::*;
 
 struct ApiMetrics {
 	request_counter: Counter<u64>,

@@ -16,6 +16,7 @@ use garage_table::*;
 use crate::s3::block_ref_table::*;
 use crate::s3::object_table::*;
 use crate::s3::version_table::*;
+use crate::k2v::item_table::*;
 
 use crate::bucket_alias_table::*;
 use crate::bucket_table::*;
@@ -36,16 +37,22 @@ pub struct Garage {
 	/// The block manager
 	pub block_manager: Arc<BlockManager>,
 
-	/// Table containing informations about buckets
+	/// Table containing buckets
 	pub bucket_table: Arc<Table<BucketTable, TableFullReplication>>,
-	/// Table containing informations about bucket aliases
+	/// Table containing bucket aliases
 	pub bucket_alias_table: Arc<Table<BucketAliasTable, TableFullReplication>>,
-	/// Table containing informations about api keys
+	/// Table containing api keys
 	pub key_table: Arc<Table<KeyTable, TableFullReplication>>,
 
+	/// Table containing S3 objects
 	pub object_table: Arc<Table<ObjectTable, TableShardedReplication>>,
+	/// Table containing S3 object versions
 	pub version_table: Arc<Table<VersionTable, TableShardedReplication>>,
+	/// Table containing S3 block references (not blocks themselves)
 	pub block_ref_table: Arc<Table<BlockRefTable, TableShardedReplication>>,
+
+	/// Table containing K2V items
+	pub k2v_item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
 }
 
 impl Garage {
@@ -96,6 +103,21 @@ impl Garage {
 			system.clone(),
 		);
 
+		// ---- admin tables ----
+		info!("Initialize bucket_table...");
+		let bucket_table = Table::new(BucketTable, control_rep_param.clone(), system.clone(), &db);
+
+		info!("Initialize bucket_alias_table...");
+		let bucket_alias_table = Table::new(
+			BucketAliasTable,
+			control_rep_param.clone(),
+			system.clone(),
+			&db,
+		);
+		info!("Initialize key_table_table...");
+		let key_table = Table::new(KeyTable, control_rep_param, system.clone(), &db);
+
+		// ---- S3 tables ----
 		info!("Initialize block_ref_table...");
 		let block_ref_table = Table::new(
 			BlockRefTable {
@@ -123,24 +145,19 @@ impl Garage {
 				background: background.clone(),
 				version_table: version_table.clone(),
 			},
-			meta_rep_param,
+			meta_rep_param.clone(),
 			system.clone(),
 			&db,
 		);
 
-		info!("Initialize bucket_table...");
-		let bucket_table = Table::new(BucketTable, control_rep_param.clone(), system.clone(), &db);
-
-		info!("Initialize bucket_alias_table...");
-		let bucket_alias_table = Table::new(
-			BucketAliasTable,
-			control_rep_param.clone(),
+		// ---- K2V tables ----
+		let k2v_item_table = Table::new(
+			K2VItemTable{},
+			meta_rep_param.clone(),
 			system.clone(),
 			&db,
 		);
 
-		info!("Initialize key_table_table...");
-		let key_table = Table::new(KeyTable, control_rep_param, system.clone(), &db);
 
 		info!("Initialize Garage...");
 
@@ -156,6 +173,7 @@ impl Garage {
 			object_table,
 			version_table,
 			block_ref_table,
+			k2v_item_table,
 		})
 	}
 

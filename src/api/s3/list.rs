@@ -17,8 +17,8 @@ use garage_table::EmptyKey;
 
 use crate::encoding::*;
 use crate::error::*;
-use crate::s3_put;
-use crate::s3_xml;
+use crate::s3::put as s3_put;
+use crate::s3::xml as s3_xml;
 
 const DUMMY_NAME: &str = "Dummy Key";
 const DUMMY_KEY: &str = "GKDummyKey";
