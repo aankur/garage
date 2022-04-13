@@ -203,6 +203,7 @@ impl TableSchema for K2VItemTable {
 		// nothing for now
 	}
 
+	#[allow(clippy::nonminimal_bool)]
 	fn matches_filter(entry: &Self::E, filter: &Self::Filter) -> bool {
 		let v = entry.values();
 		!(filter.conflicts_only && v.len() < 2)

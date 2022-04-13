@@ -23,7 +23,7 @@ use crate::error::*;
 
 pub(crate) trait ApiEndpoint: Send + Sync + 'static {
 	fn name(&self) -> &'static str;
-	fn add_span_attributes<'a>(&self, span: SpanRef<'a>);
+	fn add_span_attributes(&self, span: SpanRef<'_>);
 }
 
 #[async_trait]

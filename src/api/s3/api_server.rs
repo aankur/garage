@@ -9,8 +9,8 @@ use hyper::{Body, Method, Request, Response};
 
 use opentelemetry::{trace::SpanRef, KeyValue};
 
-use garage_util::error::Error as GarageError;
 use garage_table::util::*;
+use garage_util::error::Error as GarageError;
 
 use garage_model::garage::Garage;
 use garage_model::key_table::Key;
@@ -96,7 +96,7 @@ impl ApiHandler for S3ApiServer {
 			.and_then(|root_domain| host_to_bucket(&host, root_domain));
 
 		let (endpoint, bucket_name) =
-			Endpoint::from_request(&req, bucket_name.map(ToOwned::to_owned))?;
+			Endpoint::from_request(req, bucket_name.map(ToOwned::to_owned))?;
 
 		Ok(S3ApiEndpoint {
 			bucket_name,
@@ -432,7 +432,7 @@ impl ApiEndpoint for S3ApiEndpoint {
 		self.endpoint.name()
 	}
 
-	fn add_span_attributes<'a>(&self, span: SpanRef<'a>) {
+	fn add_span_attributes(&self, span: SpanRef<'_>) {
 		span.set_attribute(KeyValue::new(
 			"bucket",
 			self.bucket_name.clone().unwrap_or_default(),

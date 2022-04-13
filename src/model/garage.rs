@@ -151,8 +151,7 @@ impl Garage {
 		);
 
 		// ---- K2V tables ----
-		let k2v_item_table =
-			Table::new(K2VItemTable {}, meta_rep_param.clone(), system.clone(), &db);
+		let k2v_item_table = Table::new(K2VItemTable {}, meta_rep_param, system.clone(), &db);
 
 		info!("Initialize Garage...");
 
