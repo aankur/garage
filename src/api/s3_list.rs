@@ -955,7 +955,7 @@ fn key_after_prefix(pfx: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use garage_model::version_table::*;
+	use garage_model::s3::version_table::*;
 	use garage_util::*;
 	use std::iter::FromIterator;
 

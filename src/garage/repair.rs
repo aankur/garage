@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
-use garage_model::s3::block_ref_table::*;
 use garage_model::garage::Garage;
+use garage_model::s3::block_ref_table::*;
 use garage_model::s3::object_table::*;
 use garage_model::s3::version_table::*;
 use garage_table::*;
