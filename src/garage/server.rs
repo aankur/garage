@@ -8,7 +8,7 @@ use garage_util::error::Error;
 
 use garage_admin::metrics::*;
 use garage_admin::tracing_setup::*;
-use garage_api::s3::run_api_server as run_s3_api_server;
+use garage_api::s3::api_server::S3ApiServer;
 use garage_model::garage::Garage;
 use garage_web::run_web_server;
 
@@ -57,7 +57,7 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 	AdminRpcHandler::new(garage.clone());
 
 	info!("Initializing S3 API server...");
-	let s3_api_server = tokio::spawn(run_s3_api_server(
+	let s3_api_server = tokio::spawn(S3ApiServer::run(
 		garage.clone(),
 		wait_from(watch_cancel.clone()),
 	));

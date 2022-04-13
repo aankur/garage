@@ -1,5 +1,11 @@
-use crate::Error;
 use idna::domain_to_unicode;
+
+use garage_util::data::*;
+
+use garage_model::garage::Garage;
+use garage_model::key_table::Key;
+
+use crate::error::*;
 
 /// Host to bucket
 ///
@@ -60,9 +66,115 @@ pub fn authority_to_host(authority: &str) -> Result<String, Error> {
 	authority.map(|h| domain_to_unicode(h).0)
 }
 
+#[allow(clippy::ptr_arg)]
+pub async fn resolve_bucket(
+	garage: &Garage,
+	bucket_name: &String,
+	api_key: &Key,
+) -> Result<Uuid, Error> {
+	let api_key_params = api_key
+		.state
+		.as_option()
+		.ok_or_internal_error("Key should not be deleted at this point")?;
+
+	if let Some(Some(bucket_id)) = api_key_params.local_aliases.get(bucket_name) {
+		Ok(*bucket_id)
+	} else {
+		Ok(garage
+			.bucket_helper()
+			.resolve_global_bucket_name(bucket_name)
+			.await?
+			.ok_or(Error::NoSuchBucket)?)
+	}
+}
+
+/// Extract the bucket name and the key name from an HTTP path and possibly a bucket provided in
+/// the host header of the request
+///
+/// S3 internally manages only buckets and keys. This function splits
+/// an HTTP path to get the corresponding bucket name and key.
+pub fn parse_bucket_key<'a>(
+	path: &'a str,
+	host_bucket: Option<&'a str>,
+) -> Result<(&'a str, Option<&'a str>), Error> {
+	let path = path.trim_start_matches('/');
+
+	if let Some(bucket) = host_bucket {
+		if !path.is_empty() {
+			return Ok((bucket, Some(path)));
+		} else {
+			return Ok((bucket, None));
+		}
+	}
+
+	let (bucket, key) = match path.find('/') {
+		Some(i) => {
+			let key = &path[i + 1..];
+			if !key.is_empty() {
+				(&path[..i], Some(key))
+			} else {
+				(&path[..i], None)
+			}
+		}
+		None => (path, None),
+	};
+	if bucket.is_empty() {
+		return Err(Error::BadRequest("No bucket specified".to_string()));
+	}
+	Ok((bucket, key))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn parse_bucket_containing_a_key() -> Result<(), Error> {
+		let (bucket, key) = parse_bucket_key("/my_bucket/a/super/file.jpg", None)?;
+		assert_eq!(bucket, "my_bucket");
+		assert_eq!(key.expect("key must be set"), "a/super/file.jpg");
+		Ok(())
+	}
+
+	#[test]
+	fn parse_bucket_containing_no_key() -> Result<(), Error> {
+		let (bucket, key) = parse_bucket_key("/my_bucket/", None)?;
+		assert_eq!(bucket, "my_bucket");
+		assert!(key.is_none());
+		let (bucket, key) = parse_bucket_key("/my_bucket", None)?;
+		assert_eq!(bucket, "my_bucket");
+		assert!(key.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn parse_bucket_containing_no_bucket() {
+		let parsed = parse_bucket_key("", None);
+		assert!(parsed.is_err());
+		let parsed = parse_bucket_key("/", None);
+		assert!(parsed.is_err());
+		let parsed = parse_bucket_key("////", None);
+		assert!(parsed.is_err());
+	}
+
+	#[test]
+	fn parse_bucket_with_vhost_and_key() -> Result<(), Error> {
+		let (bucket, key) = parse_bucket_key("/a/super/file.jpg", Some("my-bucket"))?;
+		assert_eq!(bucket, "my-bucket");
+		assert_eq!(key.expect("key must be set"), "a/super/file.jpg");
+		Ok(())
+	}
+
+	#[test]
+	fn parse_bucket_with_vhost_no_key() -> Result<(), Error> {
+		let (bucket, key) = parse_bucket_key("", Some("my-bucket"))?;
+		assert_eq!(bucket, "my-bucket");
+		assert!(key.is_none());
+		let (bucket, key) = parse_bucket_key("/", Some("my-bucket"))?;
+		assert_eq!(bucket, "my-bucket");
+		assert!(key.is_none());
+		Ok(())
+	}
 
 	#[test]
 	fn authority_to_host_with_port() -> Result<(), Error> {

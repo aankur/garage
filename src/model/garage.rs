@@ -13,10 +13,10 @@ use garage_table::replication::TableFullReplication;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
+use crate::k2v::item_table::*;
 use crate::s3::block_ref_table::*;
 use crate::s3::object_table::*;
 use crate::s3::version_table::*;
-use crate::k2v::item_table::*;
 
 use crate::bucket_alias_table::*;
 use crate::bucket_table::*;
@@ -151,13 +151,8 @@ impl Garage {
 		);
 
 		// ---- K2V tables ----
-		let k2v_item_table = Table::new(
-			K2VItemTable{},
-			meta_rep_param.clone(),
-			system.clone(),
-			&db,
-		);
-
+		let k2v_item_table =
+			Table::new(K2VItemTable {}, meta_rep_param.clone(), system.clone(), &db);
 
 		info!("Initialize Garage...");
 

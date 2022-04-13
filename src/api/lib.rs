@@ -7,9 +7,9 @@ pub use error::Error;
 pub mod helpers;
 
 mod encoding;
+mod generic_server;
 
 /// This mode is public only to help testing. Don't expect stability here
 pub mod signature;
 
 pub mod s3;
-

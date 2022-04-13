@@ -14,8 +14,8 @@ use serde::Deserialize;
 
 use garage_model::garage::Garage;
 
-use crate::s3::api_server::resolve_bucket;
 use crate::error::*;
+use crate::helpers::resolve_bucket;
 use crate::s3::put::{get_headers, save_stream};
 use crate::s3::xml as s3_xml;
 use crate::signature::payload::{parse_date, verify_v4};

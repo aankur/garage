@@ -1,5 +1,4 @@
-mod api_server;
-pub use api_server::run_api_server;
+pub mod api_server;
 
 mod bucket;
 mod copy;
@@ -9,6 +8,7 @@ pub mod get;
 mod list;
 mod post_object;
 mod put;
-mod router;
 mod website;
+
+mod router;
 pub mod xml;

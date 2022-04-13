@@ -19,6 +19,7 @@ garage_table = { version = "0.7.0", path = "../table" }
 garage_block = { version = "0.7.0", path = "../block" }
 garage_util = { version = "0.7.0", path = "../util" }
 
+async-trait = "0.1.7"
 base64 = "0.13"
 bytes = "1.0"
 chrono = "0.4"
