@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,24 +5,15 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::future::Future;
 use futures::prelude::*;
 use hyper::header;
-use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server};
+use hyper::{Body, Method, Request, Response};
 
-use opentelemetry::{
-	global,
-	metrics::{Counter, ValueRecorder},
-	trace::{FutureExt, SpanRef, TraceContextExt, Tracer},
-	Context, KeyValue,
-};
+use opentelemetry::{trace::SpanRef, KeyValue};
 
 use garage_util::error::Error as GarageError;
-use garage_util::metrics::{gen_trace_id, RecordDuration};
+use garage_table::util::*;
 
 use garage_model::garage::Garage;
 use garage_model::key_table::Key;
-
-use garage_table::util::*;
 
 use crate::error::*;
 use crate::generic_server::*;

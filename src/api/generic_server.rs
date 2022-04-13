@@ -3,13 +3,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::future::Future;
-use futures::prelude::*;
-use hyper::header;
+
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server};
+use hyper::{Body, Request, Response, Server};
 
 use opentelemetry::{
 	global,
@@ -21,16 +19,7 @@ use opentelemetry::{
 use garage_util::error::Error as GarageError;
 use garage_util::metrics::{gen_trace_id, RecordDuration};
 
-use garage_model::garage::Garage;
-use garage_model::key_table::Key;
-
-use garage_table::util::*;
-
 use crate::error::*;
-use crate::signature::compute_scope;
-use crate::signature::payload::check_payload_signature;
-use crate::signature::streaming::SignedPayloadStream;
-use crate::signature::LONG_DATETIME;
 
 pub(crate) trait ApiEndpoint: Send + Sync + 'static {
 	fn name(&self) -> &'static str;
