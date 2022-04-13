@@ -10,8 +10,8 @@ use garage_util::error::Error as GarageError;
 use garage_util::time::*;
 
 use garage_model::garage::Garage;
-use garage_model::object_table::*;
-use garage_model::version_table::Version;
+use garage_model::s3::object_table::*;
+use garage_model::s3::version_table::Version;
 
 use garage_table::EmptyKey;
 

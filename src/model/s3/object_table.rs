@@ -9,7 +9,7 @@ use garage_table::crdt::*;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
-use crate::version_table::*;
+use crate::s3::version_table::*;
 
 use garage_model_050::object_table as old;
 

@@ -21,7 +21,7 @@ use garage_model::garage::Garage;
 use garage_model::helper::error::{Error, OkOrBadRequest};
 use garage_model::key_table::*;
 use garage_model::migrate::Migrate;
-use garage_model::object_table::ObjectFilter;
+use garage_model::s3::object_table::ObjectFilter;
 use garage_model::permission::*;
 
 use crate::cli::*;

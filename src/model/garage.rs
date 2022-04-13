@@ -13,13 +13,14 @@ use garage_table::replication::TableFullReplication;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
-use crate::block_ref_table::*;
+use crate::s3::block_ref_table::*;
+use crate::s3::object_table::*;
+use crate::s3::version_table::*;
+
 use crate::bucket_alias_table::*;
 use crate::bucket_table::*;
 use crate::helper;
 use crate::key_table::*;
-use crate::object_table::*;
-use crate::version_table::*;
 
 /// An entire Garage full of data
 pub struct Garage {

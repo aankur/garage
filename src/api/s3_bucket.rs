@@ -7,7 +7,7 @@ use garage_model::bucket_alias_table::*;
 use garage_model::bucket_table::Bucket;
 use garage_model::garage::Garage;
 use garage_model::key_table::Key;
-use garage_model::object_table::ObjectFilter;
+use garage_model::s3::object_table::ObjectFilter;
 use garage_model::permission::BucketKeyPerm;
 use garage_table::util::*;
 use garage_util::crdt::*;

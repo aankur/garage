@@ -14,10 +14,10 @@ use garage_util::error::Error as GarageError;
 use garage_util::time::*;
 
 use garage_block::manager::INLINE_THRESHOLD;
-use garage_model::block_ref_table::*;
+use garage_model::s3::block_ref_table::*;
 use garage_model::garage::Garage;
-use garage_model::object_table::*;
-use garage_model::version_table::*;
+use garage_model::s3::object_table::*;
+use garage_model::s3::version_table::*;
 
 use crate::error::*;
 use crate::s3_xml;

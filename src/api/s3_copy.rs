@@ -11,11 +11,11 @@ use garage_table::*;
 use garage_util::data::*;
 use garage_util::time::*;
 
-use garage_model::block_ref_table::*;
+use garage_model::s3::block_ref_table::*;
 use garage_model::garage::Garage;
 use garage_model::key_table::Key;
-use garage_model::object_table::*;
-use garage_model::version_table::*;
+use garage_model::s3::object_table::*;
+use garage_model::s3::version_table::*;
 
 use crate::api_server::{parse_bucket_key, resolve_bucket};
 use crate::error::*;

@@ -8,7 +8,7 @@ use garage_table::crdt::*;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
-use crate::block_ref_table::*;
+use crate::s3::block_ref_table::*;
 
 use garage_model_050::version_table as old;
 

@@ -6,7 +6,7 @@ use garage_util::data::*;
 use garage_util::time::*;
 
 use garage_model::garage::Garage;
-use garage_model::object_table::*;
+use garage_model::s3::object_table::*;
 
 use crate::error::*;
 use crate::s3_xml;
