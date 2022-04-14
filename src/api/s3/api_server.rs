@@ -20,7 +20,6 @@ use crate::generic_server::*;
 use crate::signature::payload::check_payload_signature;
 use crate::signature::streaming::*;
 
-
 use crate::helpers::*;
 use crate::s3::bucket::*;
 use crate::s3::copy::*;
@@ -30,7 +29,7 @@ use crate::s3::get::*;
 use crate::s3::list::*;
 use crate::s3::post_object::handle_post_object;
 use crate::s3::put::*;
-use crate::s3::router::{Endpoint};
+use crate::s3::router::Endpoint;
 use crate::s3::website::*;
 
 pub struct S3ApiServer {
@@ -127,7 +126,12 @@ impl ApiHandler for S3ApiServer {
 			Error::Forbidden("Garage does not support anonymous access yet".to_string())
 		})?;
 
-		let req = parse_streaming_body(&api_key, req, &mut content_sha256, &garage.config.s3_api.s3_region)?;
+		let req = parse_streaming_body(
+			&api_key,
+			req,
+			&mut content_sha256,
+			&garage.config.s3_api.s3_region,
+		)?;
 
 		let bucket_name = match bucket_name {
 			None => {

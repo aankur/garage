@@ -12,16 +12,14 @@ use garage_util::error::Error as GarageError;
 
 use garage_model::garage::Garage;
 
-
 use crate::error::*;
 use crate::generic_server::*;
 
 use crate::signature::payload::check_payload_signature;
 use crate::signature::streaming::*;
 
-
 use crate::helpers::*;
-use crate::k2v::router::{Endpoint};
+use crate::k2v::router::Endpoint;
 use crate::s3::cors::*;
 
 pub struct K2VApiServer {
@@ -86,7 +84,12 @@ impl ApiHandler for K2VApiServer {
 			Error::Forbidden("Garage does not support anonymous access yet".to_string())
 		})?;
 
-		let req = parse_streaming_body(&api_key, req, &mut content_sha256, &garage.config.s3_api.s3_region)?;
+		let req = parse_streaming_body(
+			&api_key,
+			req,
+			&mut content_sha256,
+			&garage.config.s3_api.s3_region,
+		)?;
 
 		let bucket_id = resolve_bucket(&garage, &bucket_name, &api_key).await?;
 		let bucket = garage
@@ -141,9 +144,6 @@ impl ApiEndpoint for K2VApiEndpoint {
 	}
 
 	fn add_span_attributes(&self, span: SpanRef<'_>) {
-		span.set_attribute(KeyValue::new(
-			"bucket",
-			self.bucket_name.clone(),
-		));
+		span.set_attribute(KeyValue::new("bucket", self.bucket_name.clone()));
 	}
 }

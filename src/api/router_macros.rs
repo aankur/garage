@@ -1,5 +1,3 @@
-
-
 /// This macro is used to generate very repetitive match {} blocks in this module
 /// It is _not_ made to be used anywhere else
 macro_rules! router_match {
@@ -120,7 +118,6 @@ macro_rules! router_match {
     };
 }
 
-
 /// This macro is used to generate part of the code in this module. It must be called only one, and
 /// is useless outside of this module.
 macro_rules! generateQueryParameters {
@@ -189,5 +186,5 @@ macro_rules! generateQueryParameters {
     }
 }
 
-pub(crate) use router_match;
 pub(crate) use generateQueryParameters;
+pub(crate) use router_match;

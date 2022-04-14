@@ -2,11 +2,10 @@ use crate::error::*;
 
 use std::borrow::Cow;
 
-
 use hyper::{Method, Request};
 
-use crate::router_macros::{router_match, generateQueryParameters};
 use crate::helpers::Authorization;
+use crate::router_macros::{generateQueryParameters, router_match};
 
 router_match! {@func
 
@@ -49,16 +48,15 @@ impl Endpoint {
 	/// Determine which S3 endpoint a request is for using the request, and a bucket which was
 	/// possibly extracted from the Host header.
 	/// Returns Self plus bucket name, if endpoint is not Endpoint::ListBuckets
-	pub fn from_request<T>(
-		req: &Request<T>,
-	) -> Result<(Self, String), Error> {
+	pub fn from_request<T>(req: &Request<T>) -> Result<(Self, String), Error> {
 		let uri = req.uri();
 		let path = uri.path().trim_start_matches('/');
 		let query = uri.query();
 
-		let (bucket, partition_key) = 
-			path.split_once('/') .map(|(b, p)| (b.to_owned(), p.trim_start_matches('/')))
-				.unwrap_or((path.to_owned(), ""));
+		let (bucket, partition_key) = path
+			.split_once('/')
+			.map(|(b, p)| (b.to_owned(), p.trim_start_matches('/')))
+			.unwrap_or((path.to_owned(), ""));
 
 		if bucket.is_empty() {
 			return Err(Error::BadRequest("Missing bucket name".to_owned()));
@@ -136,10 +134,7 @@ impl Endpoint {
 	}
 
 	/// Determine which endpoint a request is for, knowing it is a PUT.
-	fn from_put(
-		partition_key: String,
-		query: &mut QueryParameters<'_>,
-	) -> Result<Self, Error> {
+	fn from_put(partition_key: String, query: &mut QueryParameters<'_>) -> Result<Self, Error> {
 		router_match! {
 			@gen_parser
 			(query.keyword.take().unwrap_or_default().as_ref(), partition_key, query, None),
@@ -227,7 +222,7 @@ generateQueryParameters! {
 }
 
 mod keywords {
-	//! This module contain all query parameters with no associated value 
+	//! This module contain all query parameters with no associated value
 	//! used to differentiate endpoints.
 	pub const EMPTY: &str = "";
 

@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use hyper::header::HeaderValue;
 use hyper::{HeaderMap, Method, Request};
 
-use crate::router_macros::{router_match, generateQueryParameters};
 use crate::helpers::Authorization;
+use crate::router_macros::{generateQueryParameters, router_match};
 
 router_match! {@func
 

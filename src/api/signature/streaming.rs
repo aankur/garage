@@ -3,23 +3,23 @@ use std::pin::Pin;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::prelude::*;
 use futures::task;
-use hyper::body::Bytes;
-use hyper::{Body, Request};
 use garage_model::key_table::Key;
 use hmac::Mac;
+use hyper::body::Bytes;
+use hyper::{Body, Request};
 
 use garage_util::data::Hash;
 
-use super::{sha256sum, HmacSha256, LONG_DATETIME, compute_scope};
+use super::{compute_scope, sha256sum, HmacSha256, LONG_DATETIME};
 
 use crate::error::*;
 
 pub fn parse_streaming_body(
-							api_key: &Key,
-							req: Request<Body>,
-							content_sha256: &mut Option<Hash>,
-							region: &str,
-							) -> Result<Request<Body>, Error> {
+	api_key: &Key,
+	req: Request<Body>,
+	content_sha256: &mut Option<Hash>,
+	region: &str,
+) -> Result<Request<Body>, Error> {
 	match req.headers().get("x-amz-content-sha256") {
 		Some(header) if header == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" => {
 			let signature = content_sha256
@@ -42,13 +42,8 @@ pub fn parse_streaming_body(
 			let date: DateTime<Utc> = DateTime::from_utc(date, Utc);
 
 			let scope = compute_scope(&date, region);
-			let signing_hmac = crate::signature::signing_hmac(
-				&date,
-				secret_key,
-				region,
-				"s3",
-			)
-			.ok_or_internal_error("Unable to build signing HMAC")?;
+			let signing_hmac = crate::signature::signing_hmac(&date, secret_key, region, "s3")
+				.ok_or_internal_error("Unable to build signing HMAC")?;
 
 			Ok(req.map(move |body| {
 				Body::wrap_stream(
@@ -66,7 +61,6 @@ pub fn parse_streaming_body(
 		_ => Ok(req),
 	}
 }
-
 
 /// Result of `sha256("")`
 const EMPTY_STRING_HEX_DIGEST: &str =
