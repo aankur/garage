@@ -1,13 +1,10 @@
 //! Function related to GET and HEAD requests
 use std::sync::Arc;
-use std::time::{Duration, UNIX_EPOCH};
 
-use futures::stream::*;
 use http::header;
-use hyper::body::Bytes;
+
 use hyper::{Body, Request, Response, StatusCode};
 
-use garage_table::EmptyKey;
 use garage_util::data::*;
 
 use garage_model::garage::Garage;
@@ -15,7 +12,7 @@ use garage_model::k2v::item_table::*;
 
 use crate::error::*;
 
-const X_GARAGE_CAUSALITY_TOKEN: &'static str = "X-Garage-Causality-Token";
+const X_GARAGE_CAUSALITY_TOKEN: &str = "X-Garage-Causality-Token";
 
 pub enum ReturnFormat {
 	Json,
@@ -45,7 +42,7 @@ impl ReturnFormat {
 	pub fn make_response(&self, item: &K2VItem) -> Result<Response<Body>, Error> {
 		let vals = item.values();
 
-		if vals.len() == 0 {
+		if vals.is_empty() {
 			return Err(Error::NoSuchKey);
 		}
 
@@ -98,6 +95,7 @@ impl ReturnFormat {
 }
 
 /// Handle ReadItem request
+#[allow(clippy::ptr_arg)]
 pub async fn handle_read_item(
 	garage: Arc<Garage>,
 	req: &Request<Body>,
