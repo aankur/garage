@@ -7,6 +7,19 @@ use garage_model::key_table::Key;
 
 use crate::error::*;
 
+/// What kind of authorization is required to perform a given action
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Authorization {
+	/// No authorization is required
+	None,
+	/// Having Read permission on bucket
+	Read,
+	/// Having Write permission on bucket
+	Write,
+	/// Having Owner permission on bucket
+	Owner,
+}
+
 /// Host to bucket
 ///
 /// Convert a host, like "bucket.garage-site.tld" to the corresponding bucket "bucket",

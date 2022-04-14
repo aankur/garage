@@ -31,7 +31,7 @@ use crate::s3::get::*;
 use crate::s3::list::*;
 use crate::s3::post_object::handle_post_object;
 use crate::s3::put::*;
-use crate::s3::router::{Authorization, Endpoint};
+use crate::s3::router::{Endpoint};
 use crate::s3::website::*;
 
 pub struct S3ApiServer {
