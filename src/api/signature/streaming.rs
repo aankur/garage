@@ -4,7 +4,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::prelude::*;
 use futures::task;
 use hyper::body::Bytes;
-use hyper::{Body, Method, Request, Response};
+use hyper::{Body, Request};
 use garage_model::key_table::Key;
 use hmac::Mac;
 

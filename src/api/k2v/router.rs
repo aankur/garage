@@ -2,8 +2,8 @@ use crate::error::*;
 
 use std::borrow::Cow;
 
-use hyper::header::HeaderValue;
-use hyper::{HeaderMap, Method, Request};
+
+use hyper::{Method, Request};
 
 use crate::router_macros::{router_match, generateQueryParameters};
 use crate::helpers::Authorization;

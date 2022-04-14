@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
+
 use futures::future::Future;
-use futures::prelude::*;
 use hyper::header;
 use hyper::{Body, Method, Request, Response};
 
@@ -17,10 +16,10 @@ use garage_model::key_table::Key;
 
 use crate::error::*;
 use crate::generic_server::*;
-use crate::signature::compute_scope;
+
 use crate::signature::payload::check_payload_signature;
 use crate::signature::streaming::*;
-use crate::signature::LONG_DATETIME;
+
 
 use crate::helpers::*;
 use crate::s3::bucket::*;

@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
+
 use futures::future::Future;
-use futures::prelude::*;
-use hyper::header;
 use hyper::{Body, Method, Request, Response};
 
 use opentelemetry::{trace::SpanRef, KeyValue};
@@ -13,14 +11,14 @@ use garage_table::util::*;
 use garage_util::error::Error as GarageError;
 
 use garage_model::garage::Garage;
-use garage_model::key_table::Key;
+
 
 use crate::error::*;
 use crate::generic_server::*;
-use crate::signature::compute_scope;
+
 use crate::signature::payload::check_payload_signature;
 use crate::signature::streaming::*;
-use crate::signature::LONG_DATETIME;
+
 
 use crate::helpers::*;
 use crate::k2v::router::{Endpoint};
@@ -59,22 +57,6 @@ impl ApiHandler for K2VApiServer {
 	type Endpoint = K2VApiEndpoint;
 
 	fn parse_endpoint(&self, req: &Request<Body>) -> Result<K2VApiEndpoint, Error> {
-		let authority = req
-			.headers()
-			.get(header::HOST)
-			.ok_or_bad_request("Host header required")?
-			.to_str()?;
-
-		let host = authority_to_host(authority)?;
-
-		let bucket_name = self
-			.garage
-			.config
-			.s3_api
-			.root_domain
-			.as_ref()
-			.and_then(|root_domain| host_to_bucket(&host, root_domain));
-
 		let (endpoint, bucket_name) = Endpoint::from_request(req)?;
 
 		Ok(K2VApiEndpoint {
