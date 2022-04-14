@@ -1,1 +1,167 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use chrono::{DateTime, NaiveDateTime, Utc};
+use futures::future::Future;
+use futures::prelude::*;
+use hyper::header;
+use hyper::{Body, Method, Request, Response};
+
+use opentelemetry::{trace::SpanRef, KeyValue};
+
+use garage_table::util::*;
+use garage_util::error::Error as GarageError;
+
+use garage_model::garage::Garage;
+use garage_model::key_table::Key;
+
+use crate::error::*;
 use crate::generic_server::*;
+use crate::signature::compute_scope;
+use crate::signature::payload::check_payload_signature;
+use crate::signature::streaming::*;
+use crate::signature::LONG_DATETIME;
+
+use crate::helpers::*;
+use crate::k2v::router::{Endpoint};
+use crate::s3::cors::*;
+
+pub struct K2VApiServer {
+	garage: Arc<Garage>,
+}
+
+pub(crate) struct K2VApiEndpoint {
+	bucket_name: String,
+	endpoint: Endpoint,
+}
+
+impl K2VApiServer {
+	pub async fn run(
+		garage: Arc<Garage>,
+		shutdown_signal: impl Future<Output = ()>,
+	) -> Result<(), GarageError> {
+		let addr = garage.config.s3_api.api_bind_addr;
+
+		ApiServer::new(
+			garage.config.s3_api.s3_region.clone(),
+			K2VApiServer { garage },
+		)
+		.run_server(addr, shutdown_signal)
+		.await
+	}
+}
+
+#[async_trait]
+impl ApiHandler for K2VApiServer {
+	const API_NAME: &'static str = "k2v";
+	const API_NAME_DISPLAY: &'static str = "K2V";
+
+	type Endpoint = K2VApiEndpoint;
+
+	fn parse_endpoint(&self, req: &Request<Body>) -> Result<K2VApiEndpoint, Error> {
+		let authority = req
+			.headers()
+			.get(header::HOST)
+			.ok_or_bad_request("Host header required")?
+			.to_str()?;
+
+		let host = authority_to_host(authority)?;
+
+		let bucket_name = self
+			.garage
+			.config
+			.s3_api
+			.root_domain
+			.as_ref()
+			.and_then(|root_domain| host_to_bucket(&host, root_domain));
+
+		let (endpoint, bucket_name) = Endpoint::from_request(req)?;
+
+		Ok(K2VApiEndpoint {
+			bucket_name,
+			endpoint,
+		})
+	}
+
+	async fn handle(
+		&self,
+		req: Request<Body>,
+		endpoint: K2VApiEndpoint,
+	) -> Result<Response<Body>, Error> {
+		let K2VApiEndpoint {
+			bucket_name,
+			endpoint,
+		} = endpoint;
+		let garage = self.garage.clone();
+
+		// The OPTIONS method is procesed early, before we even check for an API key
+		if let Endpoint::Options = endpoint {
+			return handle_options_s3api(garage, &req, Some(bucket_name)).await;
+		}
+
+		let (api_key, mut content_sha256) = check_payload_signature(&garage, &req).await?;
+		let api_key = api_key.ok_or_else(|| {
+			Error::Forbidden("Garage does not support anonymous access yet".to_string())
+		})?;
+
+		let req = parse_streaming_body(&api_key, req, &mut content_sha256, &garage.config.s3_api.s3_region)?;
+
+		let bucket_id = resolve_bucket(&garage, &bucket_name, &api_key).await?;
+		let bucket = garage
+			.bucket_table
+			.get(&EmptyKey, &bucket_id)
+			.await?
+			.filter(|b| !b.state.is_deleted())
+			.ok_or(Error::NoSuchBucket)?;
+
+		let allowed = match endpoint.authorization_type() {
+			Authorization::Read => api_key.allow_read(&bucket_id),
+			Authorization::Write => api_key.allow_write(&bucket_id),
+			Authorization::Owner => api_key.allow_owner(&bucket_id),
+			_ => unreachable!(),
+		};
+
+		if !allowed {
+			return Err(Error::Forbidden(
+				"Operation is not allowed for this key.".to_string(),
+			));
+		}
+
+		// Look up what CORS rule might apply to response.
+		// Requests for methods different than GET, HEAD or POST
+		// are always preflighted, i.e. the browser should make
+		// an OPTIONS call before to check it is allowed
+		let matching_cors_rule = match *req.method() {
+			Method::GET | Method::HEAD | Method::POST => find_matching_cors_rule(&bucket, &req)?,
+			_ => None,
+		};
+
+		let resp = match endpoint {
+			//TODO
+			endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
+		};
+
+		// If request was a success and we have a CORS rule that applies to it,
+		// add the corresponding CORS headers to the response
+		let mut resp_ok = resp?;
+		if let Some(rule) = matching_cors_rule {
+			add_cors_headers(&mut resp_ok, rule)
+				.ok_or_internal_error("Invalid bucket CORS configuration")?;
+		}
+
+		Ok(resp_ok)
+	}
+}
+
+impl ApiEndpoint for K2VApiEndpoint {
+	fn name(&self) -> &'static str {
+		self.endpoint.name()
+	}
+
+	fn add_span_attributes(&self, span: SpanRef<'_>) {
+		span.set_attribute(KeyValue::new(
+			"bucket",
+			self.bucket_name.clone(),
+		));
+	}
+}

@@ -25,7 +25,7 @@ macro_rules! router_match {
             _ => None
         }
     }};
-    (@gen_parser ($keyword:expr, $key:expr, $query:expr, $header:expr),
+    (@gen_parser ($keyword:expr, $key:ident, $query:expr, $header:expr),
         key: [$($kw_k:ident $(if $required_k:ident)? $(header $header_k:expr)? => $api_k:ident $(($($conv_k:ident :: $param_k:ident),*))?,)*],
         no_key: [$($kw_nk:ident $(if $required_nk:ident)? $(if_header $header_nk:expr)? => $api_nk:ident $(($($conv_nk:ident :: $param_nk:ident),*))?,)*]) => {{
         // usage: router_match {@gen_parser (keyword, key, query, header),
@@ -44,7 +44,7 @@ macro_rules! router_match {
         match ($keyword, !$key.is_empty()){
             $(
             ($kw_k, true) if true $(&& $query.$required_k.is_some())? $(&& $header.contains_key($header_k))? => Ok($api_k {
-                key: $key,
+                $key,
                 $($(
                     $param_k: router_match!(@@parse_param $query, $conv_k, $param_k),
                 )*)?

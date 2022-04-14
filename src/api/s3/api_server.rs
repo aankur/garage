@@ -19,7 +19,7 @@ use crate::error::*;
 use crate::generic_server::*;
 use crate::signature::compute_scope;
 use crate::signature::payload::check_payload_signature;
-use crate::signature::streaming::SignedPayloadStream;
+use crate::signature::streaming::*;
 use crate::signature::LONG_DATETIME;
 
 use crate::helpers::*;
@@ -128,51 +128,7 @@ impl ApiHandler for S3ApiServer {
 			Error::Forbidden("Garage does not support anonymous access yet".to_string())
 		})?;
 
-		let req = match req.headers().get("x-amz-content-sha256") {
-			Some(header) if header == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" => {
-				let signature = content_sha256
-					.take()
-					.ok_or_bad_request("No signature provided")?;
-
-				let secret_key = &api_key
-					.state
-					.as_option()
-					.ok_or_internal_error("Deleted key state")?
-					.secret_key;
-
-				let date = req
-					.headers()
-					.get("x-amz-date")
-					.ok_or_bad_request("Missing X-Amz-Date field")?
-					.to_str()?;
-				let date: NaiveDateTime = NaiveDateTime::parse_from_str(date, LONG_DATETIME)
-					.ok_or_bad_request("Invalid date")?;
-				let date: DateTime<Utc> = DateTime::from_utc(date, Utc);
-
-				let scope = compute_scope(&date, &garage.config.s3_api.s3_region);
-				let signing_hmac = crate::signature::signing_hmac(
-					&date,
-					secret_key,
-					&garage.config.s3_api.s3_region,
-					"s3",
-				)
-				.ok_or_internal_error("Unable to build signing HMAC")?;
-
-				req.map(move |body| {
-					Body::wrap_stream(
-						SignedPayloadStream::new(
-							body.map_err(Error::from),
-							signing_hmac,
-							date,
-							&scope,
-							signature,
-						)
-						.map_err(Error::from),
-					)
-				})
-			}
-			_ => req,
-		};
+		let req = parse_streaming_body(&api_key, req, &mut content_sha256, &garage.config.s3_api.s3_region)?;
 
 		let bucket_name = match bucket_name {
 			None => {
