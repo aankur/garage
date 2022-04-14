@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 
+use serde::{Deserialize, Serialize};
+
 use garage_util::data::*;
 use garage_util::error::*;
 
@@ -14,7 +16,7 @@ pub fn make_node_id(node_id: Uuid) -> K2VNodeId {
 	u64::from_be_bytes(tmp)
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub struct CausalContext {
 	pub vector_clock: BTreeMap<K2VNodeId, u64>,
 }
