@@ -19,6 +19,7 @@ use crate::signature::payload::check_payload_signature;
 use crate::signature::streaming::*;
 
 use crate::helpers::*;
+use crate::k2v::item::*;
 use crate::k2v::router::Endpoint;
 use crate::s3::cors::*;
 
@@ -122,6 +123,10 @@ impl ApiHandler for K2VApiServer {
 		};
 
 		let resp = match endpoint {
+			Endpoint::ReadItem {
+				partition_key,
+				sort_key,
+			} => handle_read_item(garage, &req, bucket_id, &partition_key, &sort_key).await,
 			//TODO
 			endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
 		};

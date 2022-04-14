@@ -36,44 +36,36 @@ pub enum DvvsValue {
 
 impl K2VItem {
 	/// Creates a new K2VItem when no previous entry existed in the db
-	pub fn new(
-		bucket_id: Uuid,
-		partition_key: String,
-		sort_key: String,
-		this_node: Uuid,
-		value: DvvsValue,
-	) -> Self {
-		let mut ret = Self {
+	pub fn new(bucket_id: Uuid, partition_key: String, sort_key: String) -> Self {
+		Self {
 			partition: K2VItemPartition {
 				bucket_id,
 				partition_key,
 			},
 			sort_key,
 			items: BTreeMap::new(),
-		};
-		let node_id = make_node_id(this_node);
-		ret.items.insert(
-			node_id,
-			DvvsEntry {
-				t_discard: 0,
-				values: vec![(1, value)],
-			},
-		);
-		ret
+		}
 	}
 	/// Updates a K2VItem with a new value or a deletion event
-	pub fn update(&mut self, this_node: Uuid, context: CausalContext, new_value: DvvsValue) {
-		for (node, t_discard) in context.vector_clock.iter() {
-			if let Some(e) = self.items.get_mut(node) {
-				e.t_discard = std::cmp::max(e.t_discard, *t_discard);
-			} else {
-				self.items.insert(
-					*node,
-					DvvsEntry {
-						t_discard: *t_discard,
-						values: vec![],
-					},
-				);
+	pub fn update(
+		&mut self,
+		this_node: Uuid,
+		context: Option<CausalContext>,
+		new_value: DvvsValue,
+	) {
+		if let Some(context) = context {
+			for (node, t_discard) in context.vector_clock.iter() {
+				if let Some(e) = self.items.get_mut(node) {
+					e.t_discard = std::cmp::max(e.t_discard, *t_discard);
+				} else {
+					self.items.insert(
+						*node,
+						DvvsEntry {
+							t_discard: *t_discard,
+							values: vec![],
+						},
+					);
+				}
 			}
 		}
 

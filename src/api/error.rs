@@ -100,6 +100,10 @@ pub enum Error {
 	#[error(display = "Bad request: {}", _0)]
 	BadRequest(String),
 
+	/// The client asked for an invalid return format (invalid Accept header)
+	#[error(display = "Not acceptable: {}", _0)]
+	NotAcceptable(String),
+
 	/// The client sent a request for an action not supported by garage
 	#[error(display = "Unimplemented action: {}", _0)]
 	NotImplemented(String),
@@ -140,6 +144,7 @@ impl Error {
 			Error::BucketNotEmpty | Error::BucketAlreadyExists => StatusCode::CONFLICT,
 			Error::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
 			Error::Forbidden(_) => StatusCode::FORBIDDEN,
+			Error::NotAcceptable(_) => StatusCode::NOT_ACCEPTABLE,
 			Error::InternalError(
 				GarageError::Timeout
 				| GarageError::RemoteError(_)
