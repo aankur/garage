@@ -3,6 +3,8 @@ extern crate tracing;
 
 pub mod permission;
 
+pub mod index_counter;
+
 pub mod bucket_alias_table;
 pub mod bucket_table;
 pub mod key_table;
