@@ -17,7 +17,8 @@ use garage_rpc::system::System;
 use garage_rpc::*;
 
 use garage_table::replication::{TableReplication, TableShardedReplication};
-use garage_table::Table;
+use garage_table::table::TABLE_RPC_TIMEOUT;
+use garage_table::{PartitionKey, Table};
 
 use crate::k2v::causality::*;
 use crate::k2v::item_table::*;
@@ -27,8 +28,7 @@ use crate::k2v::item_table::*;
 pub enum K2VRpc {
 	Ok,
 	InsertItem {
-		bucket_id: Uuid,
-		partition_key: String,
+		partition: K2VItemPartition,
 		sort_key: String,
 		causal_context: Option<CausalContext>,
 		value: DvvsValue,
@@ -63,15 +63,79 @@ impl K2VRpcHandler {
 		rpc_handler
 	}
 
-	async fn handle_insert(
+	// ---- public interface ----
+
+	pub async fn insert(
 		&self,
 		bucket_id: Uuid,
-		partition_key: &str,
+		partition_key: String,
+		sort_key: String,
+		causal_context: Option<CausalContext>,
+		value: DvvsValue,
+	) -> Result<(), Error> {
+		let partition = K2VItemPartition {
+			bucket_id,
+			partition_key,
+		};
+		let mut who = self
+			.item_table
+			.data
+			.replication
+			.write_nodes(&partition.hash());
+		who.sort();
+
+		self.system
+			.rpc
+			.try_call_many(
+				&self.endpoint,
+				&who[..],
+				K2VRpc::InsertItem {
+					partition,
+					sort_key,
+					causal_context,
+					value,
+				},
+				RequestStrategy::with_priority(PRIO_NORMAL)
+					.with_quorum(1)
+					.with_timeout(TABLE_RPC_TIMEOUT),
+			)
+			.await?;
+
+		Ok(())
+	}
+
+	// ---- internal handlers ----
+
+	#[allow(clippy::ptr_arg)]
+	async fn handle_insert(
+		&self,
+		partition: &K2VItemPartition,
 		sort_key: &String,
 		causal_context: &Option<CausalContext>,
 		value: &DvvsValue,
 	) -> Result<K2VRpc, Error> {
-		unimplemented!() //TODO
+		let tree_key = self.item_table.data.tree_key(partition, sort_key);
+		let new = self
+			.item_table
+			.data
+			.update_entry_with(&tree_key[..], |ent| {
+				let mut ent = ent.unwrap_or_else(|| {
+					K2VItem::new(
+						partition.bucket_id,
+						partition.partition_key.clone(),
+						sort_key.clone(),
+					)
+				});
+				ent.update(self.system.id, causal_context, value.clone());
+				ent
+			})?;
+
+		// Propagate to rest of network
+		if let Some(updated) = new {
+			self.item_table.insert(&updated).await?;
+		}
+
+		Ok(K2VRpc::Ok)
 	}
 }
 
@@ -80,13 +144,12 @@ impl EndpointHandler<K2VRpc> for K2VRpcHandler {
 	async fn handle(self: &Arc<Self>, message: &K2VRpc, _from: NodeID) -> Result<K2VRpc, Error> {
 		match message {
 			K2VRpc::InsertItem {
-				bucket_id,
-				partition_key,
+				partition,
 				sort_key,
 				causal_context,
 				value,
 			} => {
-				self.handle_insert(*bucket_id, partition_key, sort_key, causal_context, value)
+				self.handle_insert(partition, sort_key, causal_context, value)
 					.await
 			}
 			m => Err(Error::unexpected_rpc_message(m)),

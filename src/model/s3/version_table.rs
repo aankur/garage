@@ -137,8 +137,11 @@ impl TableSchema for VersionTable {
 	type E = Version;
 	type Filter = DeletedFilter;
 
-	fn updated(&self, old: Option<Self::E>, new: Option<Self::E>) {
+	fn updated(&self, old: Option<&Self::E>, new: Option<&Self::E>) {
 		let block_ref_table = self.block_ref_table.clone();
+		let old = old.cloned();
+		let new = new.cloned();
+
 		self.background.spawn(async move {
 			if let (Some(old_v), Some(new_v)) = (old, new) {
 				// Propagate deletion of version blocks

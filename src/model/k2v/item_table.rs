@@ -50,7 +50,7 @@ impl K2VItem {
 	pub fn update(
 		&mut self,
 		this_node: Uuid,
-		context: Option<CausalContext>,
+		context: &Option<CausalContext>,
 		new_value: DvvsValue,
 	) {
 		if let Some(context) = context {
@@ -191,7 +191,7 @@ impl TableSchema for K2VItemTable {
 	type E = K2VItem;
 	type Filter = ItemFilter;
 
-	fn updated(&self, _old: Option<Self::E>, _new: Option<Self::E>) {
+	fn updated(&self, _old: Option<&Self::E>, _new: Option<&Self::E>) {
 		// nothing for now
 	}
 
