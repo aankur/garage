@@ -123,6 +123,14 @@ impl ApiHandler for K2VApiServer {
 		};
 
 		let resp = match endpoint {
+			Endpoint::DeleteItem {
+				partition_key,
+				sort_key,
+			} => handle_delete_item(garage, req, bucket_id, &partition_key, &sort_key).await,
+			Endpoint::InsertItem {
+				partition_key,
+				sort_key,
+			} => handle_insert_item(garage, req, bucket_id, &partition_key, &sort_key).await,
 			Endpoint::ReadItem {
 				partition_key,
 				sort_key,

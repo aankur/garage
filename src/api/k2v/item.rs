@@ -8,6 +8,7 @@ use hyper::{Body, Request, Response, StatusCode};
 use garage_util::data::*;
 
 use garage_model::garage::Garage;
+use garage_model::k2v::causality::*;
 use garage_model::k2v::item_table::*;
 
 use crate::error::*;
@@ -118,4 +119,71 @@ pub async fn handle_read_item(
 		.ok_or(Error::NoSuchKey)?;
 
 	format.make_response(&item)
+}
+
+pub async fn handle_insert_item(
+	garage: Arc<Garage>,
+	req: Request<Body>,
+	bucket_id: Uuid,
+	partition_key: &str,
+	sort_key: &str,
+) -> Result<Response<Body>, Error> {
+	let causal_context = req
+		.headers()
+		.get(X_GARAGE_CAUSALITY_TOKEN)
+		.map(|s| s.to_str())
+		.transpose()?
+		.map(CausalContext::parse)
+		.transpose()?;
+
+	let body = hyper::body::to_bytes(req.into_body()).await?;
+	let value = DvvsValue::Value(body.to_vec());
+
+	garage
+		.k2v_rpc
+		.insert(
+			bucket_id,
+			partition_key.to_string(),
+			sort_key.to_string(),
+			causal_context,
+			value,
+		)
+		.await?;
+
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(Body::empty())?)
+}
+
+pub async fn handle_delete_item(
+	garage: Arc<Garage>,
+	req: Request<Body>,
+	bucket_id: Uuid,
+	partition_key: &str,
+	sort_key: &str,
+) -> Result<Response<Body>, Error> {
+	let causal_context = req
+		.headers()
+		.get(X_GARAGE_CAUSALITY_TOKEN)
+		.map(|s| s.to_str())
+		.transpose()?
+		.map(CausalContext::parse)
+		.transpose()?;
+
+	let value = DvvsValue::Deleted;
+
+	garage
+		.k2v_rpc
+		.insert(
+			bucket_id,
+			partition_key.to_string(),
+			sort_key.to_string(),
+			causal_context,
+			value,
+		)
+		.await?;
+
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(Body::empty())?)
 }
