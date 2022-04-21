@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use garage_rpc::system::System;
 use garage_rpc::ring::Ring;
+use garage_rpc::system::System;
 use garage_util::data::*;
 use garage_util::error::*;
 
@@ -42,13 +42,14 @@ impl<T: CounterSchema> Entry<T::P, T::S> for CounterEntry<T> {
 }
 
 impl<T: CounterSchema> CounterEntry<T> {
-	pub fn filtered_values(&self, sys: System) -> HashMap<String, i64> {
-		let ring: Arc<Ring> = sys.ring.borrow().clone();
+	pub fn filtered_values(&self, ring: &Ring) -> HashMap<String, i64> {
 		let nodes = &ring.layout.node_id_vec;
-		
+
 		let mut ret = HashMap::new();
 		for (name, vals) in self.values.iter() {
-			let new_vals = vals.node_values.iter()
+			let new_vals = vals
+				.node_values
+				.iter()
 				.filter(|(n, _)| nodes.contains(n))
 				.map(|(_, (_, v))| v)
 				.collect::<Vec<_>>();
@@ -56,7 +57,7 @@ impl<T: CounterSchema> CounterEntry<T> {
 				ret.insert(name.clone(), new_vals.iter().fold(i64::MIN, |a, b| a + *b));
 			}
 		}
-		
+
 		ret
 	}
 }
@@ -123,8 +124,12 @@ pub struct IndexCounter<T: CounterSchema> {
 }
 
 impl<T: CounterSchema> IndexCounter<T> {
-	pub fn new(system: Arc<System>, replication: TableShardedReplication, db: &sled::Db) -> Self {
-		Self {
+	pub fn new(
+		system: Arc<System>,
+		replication: TableShardedReplication,
+		db: &sled::Db,
+	) -> Arc<Self> {
+		Arc::new(Self {
 			this_node: system.id,
 			local_counter: db
 				.open_tree(format!("local_counter:{}", T::NAME))
@@ -137,10 +142,10 @@ impl<T: CounterSchema> IndexCounter<T> {
 				system,
 				db,
 			),
-		}
+		})
 	}
 
-	pub fn count(&self, pk: &T::P, sk: &T::S, counts: &[(String, i64)]) -> Result<(), Error> {
+	pub fn count(&self, pk: &T::P, sk: &T::S, counts: &[(&str, i64)]) -> Result<(), Error> {
 		let tree_key = self.table.data.tree_key(pk, sk);
 
 		let new_entry = self.local_counter.transaction(|tx| {
@@ -156,7 +161,7 @@ impl<T: CounterSchema> IndexCounter<T> {
 			};
 
 			for (s, inc) in counts.iter() {
-				let mut ent = entry.values.entry(s.clone()).or_insert((0, 0));
+				let mut ent = entry.values.entry(s.to_string()).or_insert((0, 0));
 				ent.0 += 1;
 				ent.1 += *inc;
 			}

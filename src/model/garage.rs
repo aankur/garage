@@ -13,6 +13,7 @@ use garage_table::replication::TableFullReplication;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
+use crate::k2v::counter_table::*;
 use crate::k2v::item_table::*;
 use crate::k2v::rpc::*;
 use crate::s3::block_ref_table::*;
@@ -22,6 +23,7 @@ use crate::s3::version_table::*;
 use crate::bucket_alias_table::*;
 use crate::bucket_table::*;
 use crate::helper;
+use crate::index_counter::*;
 use crate::key_table::*;
 
 /// An entire Garage full of data
@@ -54,6 +56,8 @@ pub struct Garage {
 
 	/// Table containing K2V items
 	pub k2v_item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
+	/// Indexing table containing K2V item counters
+	pub k2v_counter_table: Arc<IndexCounter<K2VCounterTable>>,
 	/// K2V RPC handler
 	pub k2v_rpc: Arc<K2VRpcHandler>,
 }
@@ -154,7 +158,15 @@ impl Garage {
 		);
 
 		// ---- K2V ----
-		let k2v_item_table = Table::new(K2VItemTable {}, meta_rep_param, system.clone(), &db);
+		let k2v_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
+		let k2v_item_table = Table::new(
+			K2VItemTable {
+				counter_table: k2v_counter_table.clone(),
+			},
+			meta_rep_param,
+			system.clone(),
+			&db,
+		);
 		let k2v_rpc = K2VRpcHandler::new(system.clone(), k2v_item_table.clone());
 
 		info!("Initialize Garage...");
@@ -172,6 +184,7 @@ impl Garage {
 			version_table,
 			block_ref_table,
 			k2v_item_table,
+			k2v_counter_table,
 			k2v_rpc,
 		})
 	}

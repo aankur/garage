@@ -1,12 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use garage_util::data::*;
 
 use garage_table::crdt::*;
 use garage_table::*;
 
+use crate::index_counter::*;
 use crate::k2v::causality::*;
+use crate::k2v::counter_table::*;
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct K2VItem {
@@ -105,6 +108,25 @@ impl K2VItem {
 			ent.discard();
 		}
 	}
+
+	// returns counters: (non-deleted entries, non-tombstone values, bytes used)
+	fn stats(&self) -> (i64, i64, i64) {
+		let n_entries = if self.is_tombstone() { 0 } else { 1 };
+		let n_values = self
+			.values()
+			.iter()
+			.filter(|v| matches!(v, DvvsValue::Value(_)))
+			.count() as i64;
+		let n_bytes = self
+			.values()
+			.iter()
+			.map(|v| match v {
+				DvvsValue::Deleted => 0,
+				DvvsValue::Value(v) => v.len() as i64,
+			})
+			.sum();
+		(n_entries, n_values, n_bytes)
+	}
 }
 
 impl DvvsEntry {
@@ -175,7 +197,9 @@ impl Entry<K2VItemPartition, String> for K2VItem {
 	}
 }
 
-pub struct K2VItemTable {}
+pub struct K2VItemTable {
+	pub(crate) counter_table: Arc<IndexCounter<K2VCounterTable>>,
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ItemFilter {
@@ -191,8 +215,34 @@ impl TableSchema for K2VItemTable {
 	type E = K2VItem;
 	type Filter = ItemFilter;
 
-	fn updated(&self, _old: Option<&Self::E>, _new: Option<&Self::E>) {
-		// nothing for now
+	fn updated(&self, old: Option<&Self::E>, new: Option<&Self::E>) {
+		let (old_entries, old_values, old_bytes) = match old {
+			None => (0, 0, 0),
+			Some(e) => e.stats(),
+		};
+		let (new_entries, new_values, new_bytes) = match new {
+			None => (0, 0, 0),
+			Some(e) => e.stats(),
+		};
+
+		let count_pk = old
+			.map(|e| e.partition.bucket_id)
+			.unwrap_or_else(|| new.unwrap().partition.bucket_id);
+		let count_sk = old
+			.map(|e| &e.partition.partition_key)
+			.unwrap_or_else(|| &new.unwrap().partition.partition_key);
+
+		if let Err(e) = self.counter_table.count(
+			&count_pk,
+			count_sk,
+			&[
+				("entries", new_entries - old_entries),
+				("values", new_values - old_values),
+				("bytes", new_bytes - old_bytes),
+			],
+		) {
+			error!("Could not update K2V counter for bucket {:?} partition {}; counts will now be inconsistent. {}", count_pk, count_sk, e);
+		}
 	}
 
 	#[allow(clippy::nonminimal_bool)]
