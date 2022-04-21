@@ -19,6 +19,7 @@ use crate::error::*;
 
 pub async fn check_payload_signature(
 	garage: &Garage,
+	service: &str,
 	request: &Request<Body>,
 ) -> Result<(Option<Key>, Option<Hash>), Error> {
 	let mut headers = HashMap::new();
@@ -64,6 +65,7 @@ pub async fn check_payload_signature(
 
 	let key = verify_v4(
 		garage,
+		service,
 		&authorization.credential,
 		&authorization.date,
 		&authorization.signature,
@@ -281,6 +283,7 @@ pub fn parse_date(date: &str) -> Result<DateTime<Utc>, Error> {
 
 pub async fn verify_v4(
 	garage: &Garage,
+	service: &str,
 	credential: &str,
 	date: &DateTime<Utc>,
 	signature: &str,
@@ -289,9 +292,10 @@ pub async fn verify_v4(
 	let (key_id, scope) = parse_credential(credential)?;
 
 	let scope_expected = format!(
-		"{}/{}/s3/aws4_request",
+		"{}/{}/{}/aws4_request",
 		date.format(SHORT_DATE),
-		garage.config.s3_api.s3_region
+		garage.config.s3_api.s3_region,
+		service
 	);
 	if scope != scope_expected {
 		return Err(Error::AuthorizationHeaderMalformed(scope.to_string()));

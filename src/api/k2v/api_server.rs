@@ -81,7 +81,7 @@ impl ApiHandler for K2VApiServer {
 			return handle_options_s3api(garage, &req, Some(bucket_name)).await;
 		}
 
-		let (api_key, mut content_sha256) = check_payload_signature(&garage, &req).await?;
+		let (api_key, mut content_sha256) = check_payload_signature(&garage, "k2v", &req).await?;
 		let api_key = api_key.ok_or_else(|| {
 			Error::Forbidden("Garage does not support anonymous access yet".to_string())
 		})?;

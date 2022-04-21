@@ -119,7 +119,15 @@ pub async fn handle_post_object(
 	};
 
 	let date = parse_date(date)?;
-	let api_key = verify_v4(&garage, credential, &date, signature, policy.as_bytes()).await?;
+	let api_key = verify_v4(
+		&garage,
+		"s3",
+		credential,
+		&date,
+		signature,
+		policy.as_bytes(),
+	)
+	.await?;
 
 	let bucket_id = resolve_bucket(&garage, &bucket, &api_key).await?;
 

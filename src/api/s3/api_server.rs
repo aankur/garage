@@ -121,7 +121,7 @@ impl ApiHandler for S3ApiServer {
 			return handle_options_s3api(garage, &req, bucket_name).await;
 		}
 
-		let (api_key, mut content_sha256) = check_payload_signature(&garage, &req).await?;
+		let (api_key, mut content_sha256) = check_payload_signature(&garage, "s3", &req).await?;
 		let api_key = api_key.ok_or_else(|| {
 			Error::Forbidden("Garage does not support anonymous access yet".to_string())
 		})?;
