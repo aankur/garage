@@ -342,12 +342,13 @@ HTTP/1.1 204 NO CONTENT
 
 Lists all partition keys in the bucket for which some triplets exist, and gives
 for each the number of triplets (or an approximation thereof, this value is
-	asynchronously updated, and thus eventually consistent).
+    asynchronously updated, and thus eventually consistent).
 
 Query parameters:
 
 | name | default value | meaning |
 | - | - | - |
+| `prefix` | `null` | Restrict listing to partition keys that start with this prefix |
 | `start` | `null` | First partition key to list, in lexicographical order |
 | `end` | `null` | Last partition key to list (excluded) |
 | `limit` | `null` | Maximum number of partition keys to list |
@@ -383,6 +384,7 @@ Example response:
 HTTP/1.1 200 OK
 
 {
+  prefix: null,
   start: null,
   end: null,
   limit: null,
@@ -452,6 +454,7 @@ JSON struct with the following fields:
 | name | default value | meaning |
 | - | - | - |
 | `partitionKey` | **mandatory** | The partition key in which to search |
+| `prefix` | `null` | Restrict items to list to those whose sort keys start with this prefix |
 | `start` | `null` | The sort key of the first item to read |
 | `end` | `null` | The sort key of the last item to read (excluded) |
 | `limit` | `null` | The maximum number of items to return |
@@ -461,7 +464,7 @@ JSON struct with the following fields:
 
 
 For each of the searches, triplets are listed and returned separately. The
-semantics of `start`, `end` and `limit` is the same as for ReadIndex. The
+semantics of `prefix`, `start`, `end` and `limit` are the same as for ReadIndex. The
 additionnal parameter `singleItem` allows to get a single item, whose sort key
 is the one given in `start`. Parameters `conflictsOnly` and `tombstones`
 control additional filters on the items that are returned.
@@ -519,6 +522,7 @@ HTTP/1.1 200 OK
 [
   {
     partitionKey: "mailboxes",
+    prefix: null,
     start: null,
     end: null,
     limit: null,
@@ -535,6 +539,7 @@ HTTP/1.1 200 OK
   },
   {
     partitionKey: "mailbox::INBOX",
+    prefix: null,
     start: "001892831",
     end: null,
     limit: 3,
@@ -551,6 +556,7 @@ HTTP/1.1 200 OK
   },
   {
     partitionKey: "keys",
+    prefix: null,
     start: "0",
     end: null,
     conflictsOnly: false,
@@ -572,7 +578,7 @@ HTTP/1.1 200 OK
 
 Batch deletion of triplets. The request format is the same for `POST
 /<bucket>?search` to indicate items or range of items, except that here they
-are deleted instead of returned, but only the fields `partitionKey`, `start`,
+are deleted instead of returned, but only the fields `partitionKey`, `prefix`, `start`,
 `end`, and `singleItem` are supported. Causality information is not given by
 the user: this request will internally list all triplets and write deletion
 markers that supersede all of the versions that have been read.
@@ -605,6 +611,7 @@ HTTP/1.1 200 OK
 [
   {
     partitionKey: "mailbox:OldMailbox",
+    prefix: null,
     start: null,
     end: null,
     singleItem: false,
@@ -612,6 +619,7 @@ HTTP/1.1 200 OK
   },
   {
     partitionKey: "mailbox:INBOX",
+    prefix: null,
     start: "0018928321",
     end: null,
     singleItem: true,
