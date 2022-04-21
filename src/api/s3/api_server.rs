@@ -131,6 +131,7 @@ impl ApiHandler for S3ApiServer {
 			req,
 			&mut content_sha256,
 			&garage.config.s3_api.s3_region,
+			"s3",
 		)?;
 
 		let bucket_name = match bucket_name {

@@ -11,8 +11,8 @@ use garage_util::data::Hash;
 use garage_model::garage::Garage;
 use garage_model::key_table::*;
 
-use super::signing_hmac;
-use super::{LONG_DATETIME, SHORT_DATE};
+use super::LONG_DATETIME;
+use super::{compute_scope, signing_hmac};
 
 use crate::encoding::uri_encode;
 use crate::error::*;
@@ -291,12 +291,7 @@ pub async fn verify_v4(
 ) -> Result<Key, Error> {
 	let (key_id, scope) = parse_credential(credential)?;
 
-	let scope_expected = format!(
-		"{}/{}/{}/aws4_request",
-		date.format(SHORT_DATE),
-		garage.config.s3_api.s3_region,
-		service
-	);
+	let scope_expected = compute_scope(date, &garage.config.s3_api.s3_region, service);
 	if scope != scope_expected {
 		return Err(Error::AuthorizationHeaderMalformed(scope.to_string()));
 	}

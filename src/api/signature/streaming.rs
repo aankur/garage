@@ -19,6 +19,7 @@ pub fn parse_streaming_body(
 	req: Request<Body>,
 	content_sha256: &mut Option<Hash>,
 	region: &str,
+	service: &str,
 ) -> Result<Request<Body>, Error> {
 	match req.headers().get("x-amz-content-sha256") {
 		Some(header) if header == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" => {
@@ -41,8 +42,8 @@ pub fn parse_streaming_body(
 				.ok_or_bad_request("Invalid date")?;
 			let date: DateTime<Utc> = DateTime::from_utc(date, Utc);
 
-			let scope = compute_scope(&date, region);
-			let signing_hmac = crate::signature::signing_hmac(&date, secret_key, region, "s3")
+			let scope = compute_scope(&date, region, service);
+			let signing_hmac = crate::signature::signing_hmac(&date, secret_key, region, service)
 				.ok_or_internal_error("Unable to build signing HMAC")?;
 
 			Ok(req.map(move |body| {
@@ -343,7 +344,7 @@ mod tests {
 			.with_timezone(&Utc);
 		let secret_key = "test";
 		let region = "test";
-		let scope = crate::signature::compute_scope(&datetime, region);
+		let scope = crate::signature::compute_scope(&datetime, region, "s3");
 		let signing_hmac =
 			crate::signature::signing_hmac(&datetime, secret_key, region, "s3").unwrap();
 

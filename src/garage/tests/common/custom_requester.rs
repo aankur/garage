@@ -32,6 +32,7 @@ impl CustomRequester {
 	pub fn builder(&self, bucket: String) -> RequestBuilder<'_> {
 		RequestBuilder {
 			requester: self,
+			service: "s3",
 			bucket,
 			method: Method::GET,
 			path: String::new(),
@@ -47,6 +48,7 @@ impl CustomRequester {
 
 pub struct RequestBuilder<'a> {
 	requester: &'a CustomRequester,
+	service: &'static str,
 	bucket: String,
 	method: Method,
 	path: String,
@@ -59,6 +61,10 @@ pub struct RequestBuilder<'a> {
 }
 
 impl<'a> RequestBuilder<'a> {
+	pub fn service(&mut self, service: &'static str) -> &mut Self {
+		self.service = service;
+		self
+	}
 	pub fn method(&mut self, method: Method) -> &mut Self {
 		self.method = method;
 		self
@@ -118,7 +124,7 @@ impl<'a> RequestBuilder<'a> {
 		let uri = format!("{}{}", self.requester.uri, path);
 
 		let now = Utc::now();
-		let scope = signature::compute_scope(&now, super::REGION.as_ref());
+		let scope = signature::compute_scope(&now, super::REGION.as_ref(), self.service);
 		let mut signer = signature::signing_hmac(
 			&now,
 			&self.requester.key.secret,

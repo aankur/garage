@@ -91,6 +91,7 @@ impl ApiHandler for K2VApiServer {
 			req,
 			&mut content_sha256,
 			&garage.config.s3_api.s3_region,
+			"s3",
 		)?;
 
 		let bucket_id = resolve_bucket(&garage, &bucket_name, &api_key).await?;
