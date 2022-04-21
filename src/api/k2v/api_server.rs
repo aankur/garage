@@ -38,14 +38,18 @@ impl K2VApiServer {
 		garage: Arc<Garage>,
 		shutdown_signal: impl Future<Output = ()>,
 	) -> Result<(), GarageError> {
-		let addr = garage.config.s3_api.api_bind_addr;
+		if let Some(cfg) = &garage.config.k2v_api {
+			let bind_addr = cfg.api_bind_addr;
 
-		ApiServer::new(
-			garage.config.s3_api.s3_region.clone(),
-			K2VApiServer { garage },
-		)
-		.run_server(addr, shutdown_signal)
-		.await
+			ApiServer::new(
+				garage.config.s3_api.s3_region.clone(),
+				K2VApiServer { garage },
+			)
+			.run_server(bind_addr, shutdown_signal)
+			.await
+		} else {
+			Ok(())
+		}
 	}
 }
 
@@ -91,7 +95,7 @@ impl ApiHandler for K2VApiServer {
 			req,
 			&mut content_sha256,
 			&garage.config.s3_api.s3_region,
-			"s3",
+			"k2v",
 		)?;
 
 		let bucket_id = resolve_bucket(&garage, &bucket_name, &api_key).await?;

@@ -308,7 +308,7 @@ pub async fn verify_v4(
 		date,
 		&key_p.secret_key,
 		&garage.config.s3_api.s3_region,
-		"s3",
+		service,
 	)
 	.ok_or_internal_error("Unable to build signing HMAC")?;
 	hmac.update(payload);

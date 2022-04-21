@@ -42,7 +42,7 @@ pub(crate) trait ApiHandler: Send + Sync + 'static {
 }
 
 pub(crate) struct ApiServer<A: ApiHandler> {
-	s3_region: String,
+	region: String,
 	api_handler: A,
 
 	// Metrics
@@ -52,10 +52,10 @@ pub(crate) struct ApiServer<A: ApiHandler> {
 }
 
 impl<A: ApiHandler> ApiServer<A> {
-	pub fn new(s3_region: String, api_handler: A) -> Arc<Self> {
+	pub fn new(region: String, api_handler: A) -> Arc<Self> {
 		let meter = global::meter("garage/api");
 		Arc::new(Self {
-			s3_region,
+			region,
 			api_handler,
 			request_counter: meter
 				.u64_counter(format!("api.{}.request_counter", A::API_NAME))
@@ -102,7 +102,7 @@ impl<A: ApiHandler> ApiServer<A> {
 		let server = Server::bind(&bind_addr).serve(service);
 
 		let graceful = server.with_graceful_shutdown(shutdown_signal);
-		info!("API server listening on http://{}", bind_addr);
+		info!("{} API server listening on http://{}", A::API_NAME_DISPLAY, bind_addr);
 
 		graceful.await?;
 		Ok(())
@@ -119,7 +119,7 @@ impl<A: ApiHandler> ApiServer<A> {
 
 		let tracer = opentelemetry::global::tracer("garage");
 		let span = tracer
-			.span_builder("S3 API call (unknown)")
+			.span_builder(format!("{} API call (unknown)", A::API_NAME_DISPLAY))
 			.with_trace_id(gen_trace_id())
 			.with_attributes(vec![
 				KeyValue::new("method", format!("{}", req.method())),
@@ -138,7 +138,7 @@ impl<A: ApiHandler> ApiServer<A> {
 				Ok(x)
 			}
 			Err(e) => {
-				let body: Body = Body::from(e.aws_xml(&self.s3_region, uri.path()));
+				let body: Body = Body::from(e.aws_xml(&self.region, uri.path()));
 				let mut http_error_builder = Response::builder()
 					.status(e.http_status_code())
 					.header("Content-Type", "application/xml");
