@@ -179,7 +179,7 @@ impl<T: CounterSchema> IndexCounter<T> {
 		let pk = pk.clone();
 		let sk = sk.clone();
 		tokio::spawn(async move {
-			let dist_entry = new_entry.to_counter_entry::<T>(this_node, pk, sk);
+			let dist_entry = new_entry.into_counter_entry::<T>(this_node, pk, sk);
 			if let Err(e) = table.insert(&dist_entry).await {
 				warn!("({}) Could not propagate counter value: {}", T::NAME, e);
 			}
@@ -195,7 +195,7 @@ struct LocalCounterEntry {
 }
 
 impl LocalCounterEntry {
-	fn to_counter_entry<T: CounterSchema>(
+	fn into_counter_entry<T: CounterSchema>(
 		self,
 		this_node: Uuid,
 		pk: T::P,
