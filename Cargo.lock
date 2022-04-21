@@ -887,6 +887,7 @@ dependencies = [
  "futures-util",
  "garage_block",
  "garage_model 0.7.0",
+ "garage_rpc 0.7.0",
  "garage_table 0.7.0",
  "garage_util 0.7.0",
  "hex",

@@ -1,4 +1,3 @@
-//! Function related to GET and HEAD requests
 use std::sync::Arc;
 
 use http::header;
@@ -13,7 +12,7 @@ use garage_model::k2v::item_table::*;
 
 use crate::error::*;
 
-const X_GARAGE_CAUSALITY_TOKEN: &str = "X-Garage-Causality-Token";
+pub const X_GARAGE_CAUSALITY_TOKEN: &str = "X-Garage-Causality-Token";
 
 pub enum ReturnFormat {
 	Json,
