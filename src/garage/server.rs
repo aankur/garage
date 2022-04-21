@@ -8,8 +8,8 @@ use garage_util::error::Error;
 
 use garage_admin::metrics::*;
 use garage_admin::tracing_setup::*;
-use garage_api::s3::api_server::S3ApiServer;
 use garage_api::k2v::api_server::K2VApiServer;
+use garage_api::s3::api_server::S3ApiServer;
 use garage_model::garage::Garage;
 use garage_web::run_web_server;
 

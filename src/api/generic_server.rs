@@ -102,7 +102,11 @@ impl<A: ApiHandler> ApiServer<A> {
 		let server = Server::bind(&bind_addr).serve(service);
 
 		let graceful = server.with_graceful_shutdown(shutdown_signal);
-		info!("{} API server listening on http://{}", A::API_NAME_DISPLAY, bind_addr);
+		info!(
+			"{} API server listening on http://{}",
+			A::API_NAME_DISPLAY,
+			bind_addr
+		);
 
 		graceful.await?;
 		Ok(())
