@@ -43,8 +43,11 @@ impl<T: CounterSchema> Entry<T::P, T::S> for CounterEntry<T> {
 
 impl<T: CounterSchema> CounterEntry<T> {
 	pub fn filtered_values(&self, ring: &Ring) -> HashMap<String, i64> {
-		let nodes = &ring.layout.node_id_vec;
+		let nodes = &ring.layout.node_id_vec[..];
+		self.filtered_values_with_nodes(nodes)
+	}
 
+	pub fn filtered_values_with_nodes(&self, nodes: &[Uuid]) -> HashMap<String, i64> {
 		let mut ret = HashMap::new();
 		for (name, vals) in self.values.iter() {
 			let new_vals = vals
@@ -104,14 +107,22 @@ impl<T: CounterSchema> TableSchema for CounterTable<T> {
 	type P = T::P;
 	type S = T::S;
 	type E = CounterEntry<T>;
-	type Filter = DeletedFilter;
+	type Filter = (DeletedFilter, Vec<Uuid>);
 
 	fn updated(&self, _old: Option<&Self::E>, _new: Option<&Self::E>) {
 		// nothing for now
 	}
 
 	fn matches_filter(entry: &Self::E, filter: &Self::Filter) -> bool {
-		filter.apply(entry.is_tombstone())
+		if filter.0 == DeletedFilter::Any {
+			return true;
+		}
+
+		let is_tombstone = entry
+			.filtered_values_with_nodes(&filter.1[..])
+			.iter()
+			.all(|(_, v)| *v == 0);
+		filter.0.apply(is_tombstone)
 	}
 }
 

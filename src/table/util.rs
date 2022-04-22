@@ -17,7 +17,7 @@ impl PartitionKey for EmptyKey {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeletedFilter {
 	Any,
 	Deleted,

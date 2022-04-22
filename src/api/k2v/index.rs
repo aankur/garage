@@ -7,6 +7,7 @@ use garage_util::data::*;
 use garage_util::error::Error as GarageError;
 
 use garage_rpc::ring::Ring;
+use garage_table::util::*;
 
 use garage_model::garage::Garage;
 
@@ -30,7 +31,7 @@ pub async fn handle_read_index(
 		&start,
 		&end,
 		limit,
-		None,
+		Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
 	)
 	.await?;
 

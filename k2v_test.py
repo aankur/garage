@@ -25,50 +25,68 @@ print(response.headers)
 print(response.text)
 
 
-print("-- Put initial (no CT)")
-response = requests.put('http://localhost:3812/alex/root?sort_key=b',
-                        auth=auth,
-                        data='{}: Hello, world!'.format(datetime.timestamp(datetime.now())))
-print(response.headers)
-print(response.text)
+sort_keys = ["a", "b", "c", "d"]
 
-print("-- Get")
-response = requests.get('http://localhost:3812/alex/root?sort_key=b',
-                        auth=auth)
-print(response.headers)
-print(response.text)
-ct = response.headers["x-garage-causality-token"]
+for sk in sort_keys:
+    print("-- (%s) Put initial (no CT)"%sk)
+    response = requests.put('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth,
+                            data='{}: Hello, world!'.format(datetime.timestamp(datetime.now())))
+    print(response.headers)
+    print(response.text)
+
+    print("-- Get")
+    response = requests.get('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth)
+    print(response.headers)
+    print(response.text)
+    ct = response.headers["x-garage-causality-token"]
+
+    print("-- ReadIndex")
+    response = requests.get('http://localhost:3812/alex',
+                            auth=auth)
+    print(response.headers)
+    print(response.text)
+
+    print("-- Put with CT")
+    response = requests.put('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth,
+                            headers={'x-garage-causality-token': ct},
+                            data='{}: Good bye, world!'.format(datetime.timestamp(datetime.now())))
+    print(response.headers)
+    print(response.text)
+
+    print("-- Get")
+    response = requests.get('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth)
+    print(response.headers)
+    print(response.text)
+
+    print("-- Put again with same CT (concurrent)")
+    response = requests.put('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth,
+                            headers={'x-garage-causality-token': ct},
+                            data='{}: Concurrent value, oops'.format(datetime.timestamp(datetime.now())))
+    print(response.headers)
+    print(response.text)
+
+for sk in sort_keys:
+    print("-- (%s) Get"%sk)
+    response = requests.get('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth)
+    print(response.headers)
+    print(response.text)
+    ct = response.headers["x-garage-causality-token"]
+
+    print("-- Delete")
+    response = requests.delete('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            headers={'x-garage-causality-token': ct},
+                            auth=auth)
+    print(response.headers)
+    print(response.text)
 
 print("-- ReadIndex")
 response = requests.get('http://localhost:3812/alex',
-                        auth=auth)
-print(response.headers)
-print(response.text)
-
-print("-- Put with CT")
-response = requests.put('http://localhost:3812/alex/root?sort_key=b',
-                        auth=auth,
-                        headers={'x-garage-causality-token': ct},
-                        data='{}: Good bye, world!'.format(datetime.timestamp(datetime.now())))
-print(response.headers)
-print(response.text)
-
-print("-- Get")
-response = requests.get('http://localhost:3812/alex/root?sort_key=b',
-                        auth=auth)
-print(response.headers)
-print(response.text)
-
-print("-- Put again with same CT (concurrent)")
-response = requests.put('http://localhost:3812/alex/root?sort_key=b',
-                        auth=auth,
-                        headers={'x-garage-causality-token': ct},
-                        data='{}: Concurrent value, oops'.format(datetime.timestamp(datetime.now())))
-print(response.headers)
-print(response.text)
-
-print("-- Get")
-response = requests.get('http://localhost:3812/alex/root?sort_key=b',
                         auth=auth)
 print(response.headers)
 print(response.text)
