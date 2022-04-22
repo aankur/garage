@@ -28,8 +28,8 @@ impl ReturnFormat {
 		};
 
 		let accept = accept.split(',').map(|s| s.trim()).collect::<Vec<_>>();
-		let accept_json = accept.contains(&"application/json");
-		let accept_binary = accept.contains(&"application/octet-stream");
+		let accept_json = accept.contains(&"application/json") || accept.contains(&"*/*");
+		let accept_binary = accept.contains(&"application/octet-stream") || accept.contains(&"*/*");
 
 		match (accept_json, accept_binary) {
 			(true, true) => Ok(Self::Either),

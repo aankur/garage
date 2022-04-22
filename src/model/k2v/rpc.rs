@@ -97,7 +97,8 @@ impl K2VRpcHandler {
 				},
 				RequestStrategy::with_priority(PRIO_NORMAL)
 					.with_quorum(1)
-					.with_timeout(TABLE_RPC_TIMEOUT),
+					.with_timeout(TABLE_RPC_TIMEOUT)
+					.interrupt_after_quorum(true),
 			)
 			.await?;
 

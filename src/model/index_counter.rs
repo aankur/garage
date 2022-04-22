@@ -24,7 +24,7 @@ pub trait CounterSchema: Clone + PartialEq + Send + Sync + 'static {
 pub struct CounterEntry<T: CounterSchema> {
 	pub pk: T::P,
 	pub sk: T::S,
-	values: BTreeMap<String, CounterValue>,
+	pub values: BTreeMap<String, CounterValue>,
 }
 
 impl<T: CounterSchema> Entry<T::P, T::S> for CounterEntry<T> {
@@ -51,10 +51,10 @@ impl<T: CounterSchema> CounterEntry<T> {
 				.node_values
 				.iter()
 				.filter(|(n, _)| nodes.contains(n))
-				.map(|(_, (_, v))| v)
+				.map(|(_, (_, v))| *v)
 				.collect::<Vec<_>>();
 			if !new_vals.is_empty() {
-				ret.insert(name.clone(), new_vals.iter().fold(i64::MIN, |a, b| a + *b));
+				ret.insert(name.clone(), new_vals.iter().fold(i64::MIN, |a, b| std::cmp::max(a, *b)));
 			}
 		}
 
@@ -64,8 +64,8 @@ impl<T: CounterSchema> CounterEntry<T> {
 
 /// A counter entry in the global table
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-struct CounterValue {
-	node_values: BTreeMap<Uuid, (u64, i64)>,
+pub struct CounterValue {
+	pub node_values: BTreeMap<Uuid, (u64, i64)>,
 }
 
 impl<T: CounterSchema> Crdt for CounterEntry<T> {

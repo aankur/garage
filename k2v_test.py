@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import requests
+from datetime import datetime
 
 # let's talk to our AWS Elasticsearch cluster
 #from requests_aws4auth import AWS4Auth
@@ -17,6 +18,57 @@ auth = AWSRequestsAuth(aws_access_key='GK31c2f218a2e44f485b94239e',
         aws_service='k2v')
 
 
+print("-- ReadIndex")
 response = requests.get('http://localhost:3812/alex',
                         auth=auth)
-print(response.content)
+print(response.headers)
+print(response.text)
+
+
+print("-- Put initial (no CT)")
+response = requests.put('http://localhost:3812/alex/root?sort_key=b',
+                        auth=auth,
+                        data='{}: Hello, world!'.format(datetime.timestamp(datetime.now())))
+print(response.headers)
+print(response.text)
+
+print("-- Get")
+response = requests.get('http://localhost:3812/alex/root?sort_key=b',
+                        auth=auth)
+print(response.headers)
+print(response.text)
+ct = response.headers["x-garage-causality-token"]
+
+print("-- ReadIndex")
+response = requests.get('http://localhost:3812/alex',
+                        auth=auth)
+print(response.headers)
+print(response.text)
+
+print("-- Put with CT")
+response = requests.put('http://localhost:3812/alex/root?sort_key=b',
+                        auth=auth,
+                        headers={'x-garage-causality-token': ct},
+                        data='{}: Good bye, world!'.format(datetime.timestamp(datetime.now())))
+print(response.headers)
+print(response.text)
+
+print("-- Get")
+response = requests.get('http://localhost:3812/alex/root?sort_key=b',
+                        auth=auth)
+print(response.headers)
+print(response.text)
+
+print("-- Put again with same CT (concurrent)")
+response = requests.put('http://localhost:3812/alex/root?sort_key=b',
+                        auth=auth,
+                        headers={'x-garage-causality-token': ct},
+                        data='{}: Concurrent value, oops'.format(datetime.timestamp(datetime.now())))
+print(response.headers)
+print(response.text)
+
+print("-- Get")
+response = requests.get('http://localhost:3812/alex/root?sort_key=b',
+                        auth=auth)
+print(response.headers)
+print(response.text)
