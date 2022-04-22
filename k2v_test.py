@@ -100,7 +100,7 @@ response = requests.post('http://localhost:3812/alex',
     {"pk": "root", "sk": "a", "ct": null, "v": "aW5pdGlhbCB0ZXN0Cg=="},
     {"pk": "root", "sk": "b", "ct": null, "v": "aW5pdGlhbCB0ZXN1Cg=="}
 ]
-''');
+''')
 print(response.headers)
 print(response.text)
 
@@ -117,3 +117,17 @@ for sk in sort_keys:
     print(response.headers)
     print(response.text)
     ct = response.headers["x-garage-causality-token"]
+
+print("-- ReadBatch")
+response = requests.post('http://localhost:3812/alex?search',
+                        auth=auth,
+                        data='''
+[
+    {"partitionKey": "root"},
+    {"partitionKey": "root", "tombstones": true},
+    {"partitionKey": "root", "tombstones": true, "limit": 2},
+    {"partitionKey": "root", "start": "c", "singleItem": true}
+]
+''')
+print(response.headers)
+print(response.text)

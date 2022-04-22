@@ -73,12 +73,14 @@ impl Endpoint {
 
 		let mut query = QueryParameters::from_query(query.unwrap_or_default())?;
 
+		let method_search = Method::from_bytes(b"SEARCH").unwrap();
 		let res = match *req.method() {
 			Method::GET => Self::from_get(partition_key, &mut query)?,
-			//Method::HEAD => Self::from_head(partition_key, &mut query)?,
+			//&Method::HEAD => Self::from_head(partition_key, &mut query)?,
 			Method::POST => Self::from_post(partition_key, &mut query)?,
 			Method::PUT => Self::from_put(partition_key, &mut query)?,
 			Method::DELETE => Self::from_delete(partition_key, &mut query)?,
+			_ if req.method() == method_search => Self::from_search(partition_key, &mut query)?,
 			_ => return Err(Error::BadRequest("Unknown method".to_owned())),
 		};
 
@@ -99,6 +101,19 @@ impl Endpoint {
 			],
 			no_key: [
 				EMPTY => ReadIndex (query_opt::prefix, query_opt::start, query_opt::end, opt_parse::limit),
+			]
+		}
+	}
+
+	/// Determine which endpoint a request is for, knowing it is a SEARCH.
+	fn from_search(partition_key: String, query: &mut QueryParameters<'_>) -> Result<Self, Error> {
+		router_match! {
+			@gen_parser
+			(query.keyword.take().unwrap_or_default().as_ref(), partition_key, query, None),
+			key: [
+			],
+			no_key: [
+				EMPTY => ReadBatch,
 			]
 		}
 	}
