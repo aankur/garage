@@ -5,9 +5,12 @@
 //! node does not process the entry directly, as this would
 //! mean the vector clock gets much larger than needed).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use garage_util::data::*;
@@ -25,14 +28,18 @@ use crate::k2v::item_table::*;
 
 /// RPC messages for K2V
 #[derive(Debug, Serialize, Deserialize)]
-pub enum K2VRpc {
+enum K2VRpc {
 	Ok,
-	InsertItem {
-		partition: K2VItemPartition,
-		sort_key: String,
-		causal_context: Option<CausalContext>,
-		value: DvvsValue,
-	},
+	InsertItem(InsertedItem),
+	InsertManyItems(Vec<InsertedItem>),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct InsertedItem {
+	partition: K2VItemPartition,
+	sort_key: String,
+	causal_context: Option<CausalContext>,
+	value: DvvsValue,
 }
 
 impl Rpc for K2VRpc {
@@ -89,12 +96,12 @@ impl K2VRpcHandler {
 			.try_call_many(
 				&self.endpoint,
 				&who[..],
-				K2VRpc::InsertItem {
+				K2VRpc::InsertItem(InsertedItem {
 					partition,
 					sort_key,
 					causal_context,
 					value,
-				},
+				}),
 				RequestStrategy::with_priority(PRIO_NORMAL)
 					.with_quorum(1)
 					.with_timeout(TABLE_RPC_TIMEOUT)
@@ -105,29 +112,84 @@ impl K2VRpcHandler {
 		Ok(())
 	}
 
+	pub async fn insert_batch(
+		&self,
+		bucket_id: Uuid,
+		items: Vec<(String, String, Option<CausalContext>, DvvsValue)>,
+	) -> Result<(), Error> {
+		let n_items = items.len();
+
+		let mut call_list: HashMap<_, Vec<_>> = HashMap::new();
+
+		for (partition_key, sort_key, causal_context, value) in items {
+			let partition = K2VItemPartition {
+				bucket_id,
+				partition_key,
+			};
+			let mut who = self
+				.item_table
+				.data
+				.replication
+				.write_nodes(&partition.hash());
+			who.sort();
+
+			call_list.entry(who).or_default().push(InsertedItem {
+				partition,
+				sort_key,
+				causal_context,
+				value,
+			});
+		}
+
+		debug!(
+			"K2V insert_batch: {} requests to insert {} items",
+			call_list.len(),
+			n_items
+		);
+		let call_futures = call_list.into_iter().map(|(nodes, items)| async move {
+			let resp = self
+				.system
+				.rpc
+				.try_call_many(
+					&self.endpoint,
+					&nodes[..],
+					K2VRpc::InsertManyItems(items),
+					RequestStrategy::with_priority(PRIO_NORMAL)
+						.with_quorum(1)
+						.with_timeout(TABLE_RPC_TIMEOUT)
+						.interrupt_after_quorum(true),
+				)
+				.await?;
+			Ok::<_, Error>((nodes, resp))
+		});
+
+		let mut resps = call_futures.collect::<FuturesUnordered<_>>();
+		while let Some(resp) = resps.next().await {
+			resp?;
+		}
+
+		Ok(())
+	}
+
 	// ---- internal handlers ----
 
-	#[allow(clippy::ptr_arg)]
-	async fn handle_insert(
-		&self,
-		partition: &K2VItemPartition,
-		sort_key: &String,
-		causal_context: &Option<CausalContext>,
-		value: &DvvsValue,
-	) -> Result<K2VRpc, Error> {
-		let tree_key = self.item_table.data.tree_key(partition, sort_key);
+	async fn handle_insert(&self, item: &InsertedItem) -> Result<K2VRpc, Error> {
+		let tree_key = self
+			.item_table
+			.data
+			.tree_key(&item.partition, &item.sort_key);
 		let new = self
 			.item_table
 			.data
 			.update_entry_with(&tree_key[..], |ent| {
 				let mut ent = ent.unwrap_or_else(|| {
 					K2VItem::new(
-						partition.bucket_id,
-						partition.partition_key.clone(),
-						sort_key.clone(),
+						item.partition.bucket_id,
+						item.partition.partition_key.clone(),
+						item.sort_key.clone(),
 					)
 				});
-				ent.update(self.system.id, causal_context, value.clone());
+				ent.update(self.system.id, &item.causal_context, item.value.clone());
 				ent
 			})?;
 
@@ -138,21 +200,21 @@ impl K2VRpcHandler {
 
 		Ok(K2VRpc::Ok)
 	}
+
+	async fn handle_insert_many(&self, items: &[InsertedItem]) -> Result<K2VRpc, Error> {
+		for i in items.iter() {
+			self.handle_insert(i).await?;
+		}
+		Ok(K2VRpc::Ok)
+	}
 }
 
 #[async_trait]
 impl EndpointHandler<K2VRpc> for K2VRpcHandler {
 	async fn handle(self: &Arc<Self>, message: &K2VRpc, _from: NodeID) -> Result<K2VRpc, Error> {
 		match message {
-			K2VRpc::InsertItem {
-				partition,
-				sort_key,
-				causal_context,
-				value,
-			} => {
-				self.handle_insert(partition, sort_key, causal_context, value)
-					.await
-			}
+			K2VRpc::InsertItem(item) => self.handle_insert(item).await,
+			K2VRpc::InsertManyItems(items) => self.handle_insert_many(&items[..]).await,
 			m => Err(Error::unexpected_rpc_message(m)),
 		}
 	}

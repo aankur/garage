@@ -41,7 +41,10 @@ where
 
 	let mut entries = vec![];
 	loop {
-		let n_get = std::cmp::min(1000, limit.map(|x| x as usize).unwrap_or(usize::MAX - 10) - entries.len() + 2);
+		let n_get = std::cmp::min(
+			1000,
+			limit.map(|x| x as usize).unwrap_or(usize::MAX - 10) - entries.len() + 2,
+		);
 		let get_ret = table
 			.get_range(partition_key, Some(start.clone()), filter.clone(), n_get)
 			.await?;

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import requests
 from datetime import datetime
 
@@ -90,3 +91,29 @@ response = requests.get('http://localhost:3812/alex',
                         auth=auth)
 print(response.headers)
 print(response.text)
+
+print("-- InsertBatch")
+response = requests.post('http://localhost:3812/alex',
+                        auth=auth,
+                        data='''
+[
+    {"pk": "root", "sk": "a", "ct": null, "v": "aW5pdGlhbCB0ZXN0Cg=="},
+    {"pk": "root", "sk": "b", "ct": null, "v": "aW5pdGlhbCB0ZXN1Cg=="}
+]
+''');
+print(response.headers)
+print(response.text)
+
+print("-- ReadIndex")
+response = requests.get('http://localhost:3812/alex',
+                        auth=auth)
+print(response.headers)
+print(response.text)
+
+for sk in sort_keys:
+    print("-- (%s) Get"%sk)
+    response = requests.get('http://localhost:3812/alex/root?sort_key=%s'%sk,
+                            auth=auth)
+    print(response.headers)
+    print(response.text)
+    ct = response.headers["x-garage-causality-token"]

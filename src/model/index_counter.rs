@@ -57,7 +57,10 @@ impl<T: CounterSchema> CounterEntry<T> {
 				.map(|(_, (_, v))| *v)
 				.collect::<Vec<_>>();
 			if !new_vals.is_empty() {
-				ret.insert(name.clone(), new_vals.iter().fold(i64::MIN, |a, b| std::cmp::max(a, *b)));
+				ret.insert(
+					name.clone(),
+					new_vals.iter().fold(i64::MIN, |a, b| std::cmp::max(a, *b)),
+				);
 			}
 		}
 

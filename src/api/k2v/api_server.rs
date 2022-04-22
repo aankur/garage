@@ -19,6 +19,7 @@ use crate::signature::payload::check_payload_signature;
 use crate::signature::streaming::*;
 
 use crate::helpers::*;
+use crate::k2v::batch::*;
 use crate::k2v::index::*;
 use crate::k2v::item::*;
 use crate::k2v::router::Endpoint;
@@ -147,6 +148,7 @@ impl ApiHandler for K2VApiServer {
 				end,
 				limit,
 			} => handle_read_index(garage, bucket_id, prefix, start, end, limit).await,
+			Endpoint::InsertBatch {} => handle_insert_batch(garage, bucket_id, req).await,
 			//TODO
 			endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
 		};
