@@ -10,6 +10,7 @@ use garage_rpc::ring::Ring;
 use garage_table::util::*;
 
 use garage_model::garage::Garage;
+use garage_model::k2v::counter_table::{BYTES, CONFLICTS, ENTRIES, VALUES};
 
 use crate::error::*;
 use crate::k2v::range::read_range;
@@ -35,9 +36,10 @@ pub async fn handle_read_index(
 	)
 	.await?;
 
-	let s_entries = "entries".to_string();
-	let s_values = "values".to_string();
-	let s_bytes = "bytes".to_string();
+	let s_entries = ENTRIES.to_string();
+	let s_conflicts = CONFLICTS.to_string();
+	let s_values = VALUES.to_string();
+	let s_bytes = BYTES.to_string();
 
 	let resp = ReadIndexResponse {
 		prefix,
@@ -51,6 +53,7 @@ pub async fn handle_read_index(
 				ReadIndexResponseEntry {
 					pk: part.sk,
 					entries: *vals.get(&s_entries).unwrap_or(&0),
+					conflicts: *vals.get(&s_conflicts).unwrap_or(&0),
 					values: *vals.get(&s_values).unwrap_or(&0),
 					bytes: *vals.get(&s_bytes).unwrap_or(&0),
 				}
@@ -85,6 +88,7 @@ struct ReadIndexResponse {
 struct ReadIndexResponseEntry {
 	pk: String,
 	entries: i64,
+	conflicts: i64,
 	values: i64,
 	bytes: i64,
 }

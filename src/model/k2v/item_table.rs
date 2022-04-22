@@ -109,23 +109,25 @@ impl K2VItem {
 		}
 	}
 
-	// returns counters: (non-deleted entries, non-tombstone values, bytes used)
-	fn stats(&self) -> (i64, i64, i64) {
+	// returns counters: (non-deleted entries, conflict entries, non-tombstone values, bytes used)
+	fn stats(&self) -> (i64, i64, i64, i64) {
+		let values = self.values();
+
 		let n_entries = if self.is_tombstone() { 0 } else { 1 };
-		let n_values = self
-			.values()
+		let n_conflicts = if values.len() > 1 { 1 } else { 0 };
+		let n_values = values
 			.iter()
 			.filter(|v| matches!(v, DvvsValue::Value(_)))
 			.count() as i64;
-		let n_bytes = self
-			.values()
+		let n_bytes = values
 			.iter()
 			.map(|v| match v {
 				DvvsValue::Deleted => 0,
 				DvvsValue::Value(v) => v.len() as i64,
 			})
 			.sum();
-		(n_entries, n_values, n_bytes)
+
+		(n_entries, n_conflicts, n_values, n_bytes)
 	}
 }
 
@@ -216,12 +218,12 @@ impl TableSchema for K2VItemTable {
 	type Filter = ItemFilter;
 
 	fn updated(&self, old: Option<&Self::E>, new: Option<&Self::E>) {
-		let (old_entries, old_values, old_bytes) = match old {
-			None => (0, 0, 0),
+		let (old_entries, old_conflicts, old_values, old_bytes) = match old {
+			None => (0, 0, 0, 0),
 			Some(e) => e.stats(),
 		};
-		let (new_entries, new_values, new_bytes) = match new {
-			None => (0, 0, 0),
+		let (new_entries, new_conflicts, new_values, new_bytes) = match new {
+			None => (0, 0, 0, 0),
 			Some(e) => e.stats(),
 		};
 
@@ -236,9 +238,10 @@ impl TableSchema for K2VItemTable {
 			&count_pk,
 			count_sk,
 			&[
-				("entries", new_entries - old_entries),
-				("values", new_values - old_values),
-				("bytes", new_bytes - old_bytes),
+				(ENTRIES, new_entries - old_entries),
+				(CONFLICTS, new_conflicts - old_conflicts),
+				(VALUES, new_values - old_values),
+				(BYTES, new_bytes - old_bytes),
 			],
 		) {
 			error!("Could not update K2V counter for bucket {:?} partition {}; counts will now be inconsistent. {}", count_pk, count_sk, e);

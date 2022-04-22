@@ -2,6 +2,11 @@ use garage_util::data::*;
 
 use crate::index_counter::*;
 
+pub const ENTRIES: &'static str = "entries";
+pub const CONFLICTS: &'static str = "conflicts";
+pub const VALUES: &'static str = "values";
+pub const BYTES: &'static str = "bytes";
+
 #[derive(PartialEq, Clone)]
 pub struct K2VCounterTable;
 
