@@ -126,7 +126,8 @@ response = requests.post('http://localhost:3812/alex?search',
     {"partitionKey": "root"},
     {"partitionKey": "root", "tombstones": true},
     {"partitionKey": "root", "tombstones": true, "limit": 2},
-    {"partitionKey": "root", "start": "c", "singleItem": true}
+    {"partitionKey": "root", "start": "c", "singleItem": true},
+    {"partitionKey": "root", "start": "b", "end": "d", "tombstones": true}
 ]
 ''')
 print(response.headers)

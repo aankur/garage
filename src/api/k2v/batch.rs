@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use garage_util::data::*;
 use garage_util::error::Error as GarageError;
 
+use garage_table::TableSchema;
+
 use garage_model::garage::Garage;
 use garage_model::k2v::causality::*;
 use garage_model::k2v::item_table::*;
@@ -55,9 +57,11 @@ pub async fn handle_read_batch(
 		serde_json::from_slice(&body).ok_or_bad_request("Invalid JSON")?;
 
 	let resp_results = futures::future::join_all(
-		queries.into_iter()
-		.map(|q| handle_read_batch_query(&garage, bucket_id, q)))
-		.await;
+		queries
+			.into_iter()
+			.map(|q| handle_read_batch_query(&garage, bucket_id, q)),
+	)
+	.await;
 
 	let mut resps: Vec<ReadBatchResponse> = vec![];
 	for resp in resp_results {
@@ -75,7 +79,7 @@ async fn handle_read_batch_query(
 	bucket_id: Uuid,
 	query: ReadBatchQuery,
 ) -> Result<ReadBatchResponse, Error> {
-	let partition = K2VItemPartition{
+	let partition = K2VItemPartition {
 		bucket_id,
 		partition_key: query.partition_key.clone(),
 	};
@@ -86,15 +90,20 @@ async fn handle_read_batch_query(
 	};
 
 	let (items, more, next_start) = if query.single_item {
-		let sk = query.start.as_ref() 
+		if query.prefix.is_some() || query.end.is_some() || query.limit.is_some() {
+			return Err(Error::BadRequest("Batch query parameters 'prefix', 'end' and 'limit' must not be set when singleItem is true.".into()));
+		}
+		let sk = query
+			.start
+			.as_ref()
 			.ok_or_bad_request("start should be specified if single_item is set")?;
 		let item = garage
 			.k2v_item_table
 			.get(&partition, sk)
-			.await?;
+			.await?
+			.filter(|e| K2VItemTable::matches_filter(e, &filter));
 		match item {
-			Some(i) => (vec![ReadBatchResponseItem::from(i)],
-				false, None),
+			Some(i) => (vec![ReadBatchResponseItem::from(i)], false, None),
 			None => (vec![], false, None),
 		}
 	} else {
@@ -105,11 +114,13 @@ async fn handle_read_batch_query(
 			&query.start,
 			&query.end,
 			query.limit,
-			Some(filter)
-			).await?;
+			Some(filter),
+		)
+		.await?;
 
-		let items = items.into_iter()
-			.map(|i| ReadBatchResponseItem::from(i))
+		let items = items
+			.into_iter()
+			.map(ReadBatchResponseItem::from)
 			.collect::<Vec<_>>();
 
 		(items, more, next_start)
@@ -140,7 +151,7 @@ struct InsertBatchItem {
 
 #[derive(Deserialize)]
 struct ReadBatchQuery {
-	#[serde(rename="partitionKey")]
+	#[serde(rename = "partitionKey")]
 	partition_key: String,
 	#[serde(default)]
 	prefix: Option<String>,
@@ -150,9 +161,9 @@ struct ReadBatchQuery {
 	end: Option<String>,
 	#[serde(default)]
 	limit: Option<u64>,
-	#[serde(default,rename="singleItem")]
+	#[serde(default, rename = "singleItem")]
 	single_item: bool,
-	#[serde(default,rename="conflictsOnly")]
+	#[serde(default, rename = "conflictsOnly")]
 	conflicts_only: bool,
 	#[serde(default)]
 	tombstones: bool,
@@ -160,21 +171,21 @@ struct ReadBatchQuery {
 
 #[derive(Serialize)]
 struct ReadBatchResponse {
-	#[serde(rename="partitionKey")]
+	#[serde(rename = "partitionKey")]
 	partition_key: String,
 	prefix: Option<String>,
 	start: Option<String>,
 	end: Option<String>,
 	limit: Option<u64>,
-	#[serde(rename="singleItem")]
+	#[serde(rename = "singleItem")]
 	single_item: bool,
-	#[serde(rename="conflictsOnly")]
+	#[serde(rename = "conflictsOnly")]
 	conflicts_only: bool,
 	tombstones: bool,
 
 	items: Vec<ReadBatchResponseItem>,
 	more: bool,
-	#[serde(rename="nextStart")]
+	#[serde(rename = "nextStart")]
 	next_start: Option<String>,
 }
 
@@ -188,17 +199,18 @@ struct ReadBatchResponseItem {
 impl ReadBatchResponseItem {
 	fn from(i: K2VItem) -> Self {
 		let ct = i.causality_context().serialize();
-		let v = i.values()
-					.iter()
-					.map(|v| match v {
-						DvvsValue::Value(x) => Some(base64::encode(x)),
-						DvvsValue::Deleted => None,
-					})
-					.collect::<Vec<_>>();
+		let v = i
+			.values()
+			.iter()
+			.map(|v| match v {
+				DvvsValue::Value(x) => Some(base64::encode(x)),
+				DvvsValue::Deleted => None,
+			})
+			.collect::<Vec<_>>();
 		Self {
-				sk: i.sort_key,
-				ct,
-				v,
-			}
+			sk: i.sort_key,
+			ct,
+			v,
+		}
 	}
 }
