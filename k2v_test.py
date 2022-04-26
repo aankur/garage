@@ -98,7 +98,8 @@ response = requests.post('http://localhost:3812/alex',
                         data='''
 [
     {"pk": "root", "sk": "a", "ct": null, "v": "aW5pdGlhbCB0ZXN0Cg=="},
-    {"pk": "root", "sk": "b", "ct": null, "v": "aW5pdGlhbCB0ZXN1Cg=="}
+    {"pk": "root", "sk": "b", "ct": null, "v": "aW5pdGlhbCB0ZXN1Cg=="},
+    {"pk": "root", "sk": "c", "ct": null, "v": "aW5pdGlhbCB0ZXN2Cg=="}
 ]
 ''')
 print(response.headers)
@@ -128,6 +129,29 @@ response = requests.post('http://localhost:3812/alex?search',
     {"partitionKey": "root", "tombstones": true, "limit": 2},
     {"partitionKey": "root", "start": "c", "singleItem": true},
     {"partitionKey": "root", "start": "b", "end": "d", "tombstones": true}
+]
+''')
+print(response.headers)
+print(response.text)
+
+
+print("-- DeleteBatch")
+response = requests.post('http://localhost:3812/alex?delete',
+                        auth=auth,
+                        data='''
+[
+    {"partitionKey": "root", "start": "b", "end": "c"}
+]
+''')
+print(response.headers)
+print(response.text)
+
+print("-- ReadBatch")
+response = requests.post('http://localhost:3812/alex?search',
+                        auth=auth,
+                        data='''
+[
+    {"partitionKey": "root"}
 ]
 ''')
 print(response.headers)

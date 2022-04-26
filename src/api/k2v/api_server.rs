@@ -150,6 +150,7 @@ impl ApiHandler for K2VApiServer {
 			} => handle_read_index(garage, bucket_id, prefix, start, end, limit).await,
 			Endpoint::InsertBatch {} => handle_insert_batch(garage, bucket_id, req).await,
 			Endpoint::ReadBatch {} => handle_read_batch(garage, bucket_id, req).await,
+			Endpoint::DeleteBatch {} => handle_delete_batch(garage, bucket_id, req).await,
 			//TODO
 			endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
 		};
