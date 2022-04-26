@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::common;
 use common::custom_requester::BodySignature;
 
@@ -9,14 +8,11 @@ async fn test_simple() {
 	let ctx = common::context();
 	let bucket = ctx.create_bucket("test-k2v-simple");
 
-	let mut query_params = HashMap::new();
-	query_params.insert("sort_key".to_string(), Some("test1".to_string()));
-
 	let res = ctx.k2v.request
 		.builder(bucket.clone())
 		.method(Method::PUT)
 		.path("root".into())
-		.query_params(query_params.clone())
+		.query_param("sort_key", Some("test1"))
 		.body(b"Hello, world!".to_vec())
 		.body_signature(BodySignature::Classic)
 		.send()
@@ -24,14 +20,11 @@ async fn test_simple() {
 		.unwrap();
 	assert_eq!(res.status(), 200);
 
-	let mut h = HashMap::new();
-	h.insert("accept".to_string(), "application/octet-stream".to_string());
-
 	let res2 = ctx.k2v.request
 		.builder(bucket.clone())
 		.path("root".into())
-		.query_params(query_params.clone())
-		.signed_headers(h)
+		.query_param("sort_key", Some("test1"))
+		.signed_header("accept", "application/octet-stream")
 		.body_signature(BodySignature::Classic)
 		.send()
 		.await

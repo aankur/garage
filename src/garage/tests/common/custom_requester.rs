@@ -91,13 +91,29 @@ impl<'a> RequestBuilder<'a> {
 		self
 	}
 
+	pub fn query_param<T, U>(&mut self, param: T, value: Option<U>) -> &mut Self
+	where T: ToString, U: ToString, {
+		self.query_params.insert(param.to_string(), value.as_ref().map(ToString::to_string));
+		self
+	}
+
 	pub fn signed_headers(&mut self, signed_headers: HashMap<String, String>) -> &mut Self {
 		self.signed_headers = signed_headers;
 		self
 	}
 
+	pub fn signed_header(&mut self, name: impl ToString, value: impl ToString) -> &mut Self {
+		self.signed_headers.insert(name.to_string(), value.to_string());
+		self
+	}
+
 	pub fn unsigned_headers(&mut self, unsigned_headers: HashMap<String, String>) -> &mut Self {
 		self.unsigned_headers = unsigned_headers;
+		self
+	}
+
+	pub fn unsigned_header(&mut self, name: impl ToString, value: impl ToString) -> &mut Self {
+		self.unsigned_headers.insert(name.to_string(), value.to_string());
 		self
 	}
 
