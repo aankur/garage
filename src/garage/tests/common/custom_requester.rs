@@ -81,8 +81,8 @@ impl<'a> RequestBuilder<'a> {
 		self
 	}
 
-	pub fn path(&mut self, path: String) -> &mut Self {
-		self.path = path;
+	pub fn path(&mut self, path: impl ToString) -> &mut Self {
+		self.path = path.to_string();
 		self
 	}
 
@@ -92,8 +92,12 @@ impl<'a> RequestBuilder<'a> {
 	}
 
 	pub fn query_param<T, U>(&mut self, param: T, value: Option<U>) -> &mut Self
-	where T: ToString, U: ToString, {
-		self.query_params.insert(param.to_string(), value.as_ref().map(ToString::to_string));
+	where
+		T: ToString,
+		U: ToString,
+	{
+		self.query_params
+			.insert(param.to_string(), value.as_ref().map(ToString::to_string));
 		self
 	}
 
@@ -103,7 +107,8 @@ impl<'a> RequestBuilder<'a> {
 	}
 
 	pub fn signed_header(&mut self, name: impl ToString, value: impl ToString) -> &mut Self {
-		self.signed_headers.insert(name.to_string(), value.to_string());
+		self.signed_headers
+			.insert(name.to_string(), value.to_string());
 		self
 	}
 
@@ -113,7 +118,8 @@ impl<'a> RequestBuilder<'a> {
 	}
 
 	pub fn unsigned_header(&mut self, name: impl ToString, value: impl ToString) -> &mut Self {
-		self.unsigned_headers.insert(name.to_string(), value.to_string());
+		self.unsigned_headers
+			.insert(name.to_string(), value.to_string());
 		self
 	}
 

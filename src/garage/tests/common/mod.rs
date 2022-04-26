@@ -37,7 +37,7 @@ impl Context {
 			custom_request,
 			k2v: K2VContext {
 				request: k2v_request,
-			}
+			},
 		}
 	}
 

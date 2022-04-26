@@ -183,6 +183,6 @@ pub async fn handle_delete_item(
 		.await?;
 
 	Ok(Response::builder()
-		.status(StatusCode::OK)
+		.status(StatusCode::NO_CONTENT)
 		.body(Body::empty())?)
 }
