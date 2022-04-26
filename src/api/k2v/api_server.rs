@@ -142,6 +142,23 @@ impl ApiHandler for K2VApiServer {
 				partition_key,
 				sort_key,
 			} => handle_read_item(garage, &req, bucket_id, &partition_key, &sort_key).await,
+			Endpoint::PollItem {
+				partition_key,
+				sort_key,
+				causality_token,
+				timeout,
+			} => {
+				handle_poll_item(
+					garage,
+					&req,
+					bucket_id,
+					partition_key,
+					sort_key,
+					causality_token,
+					timeout,
+				)
+				.await
+			}
 			Endpoint::ReadIndex {
 				prefix,
 				start,
@@ -151,8 +168,7 @@ impl ApiHandler for K2VApiServer {
 			Endpoint::InsertBatch {} => handle_insert_batch(garage, bucket_id, req).await,
 			Endpoint::ReadBatch {} => handle_read_batch(garage, bucket_id, req).await,
 			Endpoint::DeleteBatch {} => handle_delete_batch(garage, bucket_id, req).await,
-			//TODO
-			endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
+			Endpoint::Options => unreachable!(),
 		};
 
 		// If request was a success and we have a CORS rule that applies to it,

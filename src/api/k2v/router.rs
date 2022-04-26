@@ -30,6 +30,7 @@ pub enum Endpoint {
 		partition_key: String,
 		sort_key: String,
 		causality_token: String,
+		timeout: Option<u64>,
 	},
 	ReadBatch {
 	},
@@ -96,7 +97,7 @@ impl Endpoint {
 			@gen_parser
 			(query.keyword.take().unwrap_or_default().as_ref(), partition_key, query, None),
 			key: [
-				EMPTY if causality_token => PollItem (query::sort_key, query::causality_token),
+				EMPTY if causality_token => PollItem (query::sort_key, query::causality_token, opt_parse::timeout),
 				EMPTY => ReadItem (query::sort_key),
 			],
 			no_key: [
@@ -235,7 +236,8 @@ generateQueryParameters! {
 	"causality_token" => causality_token,
 	"end" => end,
 	"limit" => limit,
-	"sort_key" => sort_key
+	"sort_key" => sort_key,
+	"timeout" => timeout
 }
 
 mod keywords {

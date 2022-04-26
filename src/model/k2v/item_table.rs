@@ -10,6 +10,7 @@ use garage_table::*;
 use crate::index_counter::*;
 use crate::k2v::causality::*;
 use crate::k2v::counter_table::*;
+use crate::k2v::poll::*;
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct K2VItem {
@@ -19,7 +20,7 @@ pub struct K2VItem {
 	items: BTreeMap<K2VNodeId, DvvsEntry>,
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize, Hash, Eq)]
 pub struct K2VItemPartition {
 	pub bucket_id: Uuid,
 	pub partition_key: String,
@@ -84,7 +85,7 @@ impl K2VItem {
 	}
 
 	/// Extract the causality context of a K2V Item
-	pub fn causality_context(&self) -> CausalContext {
+	pub fn causal_context(&self) -> CausalContext {
 		let mut cc = CausalContext::new_empty();
 		for (node, ent) in self.items.iter() {
 			cc.vector_clock.insert(*node, ent.max_time());
@@ -201,6 +202,7 @@ impl Entry<K2VItemPartition, String> for K2VItem {
 
 pub struct K2VItemTable {
 	pub(crate) counter_table: Arc<IndexCounter<K2VCounterTable>>,
+	pub(crate) subscriptions: Arc<SubscriptionManager>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -245,6 +247,10 @@ impl TableSchema for K2VItemTable {
 			],
 		) {
 			error!("Could not update K2V counter for bucket {:?} partition {}; counts will now be inconsistent. {}", count_pk, count_sk, e);
+		}
+
+		if let Some(new_ent) = new {
+			self.subscriptions.notify(new_ent);
 		}
 	}
 

@@ -7,12 +7,15 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use tokio::select;
 
+use garage_util::crdt::*;
 use garage_util::data::*;
 use garage_util::error::*;
 
@@ -25,6 +28,7 @@ use garage_table::{PartitionKey, Table};
 
 use crate::k2v::causality::*;
 use crate::k2v::item_table::*;
+use crate::k2v::poll::*;
 
 /// RPC messages for K2V
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +36,12 @@ enum K2VRpc {
 	Ok,
 	InsertItem(InsertedItem),
 	InsertManyItems(Vec<InsertedItem>),
+	PollItem {
+		key: PollKey,
+		causal_context: String,
+		timeout_msec: u64,
+	},
+	PollItemResponse(Option<K2VItem>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,12 +61,14 @@ pub struct K2VRpcHandler {
 	system: Arc<System>,
 	item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
 	endpoint: Arc<Endpoint<K2VRpc, Self>>,
+	subscriptions: Arc<SubscriptionManager>,
 }
 
 impl K2VRpcHandler {
 	pub fn new(
 		system: Arc<System>,
 		item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
+		subscriptions: Arc<SubscriptionManager>,
 	) -> Arc<Self> {
 		let endpoint = system.netapp.endpoint("garage_model/k2v/Rpc".to_string());
 
@@ -64,6 +76,7 @@ impl K2VRpcHandler {
 			system,
 			item_table,
 			endpoint,
+			subscriptions,
 		});
 		rpc_handler.endpoint.set_handler(rpc_handler.clone());
 
@@ -171,6 +184,64 @@ impl K2VRpcHandler {
 		Ok(())
 	}
 
+	pub async fn poll(
+		&self,
+		bucket_id: Uuid,
+		partition_key: String,
+		sort_key: String,
+		causal_context: String,
+		timeout_msec: u64,
+	) -> Result<Option<K2VItem>, Error> {
+		let poll_key = PollKey {
+			partition: K2VItemPartition {
+				bucket_id,
+				partition_key,
+			},
+			sort_key,
+		};
+		let nodes = self
+			.item_table
+			.data
+			.replication
+			.write_nodes(&poll_key.partition.hash());
+
+		let resps = self
+			.system
+			.rpc
+			.try_call_many(
+				&self.endpoint,
+				&nodes[..],
+				K2VRpc::PollItem {
+					key: poll_key,
+					causal_context,
+					timeout_msec,
+				},
+				RequestStrategy::with_priority(PRIO_NORMAL)
+					.with_quorum(self.item_table.data.replication.read_quorum())
+					.with_timeout(Duration::from_millis(timeout_msec) + TABLE_RPC_TIMEOUT),
+			)
+			.await?;
+
+		let mut resp: Option<K2VItem> = None;
+		for v in resps {
+			match v {
+				K2VRpc::PollItemResponse(Some(x)) => {
+					if let Some(y) = &mut resp {
+						y.merge(&x);
+					} else {
+						resp = Some(x);
+					}
+				}
+				K2VRpc::PollItemResponse(None) => {
+					return Ok(None);
+				}
+				v => return Err(Error::unexpected_rpc_message(v)),
+			}
+		}
+
+		Ok(resp)
+	}
+
 	// ---- internal handlers ----
 
 	async fn handle_insert(&self, item: &InsertedItem) -> Result<K2VRpc, Error> {
@@ -207,6 +278,32 @@ impl K2VRpcHandler {
 		}
 		Ok(K2VRpc::Ok)
 	}
+
+	async fn handle_poll(&self, key: &PollKey, ct: &str) -> Result<K2VItem, Error> {
+		let ct = CausalContext::parse(ct)?;
+
+		let mut chan = self.subscriptions.subscribe(key);
+
+		let mut value = self
+			.item_table
+			.data
+			.read_entry(&key.partition, &key.sort_key)?
+			.map(|bytes| self.item_table.data.decode_entry(&bytes[..]))
+			.transpose()?
+			.unwrap_or_else(|| {
+				K2VItem::new(
+					key.partition.bucket_id,
+					key.partition.partition_key.clone(),
+					key.sort_key.clone(),
+				)
+			});
+
+		while !value.causal_context().is_newer_than(&ct) {
+			value = chan.recv().await?;
+		}
+
+		Ok(value)
+	}
 }
 
 #[async_trait]
@@ -215,6 +312,17 @@ impl EndpointHandler<K2VRpc> for K2VRpcHandler {
 		match message {
 			K2VRpc::InsertItem(item) => self.handle_insert(item).await,
 			K2VRpc::InsertManyItems(items) => self.handle_insert_many(&items[..]).await,
+			K2VRpc::PollItem {
+				key,
+				causal_context,
+				timeout_msec,
+			} => {
+				let delay = tokio::time::sleep(Duration::from_millis(*timeout_msec));
+				select! {
+					ret = self.handle_poll(key, causal_context) => ret.map(Some).map(K2VRpc::PollItemResponse),
+					_ = delay => Ok(K2VRpc::PollItemResponse(None)),
+				}
+			}
 			m => Err(Error::unexpected_rpc_message(m)),
 		}
 	}

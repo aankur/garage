@@ -15,6 +15,7 @@ use garage_table::*;
 
 use crate::k2v::counter_table::*;
 use crate::k2v::item_table::*;
+use crate::k2v::poll::*;
 use crate::k2v::rpc::*;
 use crate::s3::block_ref_table::*;
 use crate::s3::object_table::*;
@@ -158,16 +159,21 @@ impl Garage {
 		);
 
 		// ---- K2V ----
+		info!("Initialize K2V counter table...");
 		let k2v_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
+		info!("Initialize K2V subscription manager...");
+		let k2v_subscriptions = Arc::new(SubscriptionManager::new());
+		info!("Initialize K2V item table...");
 		let k2v_item_table = Table::new(
 			K2VItemTable {
 				counter_table: k2v_counter_table.clone(),
+				subscriptions: k2v_subscriptions.clone(),
 			},
 			meta_rep_param,
 			system.clone(),
 			&db,
 		);
-		let k2v_rpc = K2VRpcHandler::new(system.clone(), k2v_item_table.clone());
+		let k2v_rpc = K2VRpcHandler::new(system.clone(), k2v_item_table.clone(), k2v_subscriptions);
 
 		info!("Initialize Garage...");
 

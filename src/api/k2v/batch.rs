@@ -198,7 +198,7 @@ async fn handle_delete_batch_query(
 			.filter(|e| K2VItemTable::matches_filter(e, &filter));
 		match item {
 			Some(i) => {
-				let cc = i.causality_context();
+				let cc = i.causal_context();
 				garage
 					.k2v_rpc
 					.insert(
@@ -230,7 +230,7 @@ async fn handle_delete_batch_query(
 		let items = items
 			.into_iter()
 			.map(|i| {
-				let cc = i.causality_context();
+				let cc = i.causal_context();
 				(
 					i.partition.partition_key,
 					i.sort_key,
@@ -313,7 +313,7 @@ struct ReadBatchResponseItem {
 
 impl ReadBatchResponseItem {
 	fn from(i: K2VItem) -> Self {
-		let ct = i.causality_context().serialize();
+		let ct = i.causal_context().serialize();
 		let v = i
 			.values()
 			.iter()

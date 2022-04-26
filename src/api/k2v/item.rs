@@ -46,7 +46,7 @@ impl ReturnFormat {
 			return Err(Error::NoSuchKey);
 		}
 
-		let ct = item.causality_context().serialize();
+		let ct = item.causal_context().serialize();
 		match self {
 			Self::Binary if vals.len() > 1 => Ok(Response::builder()
 				.header(X_GARAGE_CAUSALITY_TOKEN, ct)
@@ -185,4 +185,37 @@ pub async fn handle_delete_item(
 	Ok(Response::builder()
 		.status(StatusCode::NO_CONTENT)
 		.body(Body::empty())?)
+}
+
+/// Handle ReadItem request
+#[allow(clippy::ptr_arg)]
+pub async fn handle_poll_item(
+	garage: Arc<Garage>,
+	req: &Request<Body>,
+	bucket_id: Uuid,
+	partition_key: String,
+	sort_key: String,
+	causality_token: String,
+	timeout_secs: Option<u64>,
+) -> Result<Response<Body>, Error> {
+	let format = ReturnFormat::from(req)?;
+
+	let item = garage
+		.k2v_rpc
+		.poll(
+			bucket_id,
+			partition_key,
+			sort_key,
+			causality_token,
+			timeout_secs.unwrap_or(300) * 1000,
+		)
+		.await?;
+
+	if let Some(item) = item {
+		format.make_response(&item)
+	} else {
+		Ok(Response::builder()
+			.status(StatusCode::NOT_MODIFIED)
+			.body(Body::empty())?)
+	}
 }

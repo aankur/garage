@@ -74,6 +74,12 @@ impl CausalContext {
 
 		Ok(ret)
 	}
+	/// Check if this causal context contains newer items than another one
+	pub fn is_newer_than(&self, other: &Self) -> bool {
+		self.vector_clock
+			.iter()
+			.any(|(k, v)| v > other.vector_clock.get(k).unwrap_or(&0))
+	}
 }
 
 #[cfg(test)]
