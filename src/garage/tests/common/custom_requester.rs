@@ -17,14 +17,25 @@ use garage_api::signature;
 pub struct CustomRequester {
 	key: Key,
 	uri: Uri,
+	service: &'static str,
 	client: Client<HttpConnector>,
 }
 
 impl CustomRequester {
-	pub fn new(instance: &Instance) -> Self {
+	pub fn new_s3(instance: &Instance) -> Self {
 		CustomRequester {
 			key: instance.key.clone(),
-			uri: instance.uri(),
+			uri: instance.s3_uri(),
+			service: "s3",
+			client: Client::new(),
+		}
+	}
+
+	pub fn new_k2v(instance: &Instance) -> Self {
+		CustomRequester {
+			key: instance.key.clone(),
+			uri: instance.k2v_uri(),
+			service: "k2v",
 			client: Client::new(),
 		}
 	}
@@ -32,7 +43,7 @@ impl CustomRequester {
 	pub fn builder(&self, bucket: String) -> RequestBuilder<'_> {
 		RequestBuilder {
 			requester: self,
-			service: "s3",
+			service: self.service,
 			bucket,
 			method: Method::GET,
 			path: String::new(),
@@ -112,12 +123,12 @@ impl<'a> RequestBuilder<'a> {
 		let query = query_param_to_string(&self.query_params);
 		let (host, path) = if self.vhost_style {
 			(
-				format!("{}.s3.garage", self.bucket),
+				format!("{}.{}.garage", self.bucket, self.service),
 				format!("{}{}", self.path, query),
 			)
 		} else {
 			(
-				"s3.garage".to_owned(),
+				format!("{}.garage", self.service),
 				format!("{}/{}{}", self.bucket, self.path, query),
 			)
 		};
@@ -129,7 +140,7 @@ impl<'a> RequestBuilder<'a> {
 			&now,
 			&self.requester.key.secret,
 			super::REGION.as_ref(),
-			"s3",
+			self.service,
 		)
 		.unwrap();
 		let streaming_signer = signer.clone();

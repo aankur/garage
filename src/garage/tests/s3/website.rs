@@ -37,7 +37,7 @@ async fn test_website() {
 			.method("GET")
 			.uri(format!(
 				"http://127.0.0.1:{}/",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.body(Body::empty())
@@ -172,7 +172,7 @@ async fn test_website_s3_api() {
 			.method("GET")
 			.uri(format!(
 				"http://127.0.0.1:{}/site/",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.header("Origin", "https://example.com")
@@ -198,7 +198,7 @@ async fn test_website_s3_api() {
 			.method("GET")
 			.uri(format!(
 				"http://127.0.0.1:{}/wrong.html",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.body(Body::empty())
@@ -219,7 +219,7 @@ async fn test_website_s3_api() {
 			.method("OPTIONS")
 			.uri(format!(
 				"http://127.0.0.1:{}/site/",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.header("Origin", "https://example.com")
@@ -246,7 +246,7 @@ async fn test_website_s3_api() {
 			.method("OPTIONS")
 			.uri(format!(
 				"http://127.0.0.1:{}/site/",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.header("Origin", "https://example.com")
@@ -290,7 +290,7 @@ async fn test_website_s3_api() {
 			.method("OPTIONS")
 			.uri(format!(
 				"http://127.0.0.1:{}/site/",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.header("Origin", "https://example.com")
@@ -321,7 +321,7 @@ async fn test_website_s3_api() {
 			.method("GET")
 			.uri(format!(
 				"http://127.0.0.1:{}/site/",
-				common::garage::DEFAULT_PORT + 2
+				ctx.garage.web_port
 			))
 			.header("Host", format!("{}.web.garage", BCKT_NAME))
 			.body(Body::empty())
