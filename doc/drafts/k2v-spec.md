@@ -164,6 +164,33 @@ that map to zeroes.  Note that we need to filter out values from nodes that are
 no longer part of the cluster layout, as when nodes are removed they won't
 necessarily have had the time to set their counters to zero.
 
+## Important details
+
+**THIS SECTION CONTAINS A FEW WARNINGS ON THE K2V API WHICH ARE IMPORTANT
+TO UNDERSTAND IN ORDER TO USE IT CORRECTLY.**
+
+- **Internal server errors on updates do not mean that the update isn't stored.**
+  K2V will return an internal server error when it cannot reach a quorum of nodes on
+  which to save an updated value. However the value may still be stored on just one
+  node, which whill then propagate it to other nodes asynchronously via anti-entropy.
+
+- **Batch operations are not transactions.** When calling InsertBatch or DeleteBatch,
+  items may appear partially inserted/deleted while the operation is being processed.
+  More importantly, if InsertBatch or DeleteBatch returns an internal server error,
+  some of the items to be inserted/deleted might end up inserted/deleted on the server,
+  while others may still have their old value.
+
+- **Concurrent values are deduplicated.** When inserting a value for a key,
+  Garage might internally end up
+  storing the value several times if there are network errors. These values will end up as
+  concurrent values for a key, with the same byte string (or `null` for a deletion).
+  Garage fixes this by deduplicating concurrent values when they are returned to the
+  user on read operations. Importantly, *Garage does not differentiate between duplicate
+  concurrent values due to the user making the same call twice, or Garage having to
+  do an internal retry*. This means that all duplicate concurrent values are deduplicated
+  when an item is read: if the user inserts twice concurrently the same value, they will
+  only read it once.
+
 ## API Endpoints
 
 ### Operations on single items
