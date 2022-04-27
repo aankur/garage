@@ -331,3 +331,366 @@ async fn test_items_and_indices() {
 		}
 	}
 }
+
+#[tokio::test]
+async fn test_item_return_format() {
+	let ctx = common::context();
+	let bucket = ctx.create_bucket("test-k2v-item-return-format");
+
+	let single_value = b"A single value".to_vec();
+	let concurrent_value = b"A concurrent value".to_vec();
+
+	// -- Test with a single value --
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.body(single_value.clone())
+		.method(Method::PUT)
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+
+	// f0: either
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "*/*")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/octet-stream"
+	);
+	let ct = res
+		.headers()
+		.get("x-garage-causality-token")
+		.unwrap()
+		.to_str()
+		.unwrap()
+		.to_string();
+	let res_body = hyper::body::to_bytes(res.into_body())
+		.await
+		.unwrap()
+		.to_vec();
+	assert_eq!(res_body, single_value);
+
+	// f1: not specified
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&single_value)]));
+
+	// f2: binary
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/octet-stream")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/octet-stream"
+	);
+	let res_body = hyper::body::to_bytes(res.into_body())
+		.await
+		.unwrap()
+		.to_vec();
+	assert_eq!(res_body, single_value);
+
+	// f3: json
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/json")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&single_value)]));
+
+	// -- Test with a second, concurrent value --
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.body(concurrent_value.clone())
+		.method(Method::PUT)
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+
+	// f0: either
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "*/*")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&single_value), base64::encode(&concurrent_value)]));
+
+	// f1: not specified
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&single_value), base64::encode(&concurrent_value)]));
+
+	// f2: binary
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/octet-stream")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 409);	// CONFLICT
+
+	// f3: json
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/json")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&single_value), base64::encode(&concurrent_value)]));
+
+	// -- Delete first value, concurrently with second insert --
+	// -- (we now have a concurrent value and a deletion) --
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.method(Method::DELETE)
+		.signed_header("x-garage-causality-token", ct)
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 204);
+
+	// f0: either
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "*/*")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&concurrent_value), null]));
+
+	// f1: not specified
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let ct = res
+		.headers()
+		.get("x-garage-causality-token")
+		.unwrap()
+		.to_str()
+		.unwrap()
+		.to_string();
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&concurrent_value), null]));
+
+	// f2: binary
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/octet-stream")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 409);	// CONFLICT
+
+	// f3: json
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/json")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([base64::encode(&concurrent_value), null]));
+
+
+	// -- Delete everything --
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.method(Method::DELETE)
+		.signed_header("x-garage-causality-token", ct)
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 204);
+
+	// f0: either
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "*/*")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 204); // NO CONTENT
+
+	// f1: not specified
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([null]));
+
+	// f2: binary
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/octet-stream")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 204);	// NO CONTENT
+
+	// f3: json
+	let res = ctx
+		.k2v
+		.request
+		.builder(bucket.clone())
+		.path("root")
+		.query_param("sort_key", Some("v1"))
+		.signed_header("accept", "application/json")
+		.send()
+		.await
+		.unwrap();
+	assert_eq!(res.status(), 200);
+	assert_eq!(
+		res.headers().get("content-type").unwrap().to_str().unwrap(),
+		"application/json"
+	);
+	let res_body = json_body(res).await;
+	assert_json_eq!(res_body, json!([null]));
+}
