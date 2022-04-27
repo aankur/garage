@@ -473,7 +473,13 @@ async fn test_item_return_format() {
 		"application/json"
 	);
 	let res_body = json_body(res).await;
-	assert_json_eq!(res_body, json!([base64::encode(&single_value), base64::encode(&concurrent_value)]));
+	assert_json_eq!(
+		res_body,
+		json!([
+			base64::encode(&single_value),
+			base64::encode(&concurrent_value)
+		])
+	);
 
 	// f1: not specified
 	let res = ctx
@@ -491,7 +497,13 @@ async fn test_item_return_format() {
 		"application/json"
 	);
 	let res_body = json_body(res).await;
-	assert_json_eq!(res_body, json!([base64::encode(&single_value), base64::encode(&concurrent_value)]));
+	assert_json_eq!(
+		res_body,
+		json!([
+			base64::encode(&single_value),
+			base64::encode(&concurrent_value)
+		])
+	);
 
 	// f2: binary
 	let res = ctx
@@ -504,7 +516,7 @@ async fn test_item_return_format() {
 		.send()
 		.await
 		.unwrap();
-	assert_eq!(res.status(), 409);	// CONFLICT
+	assert_eq!(res.status(), 409); // CONFLICT
 
 	// f3: json
 	let res = ctx
@@ -523,7 +535,13 @@ async fn test_item_return_format() {
 		"application/json"
 	);
 	let res_body = json_body(res).await;
-	assert_json_eq!(res_body, json!([base64::encode(&single_value), base64::encode(&concurrent_value)]));
+	assert_json_eq!(
+		res_body,
+		json!([
+			base64::encode(&single_value),
+			base64::encode(&concurrent_value)
+		])
+	);
 
 	// -- Delete first value, concurrently with second insert --
 	// -- (we now have a concurrent value and a deletion) --
@@ -595,7 +613,7 @@ async fn test_item_return_format() {
 		.send()
 		.await
 		.unwrap();
-	assert_eq!(res.status(), 409);	// CONFLICT
+	assert_eq!(res.status(), 409); // CONFLICT
 
 	// f3: json
 	let res = ctx
@@ -615,7 +633,6 @@ async fn test_item_return_format() {
 	);
 	let res_body = json_body(res).await;
 	assert_json_eq!(res_body, json!([base64::encode(&concurrent_value), null]));
-
 
 	// -- Delete everything --
 	let res = ctx
@@ -673,7 +690,7 @@ async fn test_item_return_format() {
 		.send()
 		.await
 		.unwrap();
-	assert_eq!(res.status(), 204);	// NO CONTENT
+	assert_eq!(res.status(), 204); // NO CONTENT
 
 	// f3: json
 	let res = ctx
