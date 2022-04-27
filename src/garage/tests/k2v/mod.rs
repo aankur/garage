@@ -1,3 +1,4 @@
+pub mod batch;
 pub mod item;
 pub mod poll;
 pub mod simple;
