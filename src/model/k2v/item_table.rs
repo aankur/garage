@@ -98,7 +98,9 @@ impl K2VItem {
 		let mut ret = vec![];
 		for (_, ent) in self.items.iter() {
 			for (_, v) in ent.values.iter() {
-				ret.push(v);
+				if !ret.contains(&v) {
+					ret.push(v);
+				}
 			}
 		}
 		ret
