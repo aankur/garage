@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{hash_map, BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
@@ -220,7 +220,7 @@ impl<T: CounterSchema> IndexCounter<T> {
 	) {
 		// This loop batches updates to counters to be sent all at once.
 		// They are sent once the propagate_rx channel has been emptied (or is closed).
-		let mut buf = vec![];
+		let mut buf = HashMap::new();
 		let mut errors = 0;
 
 		loop {
@@ -237,15 +237,24 @@ impl<T: CounterSchema> IndexCounter<T> {
 			};
 
 			if let Some((pk, sk, counters)) = ent {
+				let tree_key = self.table.data.tree_key(&pk, &sk);
 				let dist_entry = counters.into_counter_entry::<T>(self.this_node, pk, sk);
-				buf.push(dist_entry);
+				match buf.entry(tree_key) {
+					hash_map::Entry::Vacant(e) => {
+						e.insert(dist_entry);
+					}
+					hash_map::Entry::Occupied(mut e) => {
+						e.get_mut().merge(&dist_entry);
+					}
+				}
 				// As long as we can add entries, loop back and add them to batch
 				// before sending batch to other nodes
 				continue;
 			}
 
 			if !buf.is_empty() {
-				if let Err(e) = self.table.insert_many(&buf[..]).await {
+				let entries = buf.iter().map(|(_k, v)| v);
+				if let Err(e) = self.table.insert_many(entries).await {
 					errors += 1;
 					if errors >= 2 && *must_exit.borrow() {
 						error!("({}) Could not propagate {} counter values: {}, these counters will not be updated correctly.", T::NAME, buf.len(), e);

@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
@@ -130,9 +131,13 @@ where
 		Ok(())
 	}
 
-	pub async fn insert_many(&self, entries: &[F::E]) -> Result<(), Error> {
+	pub async fn insert_many<I, IE>(&self, entries: I) -> Result<(), Error>
+	where
+		I: IntoIterator<Item = IE> + Send + Sync,
+		IE: Borrow<F::E> + Send + Sync,
+	{
 		let tracer = opentelemetry::global::tracer("garage_table");
-		let span = tracer.start(format!("{} insert_many {}", F::TABLE_NAME, entries.len()));
+		let span = tracer.start(format!("{} insert_many", F::TABLE_NAME));
 
 		self.insert_many_internal(entries)
 			.bound_record_duration(&self.data.metrics.put_request_duration)
@@ -144,10 +149,15 @@ where
 		Ok(())
 	}
 
-	async fn insert_many_internal(&self, entries: &[F::E]) -> Result<(), Error> {
+	async fn insert_many_internal<I, IE>(&self, entries: I) -> Result<(), Error>
+	where
+		I: IntoIterator<Item = IE> + Send + Sync,
+		IE: Borrow<F::E> + Send + Sync,
+	{
 		let mut call_list: HashMap<_, Vec<_>> = HashMap::new();
 
-		for entry in entries.iter() {
+		for entry in entries.into_iter() {
+			let entry = entry.borrow();
 			let hash = entry.partition_key().hash();
 			let who = self.data.replication.write_nodes(&hash);
 			let e_enc = Arc::new(ByteBuf::from(rmp_to_vec_all_named(entry)?));
