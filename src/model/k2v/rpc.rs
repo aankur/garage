@@ -38,7 +38,7 @@ enum K2VRpc {
 	InsertManyItems(Vec<InsertedItem>),
 	PollItem {
 		key: PollKey,
-		causal_context: String,
+		causal_context: CausalContext,
 		timeout_msec: u64,
 	},
 	PollItemResponse(Option<K2VItem>),
@@ -189,7 +189,7 @@ impl K2VRpcHandler {
 		bucket_id: Uuid,
 		partition_key: String,
 		sort_key: String,
-		causal_context: String,
+		causal_context: CausalContext,
 		timeout_msec: u64,
 	) -> Result<Option<K2VItem>, Error> {
 		let poll_key = PollKey {
@@ -295,9 +295,7 @@ impl K2VRpcHandler {
 			})
 	}
 
-	async fn handle_poll(&self, key: &PollKey, ct: &str) -> Result<K2VItem, Error> {
-		let ct = CausalContext::parse(ct)?;
-
+	async fn handle_poll(&self, key: &PollKey, ct: &CausalContext) -> Result<K2VItem, Error> {
 		let mut chan = self.subscriptions.subscribe(key);
 
 		let mut value = self

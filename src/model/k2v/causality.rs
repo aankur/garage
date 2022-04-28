@@ -4,7 +4,6 @@ use std::convert::TryInto;
 use serde::{Deserialize, Serialize};
 
 use garage_util::data::*;
-use garage_util::error::*;
 
 /// Node IDs used in K2V are u64 integers that are the abbreviation
 /// of full Garage node IDs which are 256-bit UUIDs.
@@ -45,13 +44,11 @@ impl CausalContext {
 		base64::encode_config(bytes, base64::URL_SAFE_NO_PAD)
 	}
 	/// Parse from base64-encoded binary representation
-	pub fn parse(s: &str) -> Result<Self, Error> {
+	pub fn parse(s: &str) -> Result<Self, String> {
 		let bytes = base64::decode_config(s, base64::URL_SAFE_NO_PAD)
-			.ok_or_message("Invalid causality token (bad base64)")?;
+			.map_err(|e| format!("bad causality token base64: {}", e))?;
 		if bytes.len() % 16 != 8 || bytes.len() < 8 {
-			return Err(Error::Message(
-				"Invalid causality token (bad length)".into(),
-			));
+			return Err("bad causality token length".into());
 		}
 
 		let checksum = u64::from_be_bytes(bytes[..8].try_into().unwrap());
@@ -68,9 +65,7 @@ impl CausalContext {
 		let check = ret.vector_clock.iter().fold(0, |acc, (n, t)| acc ^ *n ^ *t);
 
 		if check != checksum {
-			return Err(Error::Message(
-				"Invalid causality token (bad checksum)".into(),
-			));
+			return Err("bad causality token checksum".into());
 		}
 
 		Ok(ret)

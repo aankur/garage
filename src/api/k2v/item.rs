@@ -133,7 +133,8 @@ pub async fn handle_insert_item(
 		.map(|s| s.to_str())
 		.transpose()?
 		.map(CausalContext::parse)
-		.transpose()?;
+		.transpose()
+		.ok_or_bad_request("Invalid causality token")?;
 
 	let body = hyper::body::to_bytes(req.into_body()).await?;
 	let value = DvvsValue::Value(body.to_vec());
@@ -167,7 +168,8 @@ pub async fn handle_delete_item(
 		.map(|s| s.to_str())
 		.transpose()?
 		.map(CausalContext::parse)
-		.transpose()?;
+		.transpose()
+		.ok_or_bad_request("Invalid causality token")?;
 
 	let value = DvvsValue::Deleted;
 
@@ -200,13 +202,16 @@ pub async fn handle_poll_item(
 ) -> Result<Response<Body>, Error> {
 	let format = ReturnFormat::from(req)?;
 
+	let causal_context =
+		CausalContext::parse(&causality_token).ok_or_bad_request("Invalid causality token")?;
+
 	let item = garage
 		.k2v_rpc
 		.poll(
 			bucket_id,
 			partition_key,
 			sort_key,
-			causality_token,
+			causal_context,
 			timeout_secs.unwrap_or(300) * 1000,
 		)
 		.await?;
