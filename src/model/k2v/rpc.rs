@@ -312,7 +312,7 @@ impl K2VRpcHandler {
 				)
 			});
 
-		while !value.causal_context().is_newer_than(&ct) {
+		while !value.causal_context().is_newer_than(ct) {
 			value = chan.recv().await?;
 		}
 
