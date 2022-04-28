@@ -230,7 +230,13 @@ pub async fn handle_delete_bucket(
 		// Check bucket is empty
 		let objects = garage
 			.object_table
-			.get_range(&bucket_id, None, Some(ObjectFilter::IsData), 10)
+			.get_range(
+				&bucket_id,
+				None,
+				Some(ObjectFilter::IsData),
+				10,
+				EnumerationOrder::Forward,
+			)
 			.await?;
 		if !objects.is_empty() {
 			return Err(Error::BucketNotEmpty);

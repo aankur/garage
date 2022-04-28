@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use garage_util::data::*;
 use garage_util::error::Error as GarageError;
 
-use garage_table::TableSchema;
+use garage_table::{EnumerationOrder, TableSchema};
 
 use garage_model::garage::Garage;
 use garage_model::k2v::causality::*;
@@ -115,6 +115,7 @@ async fn handle_read_batch_query(
 			&query.end,
 			query.limit,
 			Some(filter),
+			EnumerationOrder::Forward,
 		)
 		.await?;
 
@@ -222,6 +223,7 @@ async fn handle_delete_batch_query(
 			&query.end,
 			None,
 			Some(filter),
+			EnumerationOrder::Forward,
 		)
 		.await?;
 		assert!(!more);

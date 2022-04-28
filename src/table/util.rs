@@ -33,3 +33,19 @@ impl DeletedFilter {
 		}
 	}
 }
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum EnumerationOrder {
+	Forward,
+	Reverse,
+}
+
+impl EnumerationOrder {
+	pub fn from_reverse(reverse: bool) -> Self {
+		if reverse {
+			Self::Reverse
+		} else {
+			Self::Forward
+		}
+	}
+}

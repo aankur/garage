@@ -33,6 +33,7 @@ pub async fn handle_read_index(
 		&end,
 		limit,
 		Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
+		EnumerationOrder::Forward,
 	)
 	.await?;
 

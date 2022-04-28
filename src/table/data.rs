@@ -2,7 +2,7 @@ use core::borrow::Borrow;
 use std::sync::Arc;
 
 use serde_bytes::ByteBuf;
-use sled::Transactional;
+use sled::{IVec, Transactional};
 use tokio::sync::Notify;
 
 use garage_util::data::*;
@@ -16,6 +16,7 @@ use crate::gc::GcTodoEntry;
 use crate::metrics::*;
 use crate::replication::*;
 use crate::schema::*;
+use crate::util::*;
 
 pub struct TableData<F: TableSchema, R: TableReplication> {
 	system: Arc<System>,
@@ -87,14 +88,34 @@ where
 		s: &Option<F::S>,
 		filter: &Option<F::Filter>,
 		limit: usize,
+		enumeration_order: EnumerationOrder,
 	) -> Result<Vec<Arc<ByteBuf>>, Error> {
 		let partition_hash = p.hash();
 		let first_key = match s {
 			None => partition_hash.to_vec(),
 			Some(sk) => self.tree_key(p, sk),
 		};
+		match enumeration_order {
+			EnumerationOrder::Forward => {
+				let range = self.store.range(first_key..);
+				self.read_range_aux(partition_hash, range, filter, limit)
+			}
+			EnumerationOrder::Reverse => {
+				let range = self.store.range(..=first_key).rev();
+				self.read_range_aux(partition_hash, range, filter, limit)
+			}
+		}
+	}
+
+	fn read_range_aux(
+		&self,
+		partition_hash: Hash,
+		range: impl Iterator<Item = sled::Result<(IVec, IVec)>>,
+		filter: &Option<F::Filter>,
+		limit: usize,
+	) -> Result<Vec<Arc<ByteBuf>>, Error> {
 		let mut ret = vec![];
-		for item in self.store.range(first_key..) {
+		for item in range {
 			let (key, value) = item?;
 			if &key[..32] != partition_hash.as_slice() {
 				break;

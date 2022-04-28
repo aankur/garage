@@ -80,7 +80,13 @@ impl AdminRpcHandler {
 		let buckets = self
 			.garage
 			.bucket_table
-			.get_range(&EmptyKey, None, Some(DeletedFilter::NotDeleted), 10000)
+			.get_range(
+				&EmptyKey,
+				None,
+				Some(DeletedFilter::NotDeleted),
+				10000,
+				EnumerationOrder::Forward,
+			)
 			.await?;
 		Ok(AdminRpc::BucketList(buckets))
 	}
@@ -210,7 +216,13 @@ impl AdminRpcHandler {
 		let objects = self
 			.garage
 			.object_table
-			.get_range(&bucket_id, None, Some(ObjectFilter::IsData), 10)
+			.get_range(
+				&bucket_id,
+				None,
+				Some(ObjectFilter::IsData),
+				10,
+				EnumerationOrder::Forward,
+			)
 			.await?;
 		if !objects.is_empty() {
 			return Err(Error::BadRequest(format!(
@@ -445,6 +457,7 @@ impl AdminRpcHandler {
 				None,
 				Some(KeyFilter::Deleted(DeletedFilter::NotDeleted)),
 				10000,
+				EnumerationOrder::Forward,
 			)
 			.await?
 			.iter()

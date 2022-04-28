@@ -11,6 +11,7 @@ use crate::error::*;
 
 /// Read range in a Garage table.
 /// Returns (entries, more?, nextStart)
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_range<F>(
 	table: &Arc<Table<F, TableShardedReplication>>,
 	partition_key: &F::P,
@@ -19,6 +20,7 @@ pub(crate) async fn read_range<F>(
 	end: &Option<String>,
 	limit: Option<u64>,
 	filter: Option<F::Filter>,
+	enumeration_order: EnumerationOrder,
 ) -> Result<(Vec<F::E>, bool, Option<String>), Error>
 where
 	F: TableSchema<S = String> + 'static,
@@ -46,7 +48,13 @@ where
 			limit.map(|x| x as usize).unwrap_or(usize::MAX - 10) - entries.len() + 2,
 		);
 		let get_ret = table
-			.get_range(partition_key, Some(start.clone()), filter.clone(), n_get)
+			.get_range(
+				partition_key,
+				Some(start.clone()),
+				filter.clone(),
+				n_get,
+				enumeration_order,
+			)
 			.await?;
 
 		let get_ret_len = get_ret.len();

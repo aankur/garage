@@ -13,7 +13,7 @@ use garage_model::garage::Garage;
 use garage_model::s3::object_table::*;
 use garage_model::s3::version_table::Version;
 
-use garage_table::EmptyKey;
+use garage_table::{EmptyKey, EnumerationOrder};
 
 use crate::encoding::*;
 use crate::error::*;
@@ -66,8 +66,14 @@ pub async fn handle_list(
 	let io = |bucket, key, count| {
 		let t = &garage.object_table;
 		async move {
-			t.get_range(&bucket, key, Some(ObjectFilter::IsData), count)
-				.await
+			t.get_range(
+				&bucket,
+				key,
+				Some(ObjectFilter::IsData),
+				count,
+				EnumerationOrder::Forward,
+			)
+			.await
 		}
 	};
 
@@ -165,8 +171,14 @@ pub async fn handle_list_multipart_upload(
 	let io = |bucket, key, count| {
 		let t = &garage.object_table;
 		async move {
-			t.get_range(&bucket, key, Some(ObjectFilter::IsUploading), count)
-				.await
+			t.get_range(
+				&bucket,
+				key,
+				Some(ObjectFilter::IsUploading),
+				count,
+				EnumerationOrder::Forward,
+			)
+			.await
 		}
 	};
 
