@@ -222,6 +222,7 @@ impl TableSchema for K2VItemTable {
 	type Filter = ItemFilter;
 
 	fn updated(&self, old: Option<&Self::E>, new: Option<&Self::E>) {
+		// 1. Count
 		let (old_entries, old_conflicts, old_values, old_bytes) = match old {
 			None => (0, 0, 0, 0),
 			Some(e) => e.stats(),
@@ -251,6 +252,7 @@ impl TableSchema for K2VItemTable {
 			error!("Could not update K2V counter for bucket {:?} partition {}; counts will now be inconsistent. {}", count_pk, count_sk, e);
 		}
 
+		// 2. Notify
 		if let Some(new_ent) = new {
 			self.subscriptions.notify(new_ent);
 		}
