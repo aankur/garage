@@ -385,7 +385,8 @@ The response consists in a JSON object that repeats the parameters of the query 
 
 The listing starts at partition key `start`, or if not specified at the
 smallest partition key that exists.  It returns partition keys in increasing
-order and stops when either of the following conditions is met:
+order, or decreasing order if `reverse` is set to `true`,
+and stops when either of the following conditions is met:
 
 1. if `end` is specfied, the partition key `end` is reached or surpassed (if it
    is reached exactly, it is not included in the result)
@@ -399,6 +400,11 @@ triggers, then in the result `more` is set to `true` and `nextStart` is set to
 the first partition key that couldn't be listed due to the limit. In the first
 case (if the listing stopped because of the `end` parameter), `more` is not set
 and the `nextStart` key is not specified.
+
+Note that if `reverse` is set to `true`, `start` is the highest key
+(in lexicographical order) for which values are returned.
+This means that if an `end` is specified, it must be smaller than `start`,
+otherwise no values will be returned.
 
 Example query:
 
