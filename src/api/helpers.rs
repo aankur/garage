@@ -265,6 +265,8 @@ mod tests {
 
 	#[test]
 	fn test_key_after_prefix() {
+		use std::iter::FromIterator;
+
 		assert_eq!(UTF8_BEFORE_LAST_CHAR as u32, (char::MAX as u32) - 1);
 		assert_eq!(key_after_prefix("a/b/").unwrap().as_str(), "a/b0");
 		assert_eq!(key_after_prefix("€").unwrap().as_str(), "₭");
