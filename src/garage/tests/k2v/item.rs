@@ -27,6 +27,7 @@ async fn test_items_and_indices() {
 			"start": null,
 			"end": null,
 			"limit": null,
+			"reverse": false,
 			"partitionKeys": [],
 			"more": false,
 			"nextStart": null
@@ -100,6 +101,7 @@ async fn test_items_and_indices() {
 				"start": null,
 				"end": null,
 				"limit": null,
+				"reverse": false,
 				"partitionKeys": [
 				{
 					"pk": "root",
@@ -167,6 +169,7 @@ async fn test_items_and_indices() {
 				"start": null,
 				"end": null,
 				"limit": null,
+				"reverse": false,
 				"partitionKeys": [
 				{
 					"pk": "root",
@@ -234,6 +237,7 @@ async fn test_items_and_indices() {
 				"start": null,
 				"end": null,
 				"limit": null,
+				"reverse": false,
 				"partitionKeys": [
 				{
 					"pk": "root",
@@ -302,6 +306,7 @@ async fn test_items_and_indices() {
 					"start": null,
 					"end": null,
 					"limit": null,
+					"reverse": false,
 					"partitionKeys": [
 					{
 						"pk": "root",
@@ -323,6 +328,7 @@ async fn test_items_and_indices() {
 					"start": null,
 					"end": null,
 					"limit": null,
+					"reverse": false,
 					"partitionKeys": [],
 					"more": false,
 					"nextStart": null

@@ -22,7 +22,10 @@ pub async fn handle_read_index(
 	start: Option<String>,
 	end: Option<String>,
 	limit: Option<u64>,
+	reverse: Option<bool>,
 ) -> Result<Response<Body>, Error> {
+	let reverse = reverse.unwrap_or(false);
+
 	let ring: Arc<Ring> = garage.system.ring.borrow().clone();
 
 	let (partition_keys, more, next_start) = read_range(
@@ -33,7 +36,7 @@ pub async fn handle_read_index(
 		&end,
 		limit,
 		Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
-		EnumerationOrder::Forward,
+		EnumerationOrder::from_reverse(reverse),
 	)
 	.await?;
 
@@ -47,6 +50,7 @@ pub async fn handle_read_index(
 		start,
 		end,
 		limit,
+		reverse,
 		partition_keys: partition_keys
 			.into_iter()
 			.map(|part| {
@@ -76,6 +80,7 @@ struct ReadIndexResponse {
 	start: Option<String>,
 	end: Option<String>,
 	limit: Option<u64>,
+	reverse: bool,
 
 	#[serde(rename = "partitionKeys")]
 	partition_keys: Vec<ReadIndexResponseEntry>,

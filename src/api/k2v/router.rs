@@ -39,6 +39,7 @@ pub enum Endpoint {
 		start: Option<String>,
 		end: Option<String>,
 		limit: Option<u64>,
+		reverse: Option<bool>,
 	},
 	ReadItem {
 		partition_key: String,
@@ -101,7 +102,7 @@ impl Endpoint {
 				EMPTY => ReadItem (query::sort_key),
 			],
 			no_key: [
-				EMPTY => ReadIndex (query_opt::prefix, query_opt::start, query_opt::end, opt_parse::limit),
+				EMPTY => ReadIndex (query_opt::prefix, query_opt::start, query_opt::end, opt_parse::limit, opt_parse::reverse),
 			]
 		}
 	}
@@ -236,6 +237,7 @@ generateQueryParameters! {
 	"causality_token" => causality_token,
 	"end" => end,
 	"limit" => limit,
+	"reverse" => reverse,
 	"sort_key" => sort_key,
 	"timeout" => timeout
 }

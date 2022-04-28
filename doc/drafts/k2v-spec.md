@@ -379,6 +379,7 @@ Query parameters:
 | `start` | `null` | First partition key to list, in lexicographical order |
 | `end` | `null` | Last partition key to list (excluded) |
 | `limit` | `null` | Maximum number of partition keys to list |
+| `reverse` | `false` | Iterate in reverse lexicographical order |
 
 The response consists in a JSON object that repeats the parameters of the query and gives the result (see below).
 
@@ -415,6 +416,7 @@ HTTP/1.1 200 OK
   start: null,
   end: null,
   limit: null,
+  reverse: false,
   partitionKeys: [
     { pk: "keys", n: 3043 },
     { pk: "mailbox:INBOX", n: 42 },
@@ -485,13 +487,14 @@ JSON struct with the following fields:
 | `start` | `null` | The sort key of the first item to read |
 | `end` | `null` | The sort key of the last item to read (excluded) |
 | `limit` | `null` | The maximum number of items to return |
+| `reverse` | `false` | Iterate in reverse lexicographical order on sort keys |
 | `singleItem` | `false` | Whether to return only the item with sort key `start` |
 | `conflictsOnly` | `false` | Whether to return only items that have several concurrent values |
 | `tombstones` | `false` | Whether or not to return tombstone lines to indicate the presence of old deleted items |
 
 
 For each of the searches, triplets are listed and returned separately. The
-semantics of `prefix`, `start`, `end` and `limit` are the same as for ReadIndex. The
+semantics of `prefix`, `start`, `end`, `limit` and `reverse` are the same as for ReadIndex. The
 additionnal parameter `singleItem` allows to get a single item, whose sort key
 is the one given in `start`. Parameters `conflictsOnly` and `tombstones`
 control additional filters on the items that are returned.
@@ -553,6 +556,7 @@ HTTP/1.1 200 OK
     start: null,
     end: null,
     limit: null,
+    reverse: false,
     conflictsOnly: false,
     tombstones: false,
     singleItem: false,
@@ -570,6 +574,7 @@ HTTP/1.1 200 OK
     start: "001892831",
     end: null,
     limit: 3,
+    reverse: false,
     conflictsOnly: false,
     tombstones: false,
     singleItem: false,
@@ -589,6 +594,7 @@ HTTP/1.1 200 OK
     conflictsOnly: false,
     tombstones: false,
     limit: null,
+    reverse: false,
     singleItem: true,
     items: [
       { sk: "0", ct: "opaquetoken999", v: ["b64binarystuff999"] },

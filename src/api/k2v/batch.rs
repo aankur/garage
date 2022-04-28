@@ -115,7 +115,7 @@ async fn handle_read_batch_query(
 			&query.end,
 			query.limit,
 			Some(filter),
-			EnumerationOrder::Forward,
+			EnumerationOrder::from_reverse(query.reverse),
 		)
 		.await?;
 
@@ -133,6 +133,7 @@ async fn handle_read_batch_query(
 		start: query.start,
 		end: query.end,
 		limit: query.limit,
+		reverse: query.reverse,
 		single_item: query.single_item,
 		conflicts_only: query.conflicts_only,
 		tombstones: query.tombstones,
@@ -278,6 +279,8 @@ struct ReadBatchQuery {
 	end: Option<String>,
 	#[serde(default)]
 	limit: Option<u64>,
+	#[serde(default)]
+	reverse: bool,
 	#[serde(default, rename = "singleItem")]
 	single_item: bool,
 	#[serde(default, rename = "conflictsOnly")]
@@ -294,6 +297,7 @@ struct ReadBatchResponse {
 	start: Option<String>,
 	end: Option<String>,
 	limit: Option<u64>,
+	reverse: bool,
 	#[serde(rename = "singleItem")]
 	single_item: bool,
 	#[serde(rename = "conflictsOnly")]
