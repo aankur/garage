@@ -92,6 +92,7 @@ async fn test_batch() {
 			br#"[
 	{"partitionKey": "root"},
 	{"partitionKey": "root", "start": "c"},
+	{"partitionKey": "root", "start": "c", "reverse": true, "end": "a"},
 	{"partitionKey": "root", "limit": 1},
 	{"partitionKey": "root", "prefix": "d"}
 		]"#
@@ -142,6 +143,23 @@ async fn test_batch() {
 				  {"sk": "d.1", "ct": ct.get("d.1").unwrap(), "v": [base64::encode(values.get("d.1").unwrap())]},
 				  {"sk": "d.2", "ct": ct.get("d.2").unwrap(), "v": [base64::encode(values.get("d.2").unwrap())]},
 				  {"sk": "e", "ct": ct.get("e").unwrap(), "v": [base64::encode(values.get("e").unwrap())]}
+				],
+				"more": false,
+				"nextStart": null,
+			},
+			{
+				"partitionKey": "root",
+				"prefix": null,
+				"start": "c",
+				"end": "a",
+				"limit": null,
+				"reverse": true,
+				"conflictsOnly": false,
+				"tombstones": false,
+				"singleItem": false,
+				"items": [
+				  {"sk": "c", "ct": ct.get("c").unwrap(), "v": [base64::encode(values.get("c").unwrap())]},
+				  {"sk": "b", "ct": ct.get("b").unwrap(), "v": [base64::encode(values.get("b").unwrap())]},
 				],
 				"more": false,
 				"nextStart": null,
@@ -252,6 +270,8 @@ async fn test_batch() {
 	{"partitionKey": "root", "prefix": "d.", "end": "d.2"},
 	{"partitionKey": "root", "prefix": "d.", "limit": 1},
 	{"partitionKey": "root", "prefix": "d.", "start": "d.2", "limit": 1},
+	{"partitionKey": "root", "prefix": "d.", "reverse": true},
+	{"partitionKey": "root", "prefix": "d.", "start": "d.2", "reverse": true},
 	{"partitionKey": "root", "prefix": "d.", "limit": 2}
 		]"#
 			.to_vec(),
@@ -355,6 +375,40 @@ async fn test_batch() {
 				"prefix": "d.",
 				"start": null,
 				"end": null,
+				"limit": null,
+				"reverse": true,
+				"conflictsOnly": false,
+				"tombstones": false,
+				"singleItem": false,
+				"items": [
+				  {"sk": "d.2", "ct": ct.get("d.2").unwrap(), "v": [base64::encode(values.get("d.2").unwrap()), base64::encode(values.get("d.2'").unwrap())]},
+				  {"sk": "d.1", "ct": ct.get("d.1").unwrap(), "v": [base64::encode(values.get("d.1'").unwrap())]},
+				],
+				"more": false,
+				"nextStart": null,
+			},
+			{
+				"partitionKey": "root",
+				"prefix": "d.",
+				"start": "d.2",
+				"end": null,
+				"limit": null,
+				"reverse": true,
+				"conflictsOnly": false,
+				"tombstones": false,
+				"singleItem": false,
+				"items": [
+				  {"sk": "d.2", "ct": ct.get("d.2").unwrap(), "v": [base64::encode(values.get("d.2").unwrap()), base64::encode(values.get("d.2'").unwrap())]},
+				  {"sk": "d.1", "ct": ct.get("d.1").unwrap(), "v": [base64::encode(values.get("d.1'").unwrap())]},
+				],
+				"more": false,
+				"nextStart": null,
+			},
+			{
+				"partitionKey": "root",
+				"prefix": "d.",
+				"start": null,
+				"end": null,
 				"limit": 2,
 				"reverse": false,
 				"conflictsOnly": false,
@@ -418,7 +472,8 @@ async fn test_batch() {
 		.query_param("search", Option::<&str>::None)
 		.body(
 			br#"[
-	{"partitionKey": "root"}
+	{"partitionKey": "root"},
+	{"partitionKey": "root", "reverse": true}
 		]"#
 			.to_vec(),
 		)
@@ -444,6 +499,23 @@ async fn test_batch() {
 				"items": [
 				  {"sk": "c", "ct": ct.get("c").unwrap(), "v": [base64::encode(values.get("c").unwrap()), base64::encode(values.get("c'").unwrap())]},
 				  {"sk": "e", "ct": ct.get("e").unwrap(), "v": [base64::encode(values.get("e").unwrap())]}
+				],
+				"more": false,
+				"nextStart": null,
+			},
+			{
+				"partitionKey": "root",
+				"prefix": null,
+				"start": null,
+				"end": null,
+				"limit": null,
+				"reverse": true,
+				"conflictsOnly": false,
+				"tombstones": false,
+				"singleItem": false,
+				"items": [
+				  {"sk": "e", "ct": ct.get("e").unwrap(), "v": [base64::encode(values.get("e").unwrap())]},
+				  {"sk": "c", "ct": ct.get("c").unwrap(), "v": [base64::encode(values.get("c").unwrap()), base64::encode(values.get("c'").unwrap())]},
 				],
 				"more": false,
 				"nextStart": null,

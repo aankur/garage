@@ -8,6 +8,7 @@ use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
 use crate::error::*;
+use crate::helpers::key_after_prefix;
 
 /// Read range in a Garage table.
 /// Returns (entries, more?, nextStart)
@@ -25,10 +26,9 @@ pub(crate) async fn read_range<F>(
 where
 	F: TableSchema<S = String> + 'static,
 {
-	let mut start = match (prefix, start) {
-		(None, None) => "".to_string(),
-		(Some(p), None) => p.clone(),
-		(None, Some(s)) => s.clone(),
+	let (mut start, mut start_ignore) = match (prefix, start) {
+		(None, None) => (None, false),
+		(None, Some(s)) => (Some(s.clone()), false),
 		(Some(p), Some(s)) => {
 			if !s.starts_with(p) {
 				return Err(Error::BadRequest(format!(
@@ -36,10 +36,15 @@ where
 					s, p
 				)));
 			}
-			s.clone()
+			(Some(s.clone()), false)
 		}
+		(Some(p), None) if enumeration_order == EnumerationOrder::Reverse => {
+			let start = key_after_prefix(p)
+				.ok_or_internal_error("Sorry, can't list this prefix in reverse order")?;
+			(Some(start), true)
+		}
+		(Some(p), None) => (Some(p.clone()), false),
 	};
-	let mut start_ignore = false;
 
 	let mut entries = vec![];
 	loop {
@@ -50,7 +55,7 @@ where
 		let get_ret = table
 			.get_range(
 				partition_key,
-				Some(start.clone()),
+				start.clone(),
 				filter.clone(),
 				n_get,
 				enumeration_order,
@@ -60,6 +65,9 @@ where
 		let get_ret_len = get_ret.len();
 
 		for entry in get_ret {
+			if start_ignore && Some(entry.sort_key()) == start.as_ref() {
+				continue;
+			}
 			if let Some(p) = prefix {
 				if !entry.sort_key().starts_with(p) {
 					return Ok((entries, false, None));
@@ -75,9 +83,6 @@ where
 					return Ok((entries, true, Some(entry.sort_key().clone())));
 				}
 			}
-			if start_ignore && entry.sort_key() == &start {
-				continue;
-			}
 			entries.push(entry);
 		}
 
@@ -85,7 +90,7 @@ where
 			return Ok((entries, false, None));
 		}
 
-		start = entries.last().unwrap().sort_key().clone();
+		start = Some(entries.last().unwrap().sort_key().clone());
 		start_ignore = true;
 	}
 }

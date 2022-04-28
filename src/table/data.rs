@@ -1,4 +1,5 @@
 use core::borrow::Borrow;
+use std::convert::TryInto;
 use std::sync::Arc;
 
 use serde_bytes::ByteBuf;
@@ -84,26 +85,36 @@ where
 
 	pub fn read_range(
 		&self,
-		p: &F::P,
-		s: &Option<F::S>,
+		partition_key: &F::P,
+		start: &Option<F::S>,
 		filter: &Option<F::Filter>,
 		limit: usize,
 		enumeration_order: EnumerationOrder,
 	) -> Result<Vec<Arc<ByteBuf>>, Error> {
-		let partition_hash = p.hash();
-		let first_key = match s {
-			None => partition_hash.to_vec(),
-			Some(sk) => self.tree_key(p, sk),
-		};
+		let partition_hash = partition_key.hash();
 		match enumeration_order {
 			EnumerationOrder::Forward => {
+				let first_key = match start {
+					None => partition_hash.to_vec(),
+					Some(sk) => self.tree_key(partition_key, sk),
+				};
 				let range = self.store.range(first_key..);
 				self.read_range_aux(partition_hash, range, filter, limit)
 			}
-			EnumerationOrder::Reverse => {
-				let range = self.store.range(..=first_key).rev();
-				self.read_range_aux(partition_hash, range, filter, limit)
-			}
+			EnumerationOrder::Reverse => match start {
+				Some(sk) => {
+					let last_key = self.tree_key(partition_key, sk);
+					let range = self.store.range(..=last_key).rev();
+					self.read_range_aux(partition_hash, range, filter, limit)
+				}
+				None => {
+					let mut last_key = partition_hash.to_vec();
+					let lower = u128::from_be_bytes(last_key[16..32].try_into().unwrap());
+					last_key[16..32].copy_from_slice(&u128::to_be_bytes(lower + 1));
+					let range = self.store.range(..last_key).rev();
+					self.read_range_aux(partition_hash, range, filter, limit)
+				}
+			},
 		}
 	}
 

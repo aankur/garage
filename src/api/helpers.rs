@@ -137,6 +137,32 @@ pub fn parse_bucket_key<'a>(
 	Ok((bucket, key))
 }
 
+const UTF8_BEFORE_LAST_CHAR: char = '\u{10FFFE}';
+
+/// Compute the key after the prefix
+pub fn key_after_prefix(pfx: &str) -> Option<String> {
+	let mut next = pfx.to_string();
+	while !next.is_empty() {
+		let tail = next.pop().unwrap();
+		if tail >= char::MAX {
+			continue;
+		}
+
+		// Circumvent a limitation of RangeFrom that overflow earlier than needed
+		// See: https://doc.rust-lang.org/core/ops/struct.RangeFrom.html
+		let new_tail = if tail == UTF8_BEFORE_LAST_CHAR {
+			char::MAX
+		} else {
+			(tail..).nth(1).unwrap()
+		};
+
+		next.push(new_tail);
+		return Some(next);
+	}
+
+	None
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -235,5 +261,38 @@ mod tests {
 
 		assert_eq!(host_to_bucket("not-garage.tld", "garage.tld"), None);
 		assert_eq!(host_to_bucket("not-garage.tld", ".garage.tld"), None);
+	}
+
+	#[test]
+	fn test_key_after_prefix() {
+		assert_eq!(UTF8_BEFORE_LAST_CHAR as u32, (char::MAX as u32) - 1);
+		assert_eq!(key_after_prefix("a/b/").unwrap().as_str(), "a/b0");
+		assert_eq!(key_after_prefix("€").unwrap().as_str(), "₭");
+		assert_eq!(
+			key_after_prefix("􏿽").unwrap().as_str(),
+			String::from(char::from_u32(0x10FFFE).unwrap())
+		);
+
+		// When the last character is the biggest UTF8 char
+		let a = String::from_iter(['a', char::MAX].iter());
+		assert_eq!(key_after_prefix(a.as_str()).unwrap().as_str(), "b");
+
+		// When all characters are the biggest UTF8 char
+		let b = String::from_iter([char::MAX; 3].iter());
+		assert!(key_after_prefix(b.as_str()).is_none());
+
+		// Check utf8 surrogates
+		let c = String::from('\u{D7FF}');
+		assert_eq!(
+			key_after_prefix(c.as_str()).unwrap().as_str(),
+			String::from('\u{E000}')
+		);
+
+		// Check the character before the biggest one
+		let d = String::from('\u{10FFFE}');
+		assert_eq!(
+			key_after_prefix(d.as_str()).unwrap().as_str(),
+			String::from(char::MAX)
+		);
 	}
 }
