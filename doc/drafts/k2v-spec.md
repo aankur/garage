@@ -10,10 +10,10 @@
 
 - Bucket names and access keys are the same as for accessing the S3 API
 
-- K2V triplets exist separately from S3 objects. K2V triples don't exist for
+- K2V triplets exist separately from S3 objects. K2V triplets don't exist for
   the S3 API, and S3 objects don't exist for the K2V API.
 
-- Values stored for triples have associated causality information, that enables
+- Values stored for triplets have associated causality information, that enables
   Garage to detect concurrent writes. In case of concurrent writes, Garage
   keeps the concurrent values until a further write supersedes the concurrent
   values. This is the same method as Riak KV implements. The method used is
@@ -28,17 +28,19 @@
 
 Triples in K2V are constituted of three fields:
 
-- a partition key (`pk`), an utf8 string that defines in what partition the triple is
-  stored; triples in different partitions cannot be listed together, they must
-  be the object of different ReadItem or ReadBatch queries
+- a partition key (`pk`), an utf8 string that defines in what partition the
+  triplet is stored; triplets in different partitions cannot be listed together
+  in a ReadBatch command, or deleted together in a DeleteBatch command: a
+  separate command must be included in the ReadBatch/DeleteBatch call for each
+  partition key in which the client wants to read/delete lists of items
 
-- a sort key (`sk`), an utf8 string that defines the index of the triple inside its
-  partition; triples are uniquely idendified by their partition key + sort key
+- a sort key (`sk`), an utf8 string that defines the index of the triplet inside its
+  partition; triplets are uniquely idendified by their partition key + sort key
 
 - a value (`v`), an opaque binary blob associated to the partition key + sort key;
   they are transmitted as binary when possible but in most case in the JSON API
   they will be represented as strings using base64 encoding; a value can also
-  be `null` to indicate a deleted triple (a `null` value is called a tombstone)
+  be `null` to indicate a deleted triplet (a `null` value is called a tombstone)
 
 ### Causality information
 
@@ -137,8 +139,8 @@ Once encoded in binary, contexts are written and transmitted in base64.
 ### Indexing
 
 K2V keeps an index, a secondary data structure that is updated asynchronously,
-that keeps tracks of the number of triples stored for each partition key.
-This allows easy listing of all of the partition keys for which triples exist
+that keeps tracks of the number of triplets stored for each partition key.
+This allows easy listing of all of the partition keys for which triplets exist
 in a bucket, as the partition key becomes the sort key in the index.
 
 How indexing works:
@@ -172,7 +174,7 @@ TO UNDERSTAND IN ORDER TO USE IT CORRECTLY.**
 - **Internal server errors on updates do not mean that the update isn't stored.**
   K2V will return an internal server error when it cannot reach a quorum of nodes on
   which to save an updated value. However the value may still be stored on just one
-  node, which whill then propagate it to other nodes asynchronously via anti-entropy.
+  node, which will then propagate it to other nodes asynchronously via anti-entropy.
 
 - **Batch operations are not transactions.** When calling InsertBatch or DeleteBatch,
   items may appear partially inserted/deleted while the operation is being processed.
@@ -447,11 +449,11 @@ insert in the following format:
 The causality token should be the one returned in a previous read request (e.g.
 by ReadItem or ReadBatch), to indicate that this write takes into account the
 values that were returned from these reads, and supersedes them causally. If
-the triple is inserted for the first time, the causality token should be set to
+the triplet is inserted for the first time, the causality token should be set to
 `null`.
 
 The value is expected to be a base64-encoded binary blob. The value `null` can
-also be used to delete the triple while preserving causality information: this
+also be used to delete the triplet while preserving causality information: this
 allows to know if a delete has happenned concurrently with an insert, in which
 case both are preserved and returned on reads (see below).
 
@@ -507,7 +509,7 @@ control additional filters on the items that are returned.
 
 The result is a list of length the number of searches, that consists in for
 each search a JSON object specified similarly to the result of ReadIndex, but
-that lists triples within a partition key.
+that lists triplets within a partition key.
 
 The format of returned tuples is as follows: `{ sk: "<sort key>", ct: "<causality
 token>", v: ["<value1>", ...] }`, with the following fields:
