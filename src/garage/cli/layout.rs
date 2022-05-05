@@ -335,14 +335,14 @@ pub fn print_staging_role_changes(layout: &ClusterLayout) -> bool {
 		.staging
 		.items()
 		.iter()
-		.any(|(k, _, v)| layout.roles.get(&k) != Some(v));
+		.any(|(k, _, v)| layout.roles.get(k) != Some(v));
 
 	if has_changes {
 		println!();
 		println!("==== STAGED ROLE CHANGES ====");
 		let mut table = vec!["ID\tTags\tZone\tCapacity".to_string()];
 		for (id, _, role) in layout.staging.items().iter() {
-			if layout.roles.get(&id) == Some(role) {
+			if layout.roles.get(id) == Some(role) {
 				continue;
 			}
 			if let Some(role) = &role.0 {
