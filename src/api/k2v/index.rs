@@ -29,7 +29,7 @@ pub async fn handle_read_index(
 	let ring: Arc<Ring> = garage.system.ring.borrow().clone();
 
 	let (partition_keys, more, next_start) = read_range(
-		&garage.k2v_counter_table.table,
+		&garage.k2v.counter_table.table,
 		&bucket_id,
 		&prefix,
 		&start,

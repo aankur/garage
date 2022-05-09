@@ -40,7 +40,7 @@ pub async fn handle_insert_batch(
 		items2.push((it.pk, it.sk, ct, v));
 	}
 
-	garage.k2v_rpc.insert_batch(bucket_id, items2).await?;
+	garage.k2v.rpc.insert_batch(bucket_id, items2).await?;
 
 	Ok(Response::builder()
 		.status(StatusCode::OK)
@@ -98,7 +98,8 @@ async fn handle_read_batch_query(
 			.as_ref()
 			.ok_or_bad_request("start should be specified if single_item is set")?;
 		let item = garage
-			.k2v_item_table
+			.k2v
+			.item_table
 			.get(&partition, sk)
 			.await?
 			.filter(|e| K2VItemTable::matches_filter(e, &filter));
@@ -108,7 +109,7 @@ async fn handle_read_batch_query(
 		}
 	} else {
 		let (items, more, next_start) = read_range(
-			&garage.k2v_item_table,
+			&garage.k2v.item_table,
 			&partition,
 			&query.prefix,
 			&query.start,
@@ -194,7 +195,8 @@ async fn handle_delete_batch_query(
 			.as_ref()
 			.ok_or_bad_request("start should be specified if single_item is set")?;
 		let item = garage
-			.k2v_item_table
+			.k2v
+			.item_table
 			.get(&partition, sk)
 			.await?
 			.filter(|e| K2VItemTable::matches_filter(e, &filter));
@@ -202,7 +204,8 @@ async fn handle_delete_batch_query(
 			Some(i) => {
 				let cc = i.causal_context();
 				garage
-					.k2v_rpc
+					.k2v
+					.rpc
 					.insert(
 						bucket_id,
 						i.partition.partition_key,
@@ -217,7 +220,7 @@ async fn handle_delete_batch_query(
 		}
 	} else {
 		let (items, more, _next_start) = read_range(
-			&garage.k2v_item_table,
+			&garage.k2v.item_table,
 			&partition,
 			&query.prefix,
 			&query.start,
@@ -244,7 +247,7 @@ async fn handle_delete_batch_query(
 			.collect::<Vec<_>>();
 		let n = items.len();
 
-		garage.k2v_rpc.insert_batch(bucket_id, items).await?;
+		garage.k2v.rpc.insert_batch(bucket_id, items).await?;
 
 		n
 	};

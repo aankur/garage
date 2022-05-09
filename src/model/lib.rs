@@ -9,6 +9,7 @@ pub mod bucket_alias_table;
 pub mod bucket_table;
 pub mod key_table;
 
+#[cfg(feature = "k2v")]
 pub mod k2v;
 pub mod s3;
 

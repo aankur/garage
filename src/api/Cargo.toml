@@ -54,3 +54,6 @@ quick-xml = { version = "0.21", features = [ "serialize" ] }
 url = "2.1"
 
 opentelemetry = "0.17"
+
+[features]
+k2v = [ "garage_util/k2v", "garage_model/k2v" ]

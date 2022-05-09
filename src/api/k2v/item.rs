@@ -106,7 +106,8 @@ pub async fn handle_read_item(
 	let format = ReturnFormat::from(req)?;
 
 	let item = garage
-		.k2v_item_table
+		.k2v
+		.item_table
 		.get(
 			&K2VItemPartition {
 				bucket_id,
@@ -140,7 +141,8 @@ pub async fn handle_insert_item(
 	let value = DvvsValue::Value(body.to_vec());
 
 	garage
-		.k2v_rpc
+		.k2v
+		.rpc
 		.insert(
 			bucket_id,
 			partition_key.to_string(),
@@ -174,7 +176,8 @@ pub async fn handle_delete_item(
 	let value = DvvsValue::Deleted;
 
 	garage
-		.k2v_rpc
+		.k2v
+		.rpc
 		.insert(
 			bucket_id,
 			partition_key.to_string(),
@@ -206,7 +209,8 @@ pub async fn handle_poll_item(
 		CausalContext::parse(&causality_token).ok_or_bad_request("Invalid causality token")?;
 
 	let item = garage
-		.k2v_rpc
+		.k2v
+		.rpc
 		.poll(
 			bucket_id,
 			partition_key,

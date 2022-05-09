@@ -12,5 +12,6 @@ mod router_macros;
 /// This mode is public only to help testing. Don't expect stability here
 pub mod signature;
 
+#[cfg(feature = "k2v")]
 pub mod k2v;
 pub mod s3;

@@ -76,6 +76,7 @@ pub struct Config {
 	pub s3_api: S3ApiConfig,
 
 	/// Configuration for K2V api
+	#[cfg(feature = "k2v")]
 	pub k2v_api: Option<K2VApiConfig>,
 
 	/// Configuration for serving files as normal web server
@@ -99,6 +100,7 @@ pub struct S3ApiConfig {
 }
 
 /// Configuration for K2V api
+#[cfg(feature = "k2v")]
 #[derive(Deserialize, Debug, Clone)]
 pub struct K2VApiConfig {
 	/// Address and port to bind for api serving

@@ -13,10 +13,6 @@ use garage_table::replication::TableFullReplication;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
-use crate::k2v::counter_table::*;
-use crate::k2v::item_table::*;
-use crate::k2v::poll::*;
-use crate::k2v::rpc::*;
 use crate::s3::block_ref_table::*;
 use crate::s3::object_table::*;
 use crate::s3::version_table::*;
@@ -24,8 +20,12 @@ use crate::s3::version_table::*;
 use crate::bucket_alias_table::*;
 use crate::bucket_table::*;
 use crate::helper;
-use crate::index_counter::*;
 use crate::key_table::*;
+
+#[cfg(feature = "k2v")]
+use crate::index_counter::*;
+#[cfg(feature = "k2v")]
+use crate::k2v::{counter_table::*, item_table::*, poll::*, rpc::*};
 
 /// An entire Garage full of data
 pub struct Garage {
@@ -55,12 +55,18 @@ pub struct Garage {
 	/// Table containing S3 block references (not blocks themselves)
 	pub block_ref_table: Arc<Table<BlockRefTable, TableShardedReplication>>,
 
+	#[cfg(feature = "k2v")]
+	pub k2v: GarageK2V,
+}
+
+#[cfg(feature = "k2v")]
+pub struct GarageK2V {
 	/// Table containing K2V items
-	pub k2v_item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
+	pub item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
 	/// Indexing table containing K2V item counters
-	pub k2v_counter_table: Arc<IndexCounter<K2VCounterTable>>,
+	pub counter_table: Arc<IndexCounter<K2VCounterTable>>,
 	/// K2V RPC handler
-	pub k2v_rpc: Arc<K2VRpcHandler>,
+	pub rpc: Arc<K2VRpcHandler>,
 }
 
 impl Garage {
@@ -148,6 +154,7 @@ impl Garage {
 		);
 
 		info!("Initialize object_table...");
+		#[allow(clippy::redundant_clone)]
 		let object_table = Table::new(
 			ObjectTable {
 				background: background.clone(),
@@ -159,21 +166,8 @@ impl Garage {
 		);
 
 		// ---- K2V ----
-		info!("Initialize K2V counter table...");
-		let k2v_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
-		info!("Initialize K2V subscription manager...");
-		let k2v_subscriptions = Arc::new(SubscriptionManager::new());
-		info!("Initialize K2V item table...");
-		let k2v_item_table = Table::new(
-			K2VItemTable {
-				counter_table: k2v_counter_table.clone(),
-				subscriptions: k2v_subscriptions.clone(),
-			},
-			meta_rep_param,
-			system.clone(),
-			&db,
-		);
-		let k2v_rpc = K2VRpcHandler::new(system.clone(), k2v_item_table.clone(), k2v_subscriptions);
+		#[cfg(feature = "k2v")]
+		let k2v = GarageK2V::new(system.clone(), &db, meta_rep_param);
 
 		info!("Initialize Garage...");
 
@@ -189,13 +183,39 @@ impl Garage {
 			object_table,
 			version_table,
 			block_ref_table,
-			k2v_item_table,
-			k2v_counter_table,
-			k2v_rpc,
+			#[cfg(feature = "k2v")]
+			k2v,
 		})
 	}
 
 	pub fn bucket_helper(&self) -> helper::bucket::BucketHelper {
 		helper::bucket::BucketHelper(self)
+	}
+}
+
+#[cfg(feature = "k2v")]
+impl GarageK2V {
+	fn new(system: Arc<System>, db: &sled::Db, meta_rep_param: TableShardedReplication) -> Self {
+		info!("Initialize K2V counter table...");
+		let counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), db);
+		info!("Initialize K2V subscription manager...");
+		let subscriptions = Arc::new(SubscriptionManager::new());
+		info!("Initialize K2V item table...");
+		let item_table = Table::new(
+			K2VItemTable {
+				counter_table: counter_table.clone(),
+				subscriptions: subscriptions.clone(),
+			},
+			meta_rep_param,
+			system.clone(),
+			db,
+		);
+		let rpc = K2VRpcHandler::new(system, item_table.clone(), subscriptions);
+
+		Self {
+			item_table,
+			counter_table,
+			rpc,
+		}
 	}
 }
