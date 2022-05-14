@@ -200,9 +200,9 @@ impl K2vClient {
 	// TODO poke team, draft doc outdated fot the return type of this endpoint
 	/// Perform a ReadIndex request, listing partition key which have at least one associated
 	/// sort key, and which matches the filter.
-	pub async fn read_index<'a>(
+	pub async fn read_index(
 		&self,
-		filter: Filter<'a>,
+		filter: Filter<'_>,
 	) -> Result<PaginatedRange<PartitionInfo>, Error> {
 		let mut req =
 			SignedRequest::new("GET", SERVICE, &self.region, &format!("/{}", self.bucket));
@@ -227,7 +227,7 @@ impl K2vClient {
 	/// Perform an InsertBatch request, inserting multiple values at once. Note: this operation is
 	/// *not* atomic: it is possible for some sub-operations to fails and others to success. In
 	/// that case, failure is reported.
-	pub async fn insert_batch<'a>(&self, operations: &[BatchInsertOp<'a>]) -> Result<(), Error> {
+	pub async fn insert_batch(&self, operations: &[BatchInsertOp<'_>]) -> Result<(), Error> {
 		let mut req =
 			SignedRequest::new("POST", SERVICE, &self.region, &format!("/{}", self.bucket));
 
@@ -238,9 +238,9 @@ impl K2vClient {
 	}
 
 	/// Perform a ReadBatch request, reading multiple values or range of values at once.
-	pub async fn read_batch<'a>(
+	pub async fn read_batch(
 		&self,
-		operations: &[BatchReadOp<'a>],
+		operations: &[BatchReadOp<'_>],
 	) -> Result<Vec<PaginatedRange<CausalValue>>, Error> {
 		let mut req =
 			SignedRequest::new("POST", SERVICE, &self.region, &format!("/{}", self.bucket));
@@ -275,10 +275,7 @@ impl K2vClient {
 
 	/// Perform a DeleteBatch request, deleting mutiple values or range of values at once, without
 	/// providing causality information.
-	pub async fn delete_batch<'a>(
-		&self,
-		operations: &[BatchDeleteOp<'a>],
-	) -> Result<Vec<u64>, Error> {
+	pub async fn delete_batch(&self, operations: &[BatchDeleteOp<'_>]) -> Result<Vec<u64>, Error> {
 		let mut req =
 			SignedRequest::new("POST", SERVICE, &self.region, &format!("/{}", self.bucket));
 		req.add_param("delete", "");
