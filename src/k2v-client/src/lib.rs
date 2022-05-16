@@ -117,7 +117,7 @@ impl K2vClient {
 		req.add_param("sort_key", sort_key);
 		req.add_param("causality_token", &causality.0);
 		req.add_param("timeout", &timeout.as_secs().to_string());
-		req.add_header(ACCEPT, "application/octet-stream, application/json;q=0.9");
+		req.add_header(ACCEPT, "application/octet-stream, application/json");
 
 		let res = self.dispatch(req, Some(timeout + DEFAULT_TIMEOUT)).await?;
 
@@ -197,7 +197,6 @@ impl K2vClient {
 		Ok(())
 	}
 
-	// TODO poke team, draft doc outdated fot the return type of this endpoint
 	/// Perform a ReadIndex request, listing partition key which have at least one associated
 	/// sort key, and which matches the filter.
 	pub async fn read_index(
@@ -407,7 +406,7 @@ impl Serialize for K2vValue {
 }
 
 /// A set of K2vValue and associated causality information.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CausalValue {
 	pub causality: CausalityToken,
 	pub value: Vec<K2vValue>,
@@ -471,7 +470,7 @@ struct ReadIndexItem {
 }
 
 /// Information about data stored with a given partition key.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PartitionInfo {
 	pub entries: u64,
 	pub conflicts: u64,
@@ -502,7 +501,7 @@ pub struct BatchReadOp<'a> {
 	#[serde(default)]
 	pub single_item: bool,
 	#[serde(default)]
-	pub concflicts_only: bool,
+	pub conflicts_only: bool,
 	#[serde(default)]
 	pub include_tombstones: bool,
 }

@@ -17,4 +17,6 @@ pub enum Error {
 	RusotoHttp(#[from] rusoto_core::HttpDispatchError),
 	#[error("deserialization error: {0}")]
 	Deserialization(#[from] serde_json::Error),
+	#[error("{0}")]
+	Message(Cow<'static, str>),
 }

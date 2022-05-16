@@ -13,3 +13,14 @@ serde = "1.0.137"
 serde_json = "1.0.81"
 thiserror = "1.0.31"
 tokio = "1.17.0"
+
+# cli deps
+clap = { version = "3.1.18", optional = true, features = ["derive", "env"] }
+
+
+[features]
+cli = ["clap", "tokio/fs", "tokio/io-std"]
+
+[[bin]]
+name = "k2v-cli"
+required-features = ["cli"]
