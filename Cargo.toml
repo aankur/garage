@@ -12,6 +12,8 @@ members = [
 	"src/k2v-client",
 ]
 
+default-members = ["src/garage"]
+
 [profile.dev]
 lto = "off"
 

@@ -1,10 +1,13 @@
 use k2v_client::*;
+
+use garage_util::formater::format_table;
+
 use rusoto_core::credential::AwsCredentials;
 use rusoto_core::Region;
 
 use clap::{Parser, Subcommand};
 
-/// Simple program to greet a person
+/// K2V command line interface
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
@@ -159,7 +162,7 @@ impl ReadOutputKind {
 
 		if self.json {
 			let stdout = std::io::stdout();
-			serde_json::to_writer(stdout, &val).unwrap();
+			serde_json::to_writer_pretty(stdout, &val).unwrap();
 			exit(0);
 		}
 
@@ -167,7 +170,7 @@ impl ReadOutputKind {
 			let mut val = val.value;
 			if val.len() != 1 {
 				eprintln!(
-					"Raw mode can only read non-concurent values, fond {} values, expected 1",
+					"Raw mode can only read non-concurent values, found {} values, expected 1",
 					val.len()
 				);
 				exit(1);
@@ -255,7 +258,7 @@ struct Filter {
 	/// Return only keys where conflict happened
 	#[clap(short, long)]
 	conflicts_only: bool,
-	/// Return only keys storing tombstones
+	/// Also include keys storing only tombstones
 	#[clap(short, long)]
 	tombstones: bool,
 	/// Return any key
@@ -350,18 +353,21 @@ async fn main() -> Result<(), Error> {
 				});
 
 				let stdout = std::io::stdout();
-				serde_json::to_writer(stdout, &json).unwrap();
+				serde_json::to_writer_pretty(stdout, &json).unwrap();
 			} else {
 				if let Some(next) = res.next_start {
 					println!("next key: {}", next);
 				}
-				println!("key: entries,conflicts,values,bytes");
+
+				let mut to_print = Vec::new();
+				to_print.push(format!("key:\tentries\tconflicts\tvalues\tbytes"));
 				for (k, v) in res.items {
-					println!(
-						"{}: {},{},{},{}",
+					to_print.push(format!(
+						"{}\t{}\t{}\t{}\t{}",
 						k, v.entries, v.conflicts, v.values, v.bytes
-					);
+					));
 				}
+				format_table(to_print);
 			}
 		}
 		Command::ReadRange {
@@ -373,7 +379,7 @@ async fn main() -> Result<(), Error> {
 				partition_key: &partition_key,
 				filter: filter.k2v_filter(),
 				conflicts_only: filter.conflicts_only,
-				include_tombstones: filter.tombstones,
+				tombstones: filter.tombstones,
 				single_item: false,
 			};
 			let mut res = client.read_batch(&[op]).await?;
@@ -397,7 +403,7 @@ async fn main() -> Result<(), Error> {
 				});
 
 				let stdout = std::io::stdout();
-				serde_json::to_writer(stdout, &json).unwrap();
+				serde_json::to_writer_pretty(stdout, &json).unwrap();
 			} else {
 				if let Some(next) = res.next_start {
 					println!("next key: {}", next);
@@ -428,27 +434,21 @@ async fn main() -> Result<(), Error> {
 			output_kind,
 			filter,
 		} => {
-			let single_item = if let Some(limit) = filter.limit {
-				if limit == 1 {
-					true
-				} else {
-					return Err(Error::Message(
-						"limit can only be 1 or no limit for delete-range".into(),
-					));
-				}
-			} else {
-				false
-			};
 			let op = BatchDeleteOp {
 				partition_key: &partition_key,
 				prefix: filter.prefix.as_deref(),
 				start: filter.start.as_deref(),
 				end: filter.end.as_deref(),
-				single_item,
+				single_item: false,
 			};
-			if filter.reverse || filter.conflicts_only || filter.tombstones {
+			if filter.reverse
+				|| filter.conflicts_only
+				|| filter.tombstones
+				|| filter.limit.is_some()
+			{
 				return Err(Error::Message(
-					"conlicts-only, reverse and tombstones are invalid for read-index".into(),
+					"limit, conlicts-only, reverse and tombstones are invalid for delete-range"
+						.into(),
 				));
 			}
 

@@ -503,7 +503,7 @@ pub struct BatchReadOp<'a> {
 	#[serde(default)]
 	pub conflicts_only: bool,
 	#[serde(default)]
-	pub include_tombstones: bool,
+	pub tombstones: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

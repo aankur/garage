@@ -16,10 +16,11 @@ tokio = "1.17.0"
 
 # cli deps
 clap = { version = "3.1.18", optional = true, features = ["derive", "env"] }
+garage_util = { path = "../util", optional = true }
 
 
 [features]
-cli = ["clap", "tokio/fs", "tokio/io-std"]
+cli = ["clap", "tokio/fs", "tokio/io-std", "garage_util"]
 
 [[bin]]
 name = "k2v-cli"
