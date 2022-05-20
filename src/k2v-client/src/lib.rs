@@ -4,6 +4,7 @@ use std::time::Duration;
 use http::header::{ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
 use http::status::StatusCode;
 use http::HeaderMap;
+use log::{debug, error};
 
 use rusoto_core::{ByteStream, DispatchSignedRequest, HttpClient};
 use rusoto_credential::AwsCredentials;
@@ -311,11 +312,27 @@ impl K2vClient {
 			StatusCode::NOT_FOUND => return Err(Error::NotFound),
 			StatusCode::NOT_MODIFIED => Vec::new(),
 			_ => {
+				let err_body = read_body(&mut res.headers, res.body)
+					.await
+					.unwrap_or_default();
+				error!(
+					"Error response {}: {}",
+					res.status,
+					std::str::from_utf8(&err_body)
+						.map(String::from)
+						.unwrap_or_else(|_| base64::encode(&err_body))
+				);
 				return Err(Error::InvalidResponse(
 					format!("invalid error code: {}", res.status).into(),
-				))
+				));
 			}
 		};
+		debug!(
+			"Response body: {}",
+			std::str::from_utf8(&body)
+				.map(String::from)
+				.unwrap_or_else(|_| base64::encode(&body))
+		);
 
 		Ok(Response {
 			body,

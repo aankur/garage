@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 base64 = "0.13.0"
 http = "0.2.6"
+log = "0.4"
 rusoto_core = "0.48.0"
 rusoto_credential = "0.48.0"
 rusoto_signature = "0.48.0"
