@@ -12,7 +12,7 @@ when changes are introduced.
 The admin API uses two different tokens for acces control, that are specified in the config file's `[admin]` section:
 
 - `metrics_token`: the token for accessing the Metrics endpoint (if this token is not set in the config file, the Metrics endpoint can be accessed without access control);
-- `admin_token`: the token for accessing all of the other administration endpoints (if this token is not set in the config file, these endpoints can be accessed without access control).
+- `admin_token`: the token for accessing all of the other administration endpoints (if this token is not set in the config file, access to these endpoints is disabled entirely).
 
 ## Administration API endpoints
 
