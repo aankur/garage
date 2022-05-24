@@ -5,7 +5,7 @@ use thiserror::Error;
 /// Errors returned by this crate
 #[derive(Error, Debug)]
 pub enum Error {
-	#[error("{0} {1}: {2} (at {3})")]
+	#[error("{0}, {1}: {2} (path = {3})")]
 	Remote(
 		http::StatusCode,
 		Cow<'static, str>,

@@ -332,7 +332,7 @@ impl K2vClient {
 							res.status,
 							"unknown".into(),
 							err_body_str.into(),
-							"".into(),
+							"?".into(),
 						),
 					};
 					return Err(err);
