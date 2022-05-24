@@ -291,12 +291,12 @@ pub async fn handle_create_bucket(
 				.set_bucket_key_permissions(
 					bucket.id,
 					&la.access_key_id,
-					BucketKeyPerm{
+					BucketKeyPerm {
 						timestamp: now_msec(),
 						allow_read: la.allow.read,
 						allow_write: la.allow.write,
 						allow_owner: la.allow.owner,
-					}
+					},
 				)
 				.await?;
 		}
