@@ -124,11 +124,11 @@ Example response:
 [
 	{
 		"success": true,
-		"error": null,
+		"error": null
 	},
 	{
 		"success": false,
-		"error": "Handshake error",
+		"error": "Handshake error"
 	}
 ]
 ```
@@ -490,7 +490,11 @@ OR
 	"localAlias": {
 		"accessKeyId": "GK31c2f218a2e44f485b94239e",
 		"alias": "NameOfMyBucket",
-		"allPermissions": true
+		"allow": {
+			"read": true,
+			"write": true,
+			"owner": false
+		}
 	}
 }
 ```
@@ -503,6 +507,9 @@ OR
 
 Creates a new bucket, either with a global alias, a local one,
 or no alias at all.
+
+Technically, you can also specify both `globalAlias` and `localAlias` and that would create
+two aliases, but I don't see why you would want to do that.
 
 #### DeleteBucket `DELETE /v0/bucket?id=<bucket id>`
 
@@ -519,7 +526,7 @@ Request body format:
 ```json
 {
 	"indexDocument": "index.html",
-	"errorDocument": "404.html",
+	"errorDocument": "404.html"
 }
 ```
 

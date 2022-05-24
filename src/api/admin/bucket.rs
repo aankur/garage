@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use garage_util::crdt::*;
 use garage_util::data::*;
 use garage_util::error::Error as GarageError;
+use garage_util::time::*;
 
 use garage_table::*;
 
@@ -283,13 +284,19 @@ pub async fn handle_create_bucket(
 			.bucket_helper()
 			.set_local_bucket_alias(bucket.id, &la.access_key_id, &la.alias)
 			.await?;
-		if la.all_permissions {
+
+		if la.allow.read || la.allow.write || la.allow.owner {
 			garage
 				.bucket_helper()
 				.set_bucket_key_permissions(
 					bucket.id,
 					&la.access_key_id,
-					BucketKeyPerm::ALL_PERMISSIONS,
+					BucketKeyPerm{
+						timestamp: now_msec(),
+						allow_read: la.allow.read,
+						allow_write: la.allow.write,
+						allow_owner: la.allow.owner,
+					}
 				)
 				.await?;
 		}
@@ -311,7 +318,7 @@ struct CreateBucketLocalAlias {
 	access_key_id: String,
 	alias: String,
 	#[serde(default)]
-	all_permissions: bool,
+	allow: ApiBucketKeyPerm,
 }
 
 pub async fn handle_delete_bucket(
