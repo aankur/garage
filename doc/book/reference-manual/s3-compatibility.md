@@ -5,17 +5,17 @@ weight = 20
 
 ## DISCLAIMER
 
-**The compatibility list for other platforms is given only for information
+**The compatibility list for other platforms is given only for informational
 purposes and based on available documentation.** They are sometimes completed,
 in a best effort approach, with the source code and inputs from maintainers
 when documentation is lacking. We are not proactively monitoring new versions
-of each software, check the modification history to know when the page has been
-updated for the last time. Some entries will be inexact or outdated: for any
+of each software: check the modification history to know when the page has been
+updated for the last time. Some entries will be inexact or outdated. For any
 serious decision, you must make your own tests.
 **The official documentation of each project can be accessed by clicking on the
 project name in the column header.**
 
-Feel free to open a PR to fix this table. Minio is missing because they do not provide a public S3 compatibility list.
+Feel free to open a PR to suggest fixes this table. Minio is missing because they do not provide a public S3 compatibility list.
 
 ## Update history
 
@@ -68,7 +68,8 @@ Some `x-amz-` headers are not implemented.
 implementation the url-encoded fields are in the same in ListObjects as they
 are in ListObjectsV2.
 
-*Note: Ceph API documentation is incomplete and miss at least HeadBucket and UploadPartCopy, but these endpoints are documented in [Red Hat Ceph Storage - Chapter 2. Ceph Object Gateway and the S3 API](https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/4/html/developer_guide/ceph-object-gateway-and-the-s3-api)*
+*Note: Ceph API documentation is incomplete and lacks at least HeadBucket and UploadPartCopy,
+but these endpoints are documented in [Red Hat Ceph Storage - Chapter 2. Ceph Object Gateway and the S3 API](https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/4/html/developer_guide/ceph-object-gateway-and-the-s3-api)*
 
 ### Multipart Upload endpoints
 
@@ -98,7 +99,7 @@ For more information, please refer to our [issue tracker](https://git.deuxfleurs
 
 **PutBucketWebsite:** Implemented, but only stores the index document suffix and the error document path. Redirects are not supported.
 
-*Note: Ceph radosgw has some support for static websites but it is different from the Amazon one plus it does not implement its configuration endpoints.*
+*Note: Ceph radosgw has some support for static websites but it is different from the Amazon one. It also does not implement its configuration endpoints.*
 
 ### ACL, Policies endpoints
 
@@ -146,7 +147,10 @@ Please open an issue if you have a use case for replication.
 | [GetBucketReplication](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketReplication.html) | ❌ Missing | ❌| ✅ | ❌| ❌|
 | [PutBucketReplication](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketReplication.html) | ❌ Missing | ❌| ⚠ | ❌| ❌|
 
-*Note: Ceph documentation briefly says that Ceph supports [replication though the S3 API](https://docs.ceph.com/en/latest/radosgw/multisite-sync-policy/#s3-replication-api) but with some limitations. Additionaly, replication endpoints are not documented in the S3 compatibility page so I don't know what kind of support we can expect.*
+*Note: Ceph documentation briefly says that Ceph supports
+[replication though the S3 API](https://docs.ceph.com/en/latest/radosgw/multisite-sync-policy/#s3-replication-api)
+but with some limitations.
+Additionaly, replication endpoints are not documented in the S3 compatibility page so I don't know what kind of support we can expect.*
 
 ### Locking objects
 
