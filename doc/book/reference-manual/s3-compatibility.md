@@ -60,7 +60,7 @@ Some `x-amz-` headers are not implemented.
 | [GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)                    | ✅ Implemented                      |  ✅ | ✅ | ✅ | ✅ |
 | [ListObjects](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html)                  | ✅ Implemented (see details below)   | ✅ | ✅ |  ✅ | ❌|
 | [ListObjectsV2](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html)                | ✅ Implemented                      | ❌|  ✅  | ❌| ✅ |
-| [PostObject](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html) (compatibility API)  | ✅ Implemented                      | ❌| ✅ | ❌| ❌|
+| [PostObject](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html)                  | ✅ Implemented                      | ❌| ✅ | ❌| ❌|
 | [PutObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)                    | ✅ Implemented                      | ✅ | ✅ | ✅ | ✅ |
 
 **ListObjects:** Implemented, but there isn't a very good specification of what
