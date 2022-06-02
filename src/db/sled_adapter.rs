@@ -44,50 +44,6 @@ impl SledDb {
 			.cloned()
 			.ok_or(Error("invalid tree id".into()))
 	}
-
-	pub fn export<'a>(&'a self) -> Result<Exporter<'a>> {
-		let mut trees = vec![];
-		for name in self.db.tree_names() {
-			let name = std::str::from_utf8(&name)
-				.map_err(|e| Error(format!("{}", e).into()))?
-				.to_string();
-			let tree = self.open_tree(&name)?;
-			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
-			trees.push((name, tree));
-		}
-		let trees_exporter: Exporter<'a> = Box::new(trees.into_iter().map(|(name, tree)| {
-			let iter: ValueIter<'a> = Box::new(tree.iter().map(|v| {
-				v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-					.map_err(Into::into)
-			}));
-			Ok((name.to_string(), iter))
-		}));
-		Ok(trees_exporter)
-	}
-
-	pub fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
-		for ex_tree in ex {
-			let (name, data) = ex_tree?;
-
-			let tree = self.open_tree(&name)?;
-			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
-			if !tree.is_empty() {
-				return Err(Error(format!("tree {} already contains data", name).into()));
-			}
-
-			let mut i = 0;
-			for item in data {
-				let (k, v) = item?;
-				tree.insert(k.as_ref(), v.as_ref())?;
-				i += 1;
-				if i % 1000 == 0 {
-					println!("{}: imported {}", name, i);
-				}
-			}
-			println!("{}: finished importing, {} items", name, i);
-		}
-		Ok(())
-	}
 }
 
 impl IDb for SledDb {
@@ -103,6 +59,8 @@ impl IDb for SledDb {
 			Ok(i)
 		}
 	}
+
+	// ----
 
 	fn get<'a>(&'a self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
 		let tree = self.get_tree(tree)?;
@@ -168,6 +126,8 @@ impl IDb for SledDb {
 		)))
 	}
 
+	// ----
+
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()> {
 		let trees = self.trees.read().unwrap();
 		let res = trees.0.transaction(|txtrees| {
@@ -184,12 +144,9 @@ impl IDb for SledDb {
 					assert!(tx.err.into_inner().is_none());
 					Err(ConflictableTransactionError::Abort(()))
 				}
-				TxFnResult::Err => {
-					let err = tx
-						.err
-						.into_inner()
-						.expect("Transaction did not store error");
-					Err(err.into())
+				TxFnResult::DbErr => {
+					let e = tx.err.into_inner().expect("No DB error");
+					Err(e.into())
 				}
 			}
 		});
@@ -199,6 +156,54 @@ impl IDb for SledDb {
 			Err(TransactionError::Storage(s)) => Err(TxError::Db(s.into())),
 		}
 	}
+
+	// ----
+
+	fn export<'a>(&'a self) -> Result<Exporter<'a>> {
+		let mut trees = vec![];
+		for name in self.db.tree_names() {
+			let name = std::str::from_utf8(&name)
+				.map_err(|e| Error(format!("{}", e).into()))?
+				.to_string();
+			let tree = self.open_tree(&name)?;
+			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
+			trees.push((name, tree));
+		}
+		let trees_exporter: Exporter<'a> = Box::new(trees.into_iter().map(|(name, tree)| {
+			let iter: ValueIter<'a> = Box::new(tree.iter().map(|v| {
+				v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+					.map_err(Into::into)
+			}));
+			Ok((name.to_string(), iter))
+		}));
+		Ok(trees_exporter)
+	}
+
+	fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
+		for ex_tree in ex {
+			let (name, data) = ex_tree?;
+
+			let tree = self.open_tree(&name)?;
+			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
+			if !tree.is_empty() {
+				return Err(Error(format!("tree {} already contains data", name).into()));
+			}
+
+			let mut i = 0;
+			for item in data {
+				let (k, v) = item?;
+				tree.insert(k.as_ref(), v.as_ref())?;
+				i += 1;
+				if i % 1000 == 0 {
+					println!("{}: imported {}", name, i);
+				}
+			}
+			println!("{}: finished importing, {} items", name, i);
+		}
+		Ok(())
+	}
+
+	// ----
 }
 
 // ----

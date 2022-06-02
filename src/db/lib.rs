@@ -1,4 +1,5 @@
 pub mod sled_adapter;
+pub mod sqlite_adapter;
 
 #[cfg(test)]
 pub mod test;
@@ -22,10 +23,10 @@ pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
 
 pub type Value<'a> = Cow<'a, [u8]>;
 pub type ValueIter<'a> =
-	Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + Send + Sync + 'a>;
+	Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + 'a>;
 
 pub type Exporter<'a> =
-	Box<dyn std::iter::Iterator<Item = Result<(String, ValueIter<'a>)>> + Send + Sync + 'a>;
+	Box<dyn std::iter::Iterator<Item = Result<(String, ValueIter<'a>)>> + 'a>;
 
 // ----
 
@@ -64,25 +65,39 @@ impl Db {
 			function: fun,
 			result: Cell::new(None),
 		};
-		match self.0.transaction(&f) {
-			Err(TxError::Db(e)) => Err(TxError::Db(e)),
-			Err(TxError::Abort(())) => {
-				let r = f
-					.result
-					.into_inner()
-					.expect("Transaction did not store result");
-				assert!(matches!(r, Err(TxError::Abort(_))));
-				r
-			}
+		let tx_res = self.0.transaction(&f);
+		let ret = f
+			.result
+			.into_inner()
+			.expect("Transaction did not store result");
+
+		match tx_res {
 			Ok(()) => {
-				let r = f
-					.result
-					.into_inner()
-					.expect("Transaction did not store result");
-				assert!(matches!(r, Ok(_)));
-				r
+				assert!(matches!(ret, Ok(_)));
+				ret
 			}
+			Err(TxError::Abort(())) => {
+				assert!(matches!(ret, Err(TxError::Abort(_))));
+				ret
+			}
+			Err(TxError::Db(e2)) => match ret {
+				// Ok was stored -> the error occured when finalizing
+				// transaction
+				Ok(_) => Err(TxError::Db(e2)),
+				// An error was already stored: that's the one we want to
+				// return
+				Err(TxError::Db(e)) => Err(TxError::Db(e)),
+				_ => unreachable!(),
+			},
 		}
+	}
+
+	pub fn export<'a>(&'a self) -> Result<Exporter<'a>> {
+		self.0.export()
+	}
+
+	pub fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
+		self.0.import(ex)
 	}
 }
 
@@ -181,14 +196,12 @@ impl<'a> Transaction<'a> {
 	// ----
 
 	#[must_use]
-	pub fn abort<R, E>(self, e: E) -> TxResult<R, E>
-	{
+	pub fn abort<R, E>(self, e: E) -> TxResult<R, E> {
 		Err(TxError::Abort(e))
 	}
 
 	#[must_use]
-	pub fn commit<R, E>(self, r: R) -> TxResult<R, E>
-	{
+	pub fn commit<R, E>(self, r: R) -> TxResult<R, E> {
 		Ok(r)
 	}
 }
@@ -221,6 +234,9 @@ pub(crate) trait IDb: Send + Sync {
 	) -> Result<ValueIter<'a>>;
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()>;
+
+	fn export<'a>(&'a self) -> Result<Exporter<'a>>;
+	fn import<'a>(&self, ex: Exporter<'a>) -> Result<()>;
 }
 
 pub(crate) trait ITx<'a> {
@@ -251,10 +267,10 @@ pub(crate) trait ITxFn {
 	fn try_on<'a>(&'a self, tx: &'a dyn ITx<'a>) -> TxFnResult;
 }
 
-enum TxFnResult {
-	Abort,
+pub(crate) enum TxFnResult {
 	Ok,
-	Err,
+	Abort,
+	DbErr,
 }
 
 struct TxFn<F, R, E>
@@ -271,13 +287,13 @@ where
 {
 	fn try_on<'a>(&'a self, tx: &'a dyn ITx<'a>) -> TxFnResult {
 		let res = (self.function)(Transaction(tx));
-		let retval = match &res {
+		let res2 = match &res {
 			Ok(_) => TxFnResult::Ok,
 			Err(TxError::Abort(_)) => TxFnResult::Abort,
-			Err(TxError::Db(_)) => TxFnResult::Err,
+			Err(TxError::Db(_)) => TxFnResult::DbErr,
 		};
 		self.result.set(Some(res));
-		retval
+		res2
 	}
 }
 
