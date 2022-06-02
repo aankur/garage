@@ -1,6 +1,5 @@
 use core::ops::Bound;
 
-use std::cell::Cell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::ptr::NonNull;
@@ -133,41 +132,8 @@ impl IDb for SqliteDb {
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
 
-		let mut sql = format!("SELECT k, v FROM {}", tree);
-		let mut params: Vec<Vec<u8>> = vec![];
-
-		match low {
-			Bound::Included(b) => {
-				sql.push_str(" WHERE k >= ?1");
-				params.push(b.to_vec());
-			}
-			Bound::Excluded(b) => {
-				sql.push_str(" WHERE k > ?1");
-				params.push(b.to_vec());
-			}
-			Bound::Unbounded => (),
-		};
-
-		match high {
-			Bound::Included(b) => {
-				if !params.is_empty() {
-					sql.push_str(" AND k <= ?2");
-				} else {
-					sql.push_str(" WHERE k <= ?1");
-				}
-				params.push(b.to_vec());
-			}
-			Bound::Excluded(b) => {
-				if !params.is_empty() {
-					sql.push_str(" AND k < ?2");
-				} else {
-					sql.push_str(" WHERE k < ?1");
-				}
-				params.push(b.to_vec());
-			}
-			Bound::Unbounded => (),
-		}
-		sql.push_str(" ORDER BY k ASC");
+		let (bounds_sql, params) = bounds_sql(low, high);
+		let sql = format!("SELECT k, v FROM {} {} ORDER BY k ASC", tree, bounds_sql);
 
 		let params = params
 			.iter()
@@ -187,41 +153,8 @@ impl IDb for SqliteDb {
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
 
-		let mut sql = format!("SELECT k, v FROM {}", tree);
-		let mut params: Vec<Vec<u8>> = vec![];
-
-		match low {
-			Bound::Included(b) => {
-				sql.push_str(" WHERE k >= ?1");
-				params.push(b.to_vec());
-			}
-			Bound::Excluded(b) => {
-				sql.push_str(" WHERE k > ?1");
-				params.push(b.to_vec());
-			}
-			Bound::Unbounded => (),
-		};
-
-		match high {
-			Bound::Included(b) => {
-				if !params.is_empty() {
-					sql.push_str(" AND k <= ?2");
-				} else {
-					sql.push_str(" WHERE k <= ?1");
-				}
-				params.push(b.to_vec());
-			}
-			Bound::Excluded(b) => {
-				if !params.is_empty() {
-					sql.push_str(" AND k < ?2");
-				} else {
-					sql.push_str(" WHERE k < ?1");
-				}
-				params.push(b.to_vec());
-			}
-			Bound::Unbounded => (),
-		}
-		sql.push_str(" ORDER BY k DESC");
+		let (bounds_sql, params) = bounds_sql(low, high);
+		let sql = format!("SELECT k, v FROM {} {} ORDER BY k DESC", tree, bounds_sql);
 
 		let params = params
 			.iter()
@@ -428,4 +361,45 @@ impl<'a> Iterator for DbValueIteratorPin<'a> {
 		};
 		Some(Ok((k.into(), v.into())))
 	}
+}
+
+// ----
+
+fn bounds_sql<'r>(low: Bound<&'r [u8]>, high: Bound<&'r [u8]>) -> (String, Vec<Vec<u8>>) {
+	let mut sql = String::new();
+	let mut params: Vec<Vec<u8>> = vec![];
+
+	match low {
+		Bound::Included(b) => {
+			sql.push_str(" WHERE k >= ?1");
+			params.push(b.to_vec());
+		}
+		Bound::Excluded(b) => {
+			sql.push_str(" WHERE k > ?1");
+			params.push(b.to_vec());
+		}
+		Bound::Unbounded => (),
+	};
+
+	match high {
+		Bound::Included(b) => {
+			if !params.is_empty() {
+				sql.push_str(" AND k <= ?2");
+			} else {
+				sql.push_str(" WHERE k <= ?1");
+			}
+			params.push(b.to_vec());
+		}
+		Bound::Excluded(b) => {
+			if !params.is_empty() {
+				sql.push_str(" AND k < ?2");
+			} else {
+				sql.push_str(" WHERE k < ?1");
+			}
+			params.push(b.to_vec());
+		}
+		Bound::Unbounded => (),
+	}
+
+	(sql, params)
 }
