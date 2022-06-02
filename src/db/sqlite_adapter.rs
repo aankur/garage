@@ -132,7 +132,52 @@ impl IDb for SqliteDb {
 		high: Bound<&'r [u8]>,
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
-		unimplemented!();
+
+		let mut sql = format!("SELECT k, v FROM {}", tree);
+		let mut params: Vec<Vec<u8>> = vec![];
+
+		match low {
+			Bound::Included(b) => {
+				sql.push_str(" WHERE k >= ?1");
+				params.push(b.to_vec());
+			}
+			Bound::Excluded(b) => {
+				sql.push_str(" WHERE k > ?1");
+				params.push(b.to_vec());
+			}
+			Bound::Unbounded => (),
+		};
+
+		match high {
+			Bound::Included(b) => {
+				if !params.is_empty() {
+					sql.push_str(" AND k <= ?2");
+				} else {
+					sql.push_str(" WHERE k <= ?1");
+				}
+				params.push(b.to_vec());
+			}
+			Bound::Excluded(b) => {
+				if !params.is_empty() {
+					sql.push_str(" AND k < ?2");
+				} else {
+					sql.push_str(" WHERE k < ?1");
+				}
+				params.push(b.to_vec());
+			}
+			Bound::Unbounded => (),
+		}
+		sql.push_str(" ORDER BY k ASC");
+
+		let params = params
+			.iter()
+			.map(|x| x as &dyn rusqlite::ToSql)
+			.collect::<Vec<_>>();
+		DbValueIterator::new::<&[&dyn rusqlite::ToSql]>(
+			self.db.lock().unwrap(),
+			&sql,
+			params.as_ref(),
+		)
 	}
 	fn range_rev<'a, 'r>(
 		&'a self,
@@ -141,7 +186,52 @@ impl IDb for SqliteDb {
 		high: Bound<&'r [u8]>,
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
-		unimplemented!();
+
+		let mut sql = format!("SELECT k, v FROM {}", tree);
+		let mut params: Vec<Vec<u8>> = vec![];
+
+		match low {
+			Bound::Included(b) => {
+				sql.push_str(" WHERE k >= ?1");
+				params.push(b.to_vec());
+			}
+			Bound::Excluded(b) => {
+				sql.push_str(" WHERE k > ?1");
+				params.push(b.to_vec());
+			}
+			Bound::Unbounded => (),
+		};
+
+		match high {
+			Bound::Included(b) => {
+				if !params.is_empty() {
+					sql.push_str(" AND k <= ?2");
+				} else {
+					sql.push_str(" WHERE k <= ?1");
+				}
+				params.push(b.to_vec());
+			}
+			Bound::Excluded(b) => {
+				if !params.is_empty() {
+					sql.push_str(" AND k < ?2");
+				} else {
+					sql.push_str(" WHERE k < ?1");
+				}
+				params.push(b.to_vec());
+			}
+			Bound::Unbounded => (),
+		}
+		sql.push_str(" ORDER BY k DESC");
+
+		let params = params
+			.iter()
+			.map(|x| x as &dyn rusqlite::ToSql)
+			.collect::<Vec<_>>();
+		DbValueIterator::new::<&[&dyn rusqlite::ToSql]>(
+			self.db.lock().unwrap(),
+			&sql,
+			params.as_ref(),
+		)
 	}
 
 	// ----
