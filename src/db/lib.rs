@@ -6,9 +6,9 @@ pub mod test;
 use core::ops::{Bound, RangeBounds};
 
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::sync::Arc;
 
-use arc_swap::ArcSwapOption;
 use err_derive::Error;
 
 #[derive(Clone)]
@@ -25,7 +25,7 @@ pub type ValueIter<'a> =
 	Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + Send + Sync + 'a>;
 
 pub type Exporter<'a> =
-	Box<dyn std::iter::Iterator<Item=Result<(String, ValueIter<'a>)>> + Send + Sync + 'a>;
+	Box<dyn std::iter::Iterator<Item = Result<(String, ValueIter<'a>)>> + Send + Sync + 'a>;
 
 // ----
 
@@ -59,30 +59,26 @@ impl Db {
 	pub fn transaction<R, E, F>(&self, fun: F) -> TxResult<R, E>
 	where
 		F: Fn(Transaction<'_>) -> TxResult<R, E>,
-		R: Send + Sync,
-		E: Send + Sync,
 	{
 		let f = TxFn {
 			function: fun,
-			result: ArcSwapOption::new(None),
+			result: Cell::new(None),
 		};
 		match self.0.transaction(&f) {
 			Err(TxError::Db(e)) => Err(TxError::Db(e)),
 			Err(TxError::Abort(())) => {
-				let r_arc = f
+				let r = f
 					.result
 					.into_inner()
 					.expect("Transaction did not store result");
-				let r = Arc::try_unwrap(r_arc).ok().expect("Many refs");
 				assert!(matches!(r, Err(TxError::Abort(_))));
 				r
 			}
 			Ok(()) => {
-				let r_arc = f
+				let r = f
 					.result
 					.into_inner()
 					.expect("Transaction did not store result");
-				let r = Arc::try_unwrap(r_arc).ok().expect("Many refs");
 				assert!(matches!(r, Ok(_)));
 				r
 			}
@@ -186,18 +182,12 @@ impl<'a> Transaction<'a> {
 
 	#[must_use]
 	pub fn abort<R, E>(self, e: E) -> TxResult<R, E>
-	where
-		R: Send + Sync,
-		E: Send + Sync,
 	{
 		Err(TxError::Abort(e))
 	}
 
 	#[must_use]
 	pub fn commit<R, E>(self, r: R) -> TxResult<R, E>
-	where
-		R: Send + Sync,
-		E: Send + Sync,
 	{
 		Ok(r)
 	}
@@ -270,18 +260,14 @@ enum TxFnResult {
 struct TxFn<F, R, E>
 where
 	F: Fn(Transaction<'_>) -> TxResult<R, E>,
-	R: Send + Sync,
-	E: Send + Sync,
 {
 	function: F,
-	result: ArcSwapOption<TxResult<R, E>>,
+	result: Cell<Option<TxResult<R, E>>>,
 }
 
 impl<F, R, E> ITxFn for TxFn<F, R, E>
 where
 	F: Fn(Transaction<'_>) -> TxResult<R, E>,
-	R: Send + Sync,
-	E: Send + Sync,
 {
 	fn try_on<'a>(&'a self, tx: &'a dyn ITx<'a>) -> TxFnResult {
 		let res = (self.function)(Transaction(tx));
@@ -290,7 +276,7 @@ where
 			Err(TxError::Abort(_)) => TxFnResult::Abort,
 			Err(TxError::Db(_)) => TxFnResult::Err,
 		};
-		self.result.store(Some(Arc::new(res)));
+		self.result.set(Some(res));
 		retval
 	}
 }

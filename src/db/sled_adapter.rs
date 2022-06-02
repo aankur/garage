@@ -1,16 +1,17 @@
 use core::ops::Bound;
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-
-use arc_swap::ArcSwapOption;
 
 use sled::transaction::{
 	ConflictableTransactionError, TransactionError, Transactional, TransactionalTree,
 	UnabortableTransactionError,
 };
 
-use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter, Exporter};
+use crate::{
+	Db, Error, Exporter, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
+};
 
 pub use sled;
 
@@ -47,20 +48,20 @@ impl SledDb {
 	pub fn export<'a>(&'a self) -> Result<Exporter<'a>> {
 		let mut trees = vec![];
 		for name in self.db.tree_names() {
-			let name = std::str::from_utf8(&name).map_err(|e| Error(format!("{}", e).into()))?.to_string();
+			let name = std::str::from_utf8(&name)
+				.map_err(|e| Error(format!("{}", e).into()))?
+				.to_string();
 			let tree = self.open_tree(&name)?;
 			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
 			trees.push((name, tree));
 		}
-		let trees_exporter: Exporter<'a> = Box::new(trees
-			.into_iter()
-			.map(|(name, tree)| {
-				let iter: ValueIter<'a> = Box::new(tree.iter().map(|v| {
-					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-						.map_err(Into::into)
-				}));
-				Ok((name.to_string(), iter))
+		let trees_exporter: Exporter<'a> = Box::new(trees.into_iter().map(|(name, tree)| {
+			let iter: ValueIter<'a> = Box::new(tree.iter().map(|v| {
+				v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+					.map_err(Into::into)
 			}));
+			Ok((name.to_string(), iter))
+		}));
 		Ok(trees_exporter)
 	}
 
@@ -172,7 +173,7 @@ impl IDb for SledDb {
 		let res = trees.0.transaction(|txtrees| {
 			let tx = SledTx {
 				trees: txtrees,
-				err: ArcSwapOption::new(None),
+				err: Cell::new(None),
 			};
 			match f.try_on(&tx) {
 				TxFnResult::Ok => {
@@ -184,11 +185,10 @@ impl IDb for SledDb {
 					Err(ConflictableTransactionError::Abort(()))
 				}
 				TxFnResult::Err => {
-					let err_arc = tx
+					let err = tx
 						.err
 						.into_inner()
 						.expect("Transaction did not store error");
-					let err = Arc::try_unwrap(err_arc).ok().expect("Many refs");
 					Err(err.into())
 				}
 			}
@@ -205,14 +205,14 @@ impl IDb for SledDb {
 
 struct SledTx<'a> {
 	trees: &'a [TransactionalTree],
-	err: ArcSwapOption<UnabortableTransactionError>,
+	err: Cell<Option<UnabortableTransactionError>>,
 }
 
 impl<'a> SledTx<'a> {
 	fn get_tree(&self, i: usize) -> Result<&TransactionalTree> {
-		self.trees
-			.get(i)
-			.ok_or(Error("invalid tree id (it might have been openned after the transaction started)".into()))
+		self.trees.get(i).ok_or(Error(
+			"invalid tree id (it might have been openned after the transaction started)".into(),
+		))
 	}
 
 	fn save_error<R>(&self, v: std::result::Result<R, UnabortableTransactionError>) -> Result<R> {
@@ -220,7 +220,7 @@ impl<'a> SledTx<'a> {
 			Ok(x) => Ok(x),
 			Err(e) => {
 				let txt = format!("{}", e);
-				self.err.store(Some(Arc::new(e)));
+				self.err.set(Some(e));
 				Err(Error(txt.into()))
 			}
 		}
