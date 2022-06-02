@@ -1,11 +1,12 @@
 use core::ops::Bound;
 
 use std::cell::Cell;
-use std::sync::{Arc, Mutex, RwLock, MutexGuard};
+use std::marker::PhantomPinned;
+use std::pin::Pin;
+use std::ptr::NonNull;
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
-use ouroboros::self_referencing;
-
-use rusqlite::{params, Connection, Transaction};
+use rusqlite::{params, Connection, Rows, Statement, Transaction};
 
 use crate::{
 	Db, Error, Exporter, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
@@ -114,16 +115,14 @@ impl IDb for SqliteDb {
 
 	fn iter<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
-		let db = self.db.lock().unwrap();
 		let sql = format!("SELECT k, v FROM {} ORDER BY k ASC", tree);
-		let mut stmt = db.prepare(&sql)?; 
-		let res = stmt.query([])?;
-		unimplemented!();
+		DbValueIterator::new(self.db.lock().unwrap(), &sql, [])
 	}
 
 	fn iter_rev<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
-		unimplemented!();
+		let sql = format!("SELECT k, v FROM {} ORDER BY k DESC", tree);
+		DbValueIterator::new(self.db.lock().unwrap(), &sql, [])
 	}
 
 	fn range<'a, 'r>(
@@ -263,3 +262,80 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 	}
 }
 
+// ----
+
+struct DbValueIterator<'a> {
+	db: Option<MutexGuard<'a, Connection>>,
+	stmt: Option<Statement<'a>>,
+	iter: Option<Rows<'a>>,
+	_pin: PhantomPinned,
+}
+
+impl<'a> DbValueIterator<'a> {
+	fn new<P: rusqlite::Params>(
+		db: MutexGuard<'a, Connection>,
+		sql: &str,
+		args: P,
+	) -> Result<ValueIter<'a>> {
+		let res = DbValueIterator {
+			db: Some(db),
+			stmt: None,
+			iter: None,
+			_pin: PhantomPinned,
+		};
+		let mut boxed = Box::pin(res);
+
+		unsafe {
+			let db = NonNull::from(&boxed.db);
+			let stmt = db.as_ref().as_ref().unwrap().prepare(&sql)?;
+
+			let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut boxed);
+			Pin::get_unchecked_mut(mut_ref).stmt = Some(stmt);
+
+			let mut stmt = NonNull::from(&boxed.stmt);
+			let iter = stmt.as_mut().as_mut().unwrap().query(args)?;
+
+			let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut boxed);
+			Pin::get_unchecked_mut(mut_ref).iter = Some(iter);
+		}
+
+		Ok(Box::new(DbValueIteratorPin(boxed)))
+	}
+}
+
+struct DbValueIteratorPin<'a>(Pin<Box<DbValueIterator<'a>>>);
+
+impl<'a> Iterator for DbValueIteratorPin<'a> {
+	type Item = Result<(Value<'a>, Value<'a>)>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		let next = unsafe {
+			let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut self.0);
+			Pin::get_unchecked_mut(mut_ref).iter.as_mut()?.next()
+		};
+		let row = match next {
+			Err(e) => return Some(Err(e.into())),
+			Ok(None) => {
+				// finished, drop everything
+				unsafe {
+					let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut self.0);
+					let t = Pin::get_unchecked_mut(mut_ref);
+					drop(t.iter.take());
+					drop(t.stmt.take());
+					drop(t.db.take());
+				}
+				return None;
+			}
+			Ok(Some(r)) => r,
+		};
+		let k = match row.get::<_, Vec<u8>>(0) {
+			Err(e) => return Some(Err(e.into())),
+			Ok(x) => x,
+		};
+		let v = match row.get::<_, Vec<u8>>(1) {
+			Err(e) => return Some(Err(e.into())),
+			Ok(y) => y,
+		};
+		Some(Ok((k.into(), v.into())))
+	}
+}

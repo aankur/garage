@@ -89,33 +89,33 @@ where
 
 	async fn updater_loop(self: Arc<Self>, mut must_exit: watch::Receiver<bool>) {
 		while !*must_exit.borrow() {
-			if let Some(x) = self.data.merkle_todo.iter().unwrap().next() {
-				// TODO unwrap to remove
-				match x {
-					Ok((key, valhash)) => {
-						if let Err(e) = self.update_item(&key[..], &valhash[..]) {
-							warn!(
-								"({}) Error while updating Merkle tree item: {}",
-								F::TABLE_NAME,
-								e
-							);
-						}
-					}
-					Err(e) => {
-						warn!(
-							"({}) Error while iterating on Merkle todo tree: {}",
-							F::TABLE_NAME,
-							e
-						);
-						tokio::time::sleep(Duration::from_secs(10)).await;
+			match self.updater_loop_iter() {
+				Ok(true) => (),
+				Ok(false) => {
+					select! {
+						_ = self.data.merkle_todo_notify.notified().fuse() => {},
+						_ = must_exit.changed().fuse() => {},
 					}
 				}
-			} else {
-				select! {
-					_ = self.data.merkle_todo_notify.notified().fuse() => {},
-					_ = must_exit.changed().fuse() => {},
+				Err(e) => {
+					warn!(
+						"({}) Error while updating Merkle tree item: {}",
+						F::TABLE_NAME,
+						e
+					);
+					tokio::time::sleep(Duration::from_secs(10)).await;
 				}
 			}
+		}
+	}
+
+	fn updater_loop_iter(&self) -> Result<bool, Error> {
+		if let Some(x) = self.data.merkle_todo.iter()?.next() {
+			let (key, valhash) = x?;
+			self.update_item(&key[..], &valhash[..])?;
+			Ok(true)
+		} else {
+			Ok(false)
 		}
 	}
 

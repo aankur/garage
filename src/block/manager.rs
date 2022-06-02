@@ -547,9 +547,7 @@ impl BlockManager {
 	// - Ok(false) -> no block was processed, but we are ready for the next iteration
 	// - Err(_) -> a Sled error occurred when reading/writing from resync_queue/resync_errors
 	async fn resync_iter(&self, must_exit: &mut watch::Receiver<bool>) -> Result<bool, db::Error> {
-		if let Some(first_pair_res) = self.resync_queue.iter()?.next() {
-			let (time_bytes, hash_bytes) = first_pair_res?;
-
+		if let Some((time_bytes, hash_bytes)) = self.resync_get_next()? {
 			let time_msec = u64::from_be_bytes(time_bytes[0..8].try_into().unwrap());
 			let now = now_msec();
 
@@ -639,6 +637,16 @@ impl BlockManager {
 				_ = must_exit.changed().fuse() => {},
 			}
 			Ok(false)
+		}
+	}
+
+	fn resync_get_next(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, db::Error> {
+		match self.resync_queue.iter()?.next() {
+			None => Ok(None),
+			Some(v) => {
+				let (time_bytes, hash_bytes) = v?;
+				Ok(Some((time_bytes.into_owned(), hash_bytes.into_owned())))
+			}
 		}
 	}
 

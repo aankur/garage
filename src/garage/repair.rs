@@ -66,18 +66,10 @@ impl Repair {
 	async fn repair_versions(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		let mut pos = vec![];
 
-		while let Some(item) = self
-			.garage
-			.version_table
-			.data
-			.store
-			.range((Bound::Excluded(pos), Bound::Unbounded))?
-			.next()
-		{
-			let (item_key, item_bytes) = item?;
-			pos = item_key.to_vec();
+		while let Some((item_key, item_bytes)) = self.get_next_version_after(&pos)? {
+			pos = item_key;
 
-			let version = rmp_serde::decode::from_read_ref::<_, Version>(item_bytes.as_ref())?;
+			let version = rmp_serde::decode::from_read_ref::<_, Version>(&item_bytes)?;
 			if version.deleted.get() {
 				continue;
 			}
@@ -113,22 +105,30 @@ impl Repair {
 		Ok(())
 	}
 
+	fn get_next_version_after(&self, pos: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+		match self
+			.garage
+			.version_table
+			.data
+			.store
+			.range::<&[u8], _>((Bound::Excluded(pos), Bound::Unbounded))?
+			.next()
+		{
+			None => Ok(None),
+			Some(item) => {
+				let (item_key, item_bytes) = item?;
+				Ok(Some((item_key.into_owned(), item_bytes.into_owned())))
+			}
+		}
+	}
+
 	async fn repair_block_ref(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		let mut pos = vec![];
 
-		while let Some(item) = self
-			.garage
-			.block_ref_table
-			.data
-			.store
-			.range((Bound::Excluded(pos), Bound::Unbounded))?
-			.next()
-		{
-			let (item_key, item_bytes) = item?;
+		while let Some((item_key, item_bytes)) = self.get_next_block_ref_after(&pos)? {
+			pos = item_key;
 
-			pos = item_key.to_vec();
-
-			let block_ref = rmp_serde::decode::from_read_ref::<_, BlockRef>(item_bytes.as_ref())?;
+			let block_ref = rmp_serde::decode::from_read_ref::<_, BlockRef>(&item_bytes)?;
 			if block_ref.deleted.get() {
 				continue;
 			}
@@ -159,5 +159,22 @@ impl Repair {
 			}
 		}
 		Ok(())
+	}
+
+	fn get_next_block_ref_after(&self, pos: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+		match self
+			.garage
+			.block_ref_table
+			.data
+			.store
+			.range::<&[u8], _>((Bound::Excluded(pos), Bound::Unbounded))?
+			.next()
+		{
+			None => Ok(None),
+			Some(item) => {
+				let (item_key, item_bytes) = item?;
+				Ok(Some((item_key.into_owned(), item_bytes.into_owned())))
+			}
+		}
 	}
 }
