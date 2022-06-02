@@ -23,7 +23,7 @@ pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
 
 pub type Value<'a> = Cow<'a, [u8]>;
 pub type ValueIter<'a> =
-	Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + 'a>;
+	Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + Send + 'a>;
 
 pub type Exporter<'a> =
 	Box<dyn std::iter::Iterator<Item = Result<(String, ValueIter<'a>)>> + 'a>;
