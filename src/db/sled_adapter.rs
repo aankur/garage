@@ -12,6 +12,8 @@ use sled::transaction::{
 
 use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
 
+pub use sled;
+
 impl From<sled::Error> for Error {
 	fn from(e: sled::Error) -> Error {
 		Error(format!("{}", e).into())

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use tokio::sync::watch;
 
+use garage_db as db;
+
 use garage_util::background::*;
 use garage_util::config::*;
 use garage_util::error::Error;
@@ -32,13 +34,13 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 	info!("Opening database...");
 	let mut db_path = config.metadata_dir.clone();
 	db_path.push("db");
-	let db = sled::Config::default()
+	let db = db::sled_adapter::sled::Config::default()
 		.path(&db_path)
 		.cache_capacity(config.sled_cache_capacity)
 		.flush_every_ms(Some(config.sled_flush_every_ms))
 		.open()
 		.expect("Unable to open sled DB");
-	let db = garage_db::sled_adapter::SledDb::new(db);
+	let db = db::sled_adapter::SledDb::new(db);
 
 	info!("Initializing background runner...");
 	let watch_cancel = netapp::util::watch_ctrl_c();

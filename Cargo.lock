@@ -912,7 +912,6 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "sha2",
- "sled",
  "static_init",
  "structopt",
  "tokio",
