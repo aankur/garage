@@ -258,7 +258,7 @@ where
 		while !*must_exit.borrow() {
 			let mut items = Vec::new();
 
-			for item in self.data.store.range(begin.to_vec()..end.to_vec()) {
+			for item in self.data.store.range(begin.to_vec()..end.to_vec())? {
 				let (key, value) = item?;
 				items.push((key.to_vec(), Arc::new(ByteBuf::from(value.as_ref()))));
 
@@ -603,7 +603,8 @@ impl SyncTodo {
 			let retain = nodes.contains(&my_id);
 			if !retain {
 				// Check if we have some data to send, otherwise skip
-				if data.store.range(begin..end).next().is_none() {
+				if data.store.range(begin..end).unwrap().next().is_none() {
+					// TODO fix unwrap
 					continue;
 				}
 			}

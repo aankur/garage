@@ -1,6 +1,6 @@
 use opentelemetry::{global, metrics::*, KeyValue};
 
-use garage_util::sled_counter::SledCountedTree;
+use garage_db as db;
 
 /// TableMetrics reference all counter used for metrics
 pub struct TableMetrics {
@@ -19,11 +19,7 @@ pub struct TableMetrics {
 	pub(crate) sync_items_received: Counter<u64>,
 }
 impl TableMetrics {
-	pub fn new(
-		table_name: &'static str,
-		merkle_todo: sled::Tree,
-		gc_todo: SledCountedTree,
-	) -> Self {
+	pub fn new(table_name: &'static str, merkle_todo: db::Tree, gc_todo: db::Tree) -> Self {
 		let meter = global::meter(table_name);
 		TableMetrics {
 			_merkle_todo_len: meter
@@ -31,7 +27,7 @@ impl TableMetrics {
 					"table.merkle_updater_todo_queue_length",
 					move |observer| {
 						observer.observe(
-							merkle_todo.len() as u64,
+							merkle_todo.len().unwrap() as u64, // TODO fix unwrap
 							&[KeyValue::new("table_name", table_name)],
 						)
 					},
@@ -43,7 +39,7 @@ impl TableMetrics {
 					"table.gc_todo_queue_length",
 					move |observer| {
 						observer.observe(
-							gc_todo.len() as u64,
+							gc_todo.len().unwrap() as u64, // TODO fix unwrap
 							&[KeyValue::new("table_name", table_name)],
 						)
 					},

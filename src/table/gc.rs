@@ -12,9 +12,10 @@ use futures::select;
 use futures_util::future::*;
 use tokio::sync::watch;
 
+use garage_db as db;
+
 use garage_util::data::*;
 use garage_util::error::*;
-use garage_util::sled_counter::SledCountedTree;
 use garage_util::time::*;
 
 use garage_rpc::system::System;
@@ -106,7 +107,7 @@ where
 		// List entries in the GC todo list
 		// These entries are put there when a tombstone is inserted in the table
 		// (see update_entry in data.rs)
-		for entry_kv in self.data.gc_todo.iter() {
+		for entry_kv in self.data.gc_todo.iter()? {
 			let (k, vhash) = entry_kv?;
 			let mut todo_entry = GcTodoEntry::parse(&k, &vhash);
 
@@ -353,17 +354,17 @@ impl GcTodoEntry {
 	}
 
 	/// Parses a GcTodoEntry from a (k, v) pair stored in the gc_todo tree
-	pub(crate) fn parse(sled_k: &[u8], sled_v: &[u8]) -> Self {
+	pub(crate) fn parse(db_k: &[u8], db_v: &[u8]) -> Self {
 		Self {
-			tombstone_timestamp: u64::from_be_bytes(sled_k[0..8].try_into().unwrap()),
-			key: sled_k[8..].to_vec(),
-			value_hash: Hash::try_from(sled_v).unwrap(),
+			tombstone_timestamp: u64::from_be_bytes(db_k[0..8].try_into().unwrap()),
+			key: db_k[8..].to_vec(),
+			value_hash: Hash::try_from(db_v).unwrap(),
 			value: None,
 		}
 	}
 
 	/// Saves the GcTodoEntry in the gc_todo tree
-	pub(crate) fn save(&self, gc_todo_tree: &SledCountedTree) -> Result<(), Error> {
+	pub(crate) fn save(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
 		gc_todo_tree.insert(self.todo_table_key(), self.value_hash.as_slice())?;
 		Ok(())
 	}
@@ -373,12 +374,15 @@ impl GcTodoEntry {
 	/// This is usefull to remove a todo entry only under the condition
 	/// that it has not changed since the time it was read, i.e.
 	/// what we have to do is still the same
-	pub(crate) fn remove_if_equal(&self, gc_todo_tree: &SledCountedTree) -> Result<(), Error> {
-		let _ = gc_todo_tree.compare_and_swap::<_, _, Vec<u8>>(
-			&self.todo_table_key()[..],
-			Some(self.value_hash),
-			None,
-		)?;
+	pub(crate) fn remove_if_equal(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
+		let key = self.todo_table_key();
+		gc_todo_tree.db().transaction(|tx| {
+			let old_val = tx.get(gc_todo_tree, &key)?;
+			if old_val == Some(self.value_hash.as_slice().into()) {
+				tx.remove(gc_todo_tree, &key)?;
+			}
+			tx.commit(())
+		})?;
 		Ok(())
 	}
 

@@ -26,8 +26,6 @@ hexdump = "0.1"
 tracing = "0.1.30"
 rand = "0.8"
 
-sled = "0.34"
-
 rmp-serde = "0.15"
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
 serde_bytes = "0.11"

@@ -727,7 +727,7 @@ impl AdminRpcHandler {
 	{
 		writeln!(to, "\nTable stats for {}", F::TABLE_NAME).unwrap();
 		if opt.detailed {
-			writeln!(to, "  number of items: {}", t.data.store.len()).unwrap();
+			writeln!(to, "  number of items: {}", t.data.store.len().unwrap()).unwrap(); // TODO fix len unwrap
 			writeln!(
 				to,
 				"  Merkle tree size: {}",

@@ -1,3 +1,4 @@
+use core::ops::Bound;
 use std::sync::Arc;
 
 use tokio::sync::watch;
@@ -65,9 +66,15 @@ impl Repair {
 	async fn repair_versions(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		let mut pos = vec![];
 
-		while let Some((item_key, item_bytes)) =
-			self.garage.version_table.data.store.get_gt(&pos)?
+		while let Some(item) = self
+			.garage
+			.version_table
+			.data
+			.store
+			.range((Bound::Excluded(pos), Bound::Unbounded))?
+			.next()
 		{
+			let (item_key, item_bytes) = item?;
 			pos = item_key.to_vec();
 
 			let version = rmp_serde::decode::from_read_ref::<_, Version>(item_bytes.as_ref())?;
@@ -109,9 +116,16 @@ impl Repair {
 	async fn repair_block_ref(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		let mut pos = vec![];
 
-		while let Some((item_key, item_bytes)) =
-			self.garage.block_ref_table.data.store.get_gt(&pos)?
+		while let Some(item) = self
+			.garage
+			.block_ref_table
+			.data
+			.store
+			.range((Bound::Excluded(pos), Bound::Unbounded))?
+			.next()
 		{
+			let (item_key, item_bytes) = item?;
+
 			pos = item_key.to_vec();
 
 			let block_ref = rmp_serde::decode::from_read_ref::<_, BlockRef>(item_bytes.as_ref())?;

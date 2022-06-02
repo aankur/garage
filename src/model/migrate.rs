@@ -25,7 +25,7 @@ impl Migrate {
 			.open_tree("bucket:table")
 			.map_err(GarageError::from)?;
 
-		for res in tree.iter() {
+		for res in tree.iter().map_err(GarageError::from)? {
 			let (_k, v) = res.map_err(GarageError::from)?;
 			let bucket = rmp_serde::decode::from_read_ref::<_, old_bucket::Bucket>(&v[..])
 				.map_err(GarageError::from)?;

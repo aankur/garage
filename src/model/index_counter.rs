@@ -6,6 +6,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch};
 
+use garage_db as db;
+
 use garage_rpc::ring::Ring;
 use garage_rpc::system::System;
 use garage_util::data::*;
@@ -135,7 +137,7 @@ impl<T: CounterSchema> TableSchema for CounterTable<T> {
 
 pub struct IndexCounter<T: CounterSchema> {
 	this_node: Uuid,
-	local_counter: sled::Tree,
+	local_counter: db::Tree,
 	propagate_tx: mpsc::UnboundedSender<(T::P, T::S, LocalCounterEntry)>,
 	pub table: Arc<Table<CounterTable<T>, TableShardedReplication>>,
 }
@@ -144,7 +146,7 @@ impl<T: CounterSchema> IndexCounter<T> {
 	pub fn new(
 		system: Arc<System>,
 		replication: TableShardedReplication,
-		db: &sled::Db,
+		db: &db::Db,
 	) -> Arc<Self> {
 		let background = system.background.clone();
 
@@ -177,12 +179,12 @@ impl<T: CounterSchema> IndexCounter<T> {
 	pub fn count(&self, pk: &T::P, sk: &T::S, counts: &[(&str, i64)]) -> Result<(), Error> {
 		let tree_key = self.table.data.tree_key(pk, sk);
 
-		let new_entry = self.local_counter.transaction(|tx| {
-			let mut entry = match tx.get(&tree_key[..])? {
+		let new_entry = self.local_counter.db().transaction(|tx| {
+			let mut entry = match tx.get(&self.local_counter, &tree_key[..])? {
 				Some(old_bytes) => {
 					rmp_serde::decode::from_read_ref::<_, LocalCounterEntry>(&old_bytes)
 						.map_err(Error::RmpDecode)
-						.map_err(sled::transaction::ConflictableTransactionError::Abort)?
+						.map_err(db::TxError::Abort)?
 				}
 				None => LocalCounterEntry {
 					values: BTreeMap::new(),
@@ -197,8 +199,8 @@ impl<T: CounterSchema> IndexCounter<T> {
 
 			let new_entry_bytes = rmp_to_vec_all_named(&entry)
 				.map_err(Error::RmpEncode)
-				.map_err(sled::transaction::ConflictableTransactionError::Abort)?;
-			tx.insert(&tree_key[..], new_entry_bytes)?;
+				.map_err(db::TxError::Abort)?;
+			tx.insert(&self.local_counter, &tree_key[..], new_entry_bytes)?;
 
 			Ok(entry)
 		})?;

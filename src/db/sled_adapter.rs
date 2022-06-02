@@ -1,3 +1,5 @@
+use core::ops::Bound;
+
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -42,7 +44,7 @@ impl SledDb {
 }
 
 impl IDb for SledDb {
-	fn tree(&self, name: &str) -> Result<usize> {
+	fn open_tree(&self, name: &str) -> Result<usize> {
 		let mut trees = self.trees.write().unwrap();
 		if let Some(i) = trees.1.get(name) {
 			Ok(*i)
@@ -60,42 +62,63 @@ impl IDb for SledDb {
 		Ok(tree.get(key)?.map(|v| v.to_vec().into()))
 	}
 
-	fn put(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
+		let tree = self.get_tree(tree)?;
+		Ok(tree.remove(key)?.is_some())
+	}
+
+	fn len(&self, tree: usize) -> Result<usize> {
+		let tree = self.get_tree(tree)?;
+		Ok(tree.len())
+	}
+
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
 		tree.insert(key, value)?;
 		Ok(())
 	}
 
-	fn range<'a>(
+	fn iter<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
+		let tree = self.get_tree(tree)?;
+		Ok(Box::new(tree.iter().map(|v| {
+			v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+				.map_err(Into::into)
+		})))
+	}
+
+	fn iter_rev<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
+		let tree = self.get_tree(tree)?;
+		Ok(Box::new(tree.iter().rev().map(|v| {
+			v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+				.map_err(Into::into)
+		})))
+	}
+
+	fn range<'a, 'r>(
 		&'a self,
 		tree: usize,
-		start: Option<&[u8]>,
-		reverse: bool,
+		low: Bound<&'r [u8]>,
+		high: Bound<&'r [u8]>,
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
-		if reverse {
-			match start {
-				Some(start) => Ok(Box::new(tree.range(..=start).rev().map(|v| {
-					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-						.map_err(Into::into)
-				}))),
-				None => Ok(Box::new(tree.iter().rev().map(|v| {
-					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-						.map_err(Into::into)
-				}))),
-			}
-		} else {
-			match start {
-				Some(start) => Ok(Box::new(tree.range(start..).map(|v| {
-					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-						.map_err(Into::into)
-				}))),
-				None => Ok(Box::new(tree.iter().map(|v| {
-					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-						.map_err(Into::into)
-				}))),
-			}
-		}
+		Ok(Box::new(tree.range::<&'r [u8], _>((low, high)).map(|v| {
+			v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+				.map_err(Into::into)
+		})))
+	}
+	fn range_rev<'a, 'r>(
+		&'a self,
+		tree: usize,
+		low: Bound<&'r [u8]>,
+		high: Bound<&'r [u8]>,
+	) -> Result<ValueIter<'a>> {
+		let tree = self.get_tree(tree)?;
+		Ok(Box::new(tree.range::<&'r [u8], _>((low, high)).rev().map(
+			|v| {
+				v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+					.map_err(Into::into)
+			},
+		)))
 	}
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()> {
@@ -162,12 +185,20 @@ impl<'a> ITx<'a> for SledTx<'a> {
 		Ok(tmp.map(|v| v.to_vec().into()))
 	}
 
-	fn put(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self
 			.trees
 			.get(tree)
 			.ok_or(Error("invalid tree id".into()))?;
 		self.save_error(tree.insert(key, value))?;
 		Ok(())
+	}
+
+	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
+		let tree = self
+			.trees
+			.get(tree)
+			.ok_or(Error("invalid tree id".into()))?;
+		Ok(self.save_error(tree.remove(key))?.is_some())
 	}
 }
