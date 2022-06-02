@@ -10,7 +10,7 @@ use sled::transaction::{
 	UnabortableTransactionError,
 };
 
-use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
+use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter, Exporter};
 
 pub use sled;
 
@@ -42,6 +42,50 @@ impl SledDb {
 			.get(i)
 			.cloned()
 			.ok_or(Error("invalid tree id".into()))
+	}
+
+	pub fn export<'a>(&'a self) -> Result<Exporter<'a>> {
+		let mut trees = vec![];
+		for name in self.db.tree_names() {
+			let name = std::str::from_utf8(&name).map_err(|e| Error(format!("{}", e).into()))?.to_string();
+			let tree = self.open_tree(&name)?;
+			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
+			trees.push((name, tree));
+		}
+		let trees_exporter: Exporter<'a> = Box::new(trees
+			.into_iter()
+			.map(|(name, tree)| {
+				let iter: ValueIter<'a> = Box::new(tree.iter().map(|v| {
+					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+						.map_err(Into::into)
+				}));
+				Ok((name.to_string(), iter))
+			}));
+		Ok(trees_exporter)
+	}
+
+	pub fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
+		for ex_tree in ex {
+			let (name, data) = ex_tree?;
+
+			let tree = self.open_tree(&name)?;
+			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
+			if !tree.is_empty() {
+				return Err(Error(format!("tree {} already contains data", name).into()));
+			}
+
+			let mut i = 0;
+			for item in data {
+				let (k, v) = item?;
+				tree.insert(k.as_ref(), v.as_ref())?;
+				i += 1;
+				if i % 1000 == 0 {
+					println!("{}: imported {}", name, i);
+				}
+			}
+			println!("{}: finished importing, {} items", name, i);
+		}
+		Ok(())
 	}
 }
 
@@ -165,6 +209,12 @@ struct SledTx<'a> {
 }
 
 impl<'a> SledTx<'a> {
+	fn get_tree(&self, i: usize) -> Result<&TransactionalTree> {
+		self.trees
+			.get(i)
+			.ok_or(Error("invalid tree id (it might have been openned after the transaction started)".into()))
+	}
+
 	fn save_error<R>(&self, v: std::result::Result<R, UnabortableTransactionError>) -> Result<R> {
 		match v {
 			Ok(x) => Ok(x),
@@ -179,28 +229,45 @@ impl<'a> SledTx<'a> {
 
 impl<'a> ITx<'a> for SledTx<'a> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
-		let tree = self
-			.trees
-			.get(tree)
-			.ok_or(Error("invalid tree id".into()))?;
+		let tree = self.get_tree(tree)?;
 		let tmp = self.save_error(tree.get(key))?;
 		Ok(tmp.map(|v| v.to_vec().into()))
 	}
+	fn len(&self, _tree: usize) -> Result<usize> {
+		unimplemented!(".len() in transaction not supported with Sled backend")
+	}
 
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
-		let tree = self
-			.trees
-			.get(tree)
-			.ok_or(Error("invalid tree id".into()))?;
+		let tree = self.get_tree(tree)?;
 		self.save_error(tree.insert(key, value))?;
 		Ok(())
 	}
-
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
-		let tree = self
-			.trees
-			.get(tree)
-			.ok_or(Error("invalid tree id".into()))?;
+		let tree = self.get_tree(tree)?;
 		Ok(self.save_error(tree.remove(key))?.is_some())
+	}
+
+	fn iter(&self, _tree: usize) -> Result<ValueIter<'a>> {
+		unimplemented!("Iterators in transactions not supported with Sled backend");
+	}
+	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'a>> {
+		unimplemented!("Iterators in transactions not supported with Sled backend");
+	}
+
+	fn range<'r>(
+		&self,
+		_tree: usize,
+		_low: Bound<&'r [u8]>,
+		_high: Bound<&'r [u8]>,
+	) -> Result<ValueIter<'a>> {
+		unimplemented!("Iterators in transactions not supported with Sled backend");
+	}
+	fn range_rev<'r>(
+		&self,
+		_tree: usize,
+		_low: Bound<&'r [u8]>,
+		_high: Bound<&'r [u8]>,
+	) -> Result<ValueIter<'a>> {
+		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 }

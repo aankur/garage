@@ -24,6 +24,9 @@ pub type Value<'a> = Cow<'a, [u8]>;
 pub type ValueIter<'a> =
 	Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + Send + Sync + 'a>;
 
+pub type Exporter<'a> =
+	Box<dyn std::iter::Iterator<Item=Result<(String, ValueIter<'a>)>> + Send + Sync + 'a>;
+
 // ----
 
 #[derive(Debug, Error)]
@@ -95,7 +98,6 @@ impl Tree {
 	pub fn get<'a, T: AsRef<[u8]>>(&'a self, key: T) -> Result<Option<Value<'a>>> {
 		self.0.get(self.1, key.as_ref())
 	}
-
 	pub fn len(&self) -> Result<usize> {
 		self.0.len(self.1)
 	}
@@ -103,7 +105,6 @@ impl Tree {
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<()> {
 		self.0.insert(self.1, key.as_ref(), value.as_ref())
 	}
-
 	pub fn remove<'a, T: AsRef<[u8]>>(&'a self, key: T) -> Result<bool> {
 		self.0.remove(self.1, key.as_ref())
 	}
@@ -139,6 +140,9 @@ impl<'a> Transaction<'a> {
 	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value<'a>>> {
 		self.0.get(tree.1, key.as_ref())
 	}
+	pub fn len(&self, tree: &Tree) -> Result<usize> {
+		self.0.len(tree.1)
+	}
 
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(
 		&self,
@@ -148,10 +152,37 @@ impl<'a> Transaction<'a> {
 	) -> Result<()> {
 		self.0.insert(tree.1, key.as_ref(), value.as_ref())
 	}
-
 	pub fn remove<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<bool> {
 		self.0.remove(tree.1, key.as_ref())
 	}
+
+	pub fn iter(&self, tree: &Tree) -> Result<ValueIter<'a>> {
+		self.0.iter(tree.1)
+	}
+	pub fn iter_rev(&self, tree: &Tree) -> Result<ValueIter<'a>> {
+		self.0.iter_rev(tree.1)
+	}
+
+	pub fn range<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'a>>
+	where
+		K: AsRef<[u8]>,
+		R: RangeBounds<K>,
+	{
+		let sb = range.start_bound();
+		let eb = range.end_bound();
+		self.0.range(tree.1, get_bound(sb), get_bound(eb))
+	}
+	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'a>>
+	where
+		K: AsRef<[u8]>,
+		R: RangeBounds<K>,
+	{
+		let sb = range.start_bound();
+		let eb = range.end_bound();
+		self.0.range_rev(tree.1, get_bound(sb), get_bound(eb))
+	}
+
+	// ----
 
 	#[must_use]
 	pub fn abort<R, E>(self, e: E) -> TxResult<R, E>
@@ -204,8 +235,26 @@ pub(crate) trait IDb: Send + Sync {
 
 pub(crate) trait ITx<'a> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>>;
+	fn len(&self, tree: usize) -> Result<usize>;
+
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool>;
+
+	fn iter(&self, tree: usize) -> Result<ValueIter<'a>>;
+	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'a>>;
+
+	fn range<'r>(
+		&self,
+		tree: usize,
+		low: Bound<&'r [u8]>,
+		high: Bound<&'r [u8]>,
+	) -> Result<ValueIter<'a>>;
+	fn range_rev<'r>(
+		&self,
+		tree: usize,
+		low: Bound<&'r [u8]>,
+		high: Bound<&'r [u8]>,
+	) -> Result<ValueIter<'a>>;
 }
 
 pub(crate) trait ITxFn {
