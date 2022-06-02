@@ -988,6 +988,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "garage_db"
+version = "0.8.0"
+dependencies = [
+ "arc-swap",
+ "err-derive 0.3.1",
+ "mktemp",
+ "sled",
+]
+
+[[package]]
 name = "garage_model"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1130,6 +1140,7 @@ dependencies = [
  "bytes 1.1.0",
  "futures",
  "futures-util",
+ "garage_db",
  "garage_rpc 0.7.0",
  "garage_util 0.7.0",
  "hexdump",
@@ -1853,6 +1864,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "mktemp"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "975de676448231fcde04b9149d2543077e166b78fc29eae5aa219e7928410da2"
+dependencies = [
+ "uuid",
 ]
 
 [[package]]
@@ -3487,6 +3507,15 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding",
+]
+
+[[package]]
+name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom",
 ]
 
 [[package]]
