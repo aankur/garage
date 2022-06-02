@@ -18,6 +18,7 @@ pub struct Transaction<'a>(pub(crate) &'a dyn ITx<'a>);
 pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
 
 pub type Value<'a> = Cow<'a, [u8]>;
+pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + 'a>;
 
 // ----
 
@@ -89,6 +90,14 @@ impl Tree {
 	pub fn put<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<()> {
 		self.0.put(self.1, key.as_ref(), value.as_ref())
 	}
+
+	pub fn iter<'a>(&'a self, reverse: bool) -> Result<ValueIter<'a>> {
+		self.0.range(self.1, None, reverse)
+	}
+
+	pub fn range<'a, T: AsRef<[u8]>>(&'a self, start: T, reverse: bool) -> Result<ValueIter<'a>> {
+		self.0.range(self.1, Some(start.as_ref()), reverse)
+	}
 }
 
 impl<'a> Transaction<'a> {
@@ -126,6 +135,12 @@ pub(crate) trait IDb: Send + Sync {
 
 	fn get<'a>(&'a self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>>;
 	fn put(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
+	fn range<'a>(
+		&'a self,
+		tree: usize,
+		start: Option<&[u8]>,
+		reverse: bool,
+	) -> Result<ValueIter<'a>>;
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()>;
 }

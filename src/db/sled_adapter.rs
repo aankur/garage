@@ -4,10 +4,11 @@ use std::sync::{Arc, RwLock};
 use arc_swap::ArcSwapOption;
 
 use sled::transaction::{
-	ConflictableTransactionError, TransactionError, Transactional, TransactionalTree, UnabortableTransactionError
+	ConflictableTransactionError, TransactionError, Transactional, TransactionalTree,
+	UnabortableTransactionError,
 };
 
-use crate::{Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, Db};
+use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
 
 impl From<sled::Error> for Error {
 	fn from(e: sled::Error) -> Error {
@@ -58,10 +59,43 @@ impl IDb for SledDb {
 		let tree = self.get_tree(tree)?;
 		Ok(tree.get(key)?.map(|v| v.to_vec().into()))
 	}
+
 	fn put(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
 		tree.insert(key, value)?;
 		Ok(())
+	}
+
+	fn range<'a>(
+		&'a self,
+		tree: usize,
+		start: Option<&[u8]>,
+		reverse: bool,
+	) -> Result<ValueIter<'a>> {
+		let tree = self.get_tree(tree)?;
+		if reverse {
+			match start {
+				Some(start) => Ok(Box::new(tree.range(..=start).rev().map(|v| {
+					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+						.map_err(Into::into)
+				}))),
+				None => Ok(Box::new(tree.iter().rev().map(|v| {
+					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+						.map_err(Into::into)
+				}))),
+			}
+		} else {
+			match start {
+				Some(start) => Ok(Box::new(tree.range(start..).map(|v| {
+					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+						.map_err(Into::into)
+				}))),
+				None => Ok(Box::new(tree.iter().map(|v| {
+					v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
+						.map_err(Into::into)
+				}))),
+			}
+		}
 	}
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()> {
@@ -76,7 +110,10 @@ impl IDb for SledDb {
 					assert!(tx.err.into_inner().is_none());
 					Ok(())
 				}
-				TxFnResult::Abort => Err(ConflictableTransactionError::Abort(())),
+				TxFnResult::Abort => {
+					assert!(tx.err.into_inner().is_none());
+					Err(ConflictableTransactionError::Abort(()))
+				}
 				TxFnResult::Err => {
 					let err_arc = tx
 						.err
@@ -117,14 +154,18 @@ impl<'a> SledTx<'a> {
 
 impl<'a> ITx<'a> for SledTx<'a> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
-		let tree = self.trees.get(tree)
+		let tree = self
+			.trees
+			.get(tree)
 			.ok_or(Error("invalid tree id".into()))?;
 		let tmp = self.save_error(tree.get(key))?;
 		Ok(tmp.map(|v| v.to_vec().into()))
 	}
 
 	fn put(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
-		let tree = self.trees.get(tree)
+		let tree = self
+			.trees
+			.get(tree)
 			.ok_or(Error("invalid tree id".into()))?;
 		self.save_error(tree.insert(key, value))?;
 		Ok(())
