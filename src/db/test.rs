@@ -82,8 +82,8 @@ fn test_suite(db: Db) {
 #[test]
 fn test_lmdb_db() {
 	let path = mktemp::Temp::new_dir().unwrap();
-	let db = lmdb::Environment::new()
-		.set_max_dbs(100)
+	let db = heed::EnvOpenOptions::new()
+		.max_dbs(100)
 		.open(&path)
 		.unwrap();
 	let db = LmdbDb::init(db);

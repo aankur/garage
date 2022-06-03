@@ -7,26 +7,24 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use lmdb::{
-	Database, DatabaseFlags, Environment, RoTransaction, RwTransaction, Transaction, WriteFlags,
-};
+use heed::{Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, IValue, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
 };
 
-pub use lmdb;
+pub use heed;
 
 // -- err
 
-impl From<lmdb::Error> for Error {
-	fn from(e: lmdb::Error) -> Error {
+impl From<heed::Error> for Error {
+	fn from(e: heed::Error) -> Error {
 		Error(format!("LMDB: {}", e).into())
 	}
 }
 
-impl<T> From<lmdb::Error> for TxError<T> {
-	fn from(e: lmdb::Error) -> TxError<T> {
+impl<T> From<heed::Error> for TxError<T> {
+	fn from(e: heed::Error) -> TxError<T> {
 		TxError::Db(e.into())
 	}
 }
@@ -34,12 +32,12 @@ impl<T> From<lmdb::Error> for TxError<T> {
 // -- db
 
 pub struct LmdbDb {
-	db: lmdb::Environment,
-	trees: RwLock<(Vec<lmdb::Database>, HashMap<String, usize>)>,
+	db: heed::Env,
+	trees: RwLock<(Vec<Database>, HashMap<String, usize>)>,
 }
 
 impl LmdbDb {
-	pub fn init(db: lmdb::Environment) -> Db {
+	pub fn init(db: Env) -> Db {
 		let s = Self {
 			db,
 			trees: RwLock::new((Vec::new(), HashMap::new())),
@@ -47,7 +45,7 @@ impl LmdbDb {
 		Db(Arc::new(s))
 	}
 
-	fn get_tree(&self, i: usize) -> Result<lmdb::Database> {
+	fn get_tree(&self, i: usize) -> Result<Database> {
 		self.trees
 			.read()
 			.unwrap()
@@ -64,7 +62,7 @@ impl IDb for LmdbDb {
 		if let Some(i) = trees.1.get(name) {
 			Ok(*i)
 		} else {
-			let tree = self.db.create_db(Some(name), DatabaseFlags::empty())?;
+			let tree = self.db.create_database(Some(name))?;
 			let i = trees.0.len();
 			trees.0.push(tree);
 			trees.1.insert(name.to_string(), i);
@@ -82,7 +80,7 @@ impl IDb for LmdbDb {
 		let tree = self.get_tree(tree)?;
 
 		let res = TxAndValue {
-			tx: self.db.begin_ro_txn()?,
+			tx: self.db.read_txn()?,
 			value: NonNull::dangling(),
 			_pin: PhantomPinned,
 		};
@@ -90,9 +88,9 @@ impl IDb for LmdbDb {
 
 		unsafe {
 			let tx = NonNull::from(&boxed.tx);
-			let val = match tx.as_ref().get(tree, &key) {
-				Err(lmdb::Error::NotFound) => return Ok(None),
-				v => v?,
+			let val = match tree.get(tx.as_ref(), &key)? {
+				None => return Ok(None),
+				Some(v) => v,
 			};
 
 			let mut_ref: Pin<&mut TxAndValue<'_>> = Pin::as_mut(&mut boxed);
@@ -112,8 +110,8 @@ impl IDb for LmdbDb {
 
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
-		let mut tx = self.db.begin_rw_txn()?;
-		tx.put(tree, &key, &value, WriteFlags::empty())?;
+		let mut tx = self.db.write_txn()?;
+		tree.put(&mut tx, &key, &value)?;
 		tx.commit()?;
 		Ok(())
 	}
@@ -149,7 +147,7 @@ impl IDb for LmdbDb {
 		let trees = self.trees.read().unwrap();
 		let mut tx = LmdbTx {
 			trees: &trees.0[..],
-			tx: self.db.begin_rw_txn()?,
+			tx: self.db.write_txn()?,
 		};
 
 		let res = f.try_on(&mut tx);
@@ -159,11 +157,11 @@ impl IDb for LmdbDb {
 				Ok(())
 			}
 			TxFnResult::Abort => {
-				tx.tx.abort();
+				tx.tx.abort()?;
 				Err(TxError::Abort(()))
 			}
 			TxFnResult::DbErr => {
-				tx.tx.abort();
+				tx.tx.abort()?;
 				Err(TxError::Db(Error(
 					"(this message will be discarded)".into(),
 				)))
@@ -176,7 +174,7 @@ impl IDb for LmdbDb {
 
 struct LmdbTx<'a, 'db> {
 	trees: &'db [Database],
-	tx: RwTransaction<'a>,
+	tx: RwTxn<'a, 'a>,
 }
 
 impl<'a, 'db> LmdbTx<'a, 'db> {
@@ -192,10 +190,9 @@ impl<'a, 'db> LmdbTx<'a, 'db> {
 impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
-		match self.tx.get::<'a, _>(*tree, &key) {
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(e) => Err(e.into()),
-			Ok(v) => Ok(Some(Value(Box::new(v)))),
+		match tree.get(&self.tx, &key)? {
+			Some(v) => Ok(Some(Value(Box::new(v)))),
+			None => Ok(None),
 		}
 	}
 	fn len(&self, _tree: usize) -> Result<usize> {
@@ -203,17 +200,14 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 	}
 
 	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
-		let tree = self.get_tree(tree)?;
-		self.tx.put(*tree, &key, &value, WriteFlags::empty())?;
+		let tree = *self.get_tree(tree)?;
+		tree.put(&mut self.tx, &key, &value)?;
 		Ok(())
 	}
 	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
-		let tree = self.get_tree(tree)?;
-		match self.tx.del::<'a, _>(*tree, &key, None) {
-			Ok(()) => Ok(true),
-			Err(lmdb::Error::NotFound) => Ok(false),
-			Err(e) => Err(e.into()),
-		}
+		let tree = *self.get_tree(tree)?;
+		let deleted = tree.delete(&mut self.tx, &key)?;
+		Ok(deleted)
 	}
 
 	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {
@@ -244,7 +238,7 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 // ----
 
 struct TxAndValue<'a> {
-	tx: RoTransaction<'a>,
+	tx: RoTxn<'a>,
 	value: NonNull<&'a [u8]>,
 	_pin: PhantomPinned,
 }
