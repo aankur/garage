@@ -363,6 +363,7 @@ impl<'a> DbValueIterator<'a> {
 			_pin: PhantomPinned,
 		};
 		let mut boxed = Box::pin(res);
+		trace!("make iterator with sql: {}", sql);
 
 		unsafe {
 			let db = NonNull::from(&boxed.db);
