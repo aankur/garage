@@ -297,7 +297,7 @@ where
 	}
 
 	pub fn decode_entry(&self, bytes: &[u8]) -> Result<F::E, Error> {
-		match rmp_serde::decode::from_read_ref::<_, F::E>(bytes) {
+		match rmp_serde::decode::from_slice::<F::E>(bytes) {
 			Ok(x) => Ok(x),
 			Err(e) => match F::try_migrate(bytes) {
 				Some(x) => Ok(x),

@@ -33,7 +33,7 @@ where
 		let mut bytes = vec![];
 		file.read_to_end(&mut bytes)?;
 
-		let value = rmp_serde::decode::from_read_ref(&bytes[..])?;
+		let value = rmp_serde::decode::from_slice(&bytes[..])?;
 		Ok(value)
 	}
 
@@ -57,7 +57,7 @@ where
 		let mut bytes = vec![];
 		file.read_to_end(&mut bytes).await?;
 
-		let value = rmp_serde::decode::from_read_ref(&bytes[..])?;
+		let value = rmp_serde::decode::from_slice(&bytes[..])?;
 		Ok(value)
 	}
 

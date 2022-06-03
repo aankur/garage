@@ -181,11 +181,9 @@ impl<T: CounterSchema> IndexCounter<T> {
 
 		let new_entry = self.local_counter.db().transaction(|tx| {
 			let mut entry = match tx.get(&self.local_counter, &tree_key[..])? {
-				Some(old_bytes) => {
-					rmp_serde::decode::from_read_ref::<_, LocalCounterEntry>(&old_bytes)
-						.map_err(Error::RmpDecode)
-						.map_err(db::TxError::Abort)?
-				}
+				Some(old_bytes) => rmp_serde::decode::from_slice::<LocalCounterEntry>(&old_bytes)
+					.map_err(Error::RmpDecode)
+					.map_err(db::TxError::Abort)?,
 				None => LocalCounterEntry {
 					values: BTreeMap::new(),
 				},

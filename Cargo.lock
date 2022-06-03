@@ -930,7 +930,7 @@ dependencies = [
  "pretty_env_logger",
  "prometheus",
  "rand 0.8.5",
- "rmp-serde 0.15.5",
+ "rmp-serde 1.1.0",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -1002,7 +1002,7 @@ dependencies = [
  "hex",
  "opentelemetry",
  "rand 0.8.5",
- "rmp-serde 0.15.5",
+ "rmp-serde 1.1.0",
  "serde",
  "serde_bytes",
  "tokio",
@@ -1069,7 +1069,7 @@ dependencies = [
  "netapp 0.4.4",
  "opentelemetry",
  "rand 0.8.5",
- "rmp-serde 0.15.5",
+ "rmp-serde 1.1.0",
  "serde",
  "serde_bytes",
  "tokio",
@@ -1126,7 +1126,7 @@ dependencies = [
  "opentelemetry",
  "pnet_datalink",
  "rand 0.8.5",
- "rmp-serde 0.15.5",
+ "rmp-serde 1.1.0",
  "schemars",
  "serde",
  "serde_bytes",
@@ -1172,7 +1172,7 @@ dependencies = [
  "hexdump",
  "opentelemetry",
  "rand 0.8.5",
- "rmp-serde 0.15.5",
+ "rmp-serde 1.1.0",
  "serde",
  "serde_bytes",
  "tokio",
@@ -1220,7 +1220,7 @@ dependencies = [
  "netapp 0.4.4",
  "opentelemetry",
  "rand 0.8.5",
- "rmp-serde 0.15.5",
+ "rmp-serde 1.1.0",
  "serde",
  "serde_json",
  "sha2",
@@ -2250,6 +2250,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
+
+[[package]]
 name = "pem"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2638,12 +2644,13 @@ dependencies = [
 
 [[package]]
 name = "rmp"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f55e5fa1446c4d5dd1f5daeed2a4fe193071771a2636274d0d7a3b082aa7ad6"
+checksum = "44519172358fd6d58656c86ab8e7fbc9e1490c3e8f14d35ed78ca0dd07403c9f"
 dependencies = [
  "byteorder",
  "num-traits",
+ "paste",
 ]
 
 [[package]]
@@ -2662,6 +2669,17 @@ name = "rmp-serde"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "723ecff9ad04f4ad92fe1c8ca6c20d2196d9286e9c60727c4cb5511629260e9d"
+dependencies = [
+ "byteorder",
+ "rmp",
+ "serde",
+]
+
+[[package]]
+name = "rmp-serde"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25786b0d276110195fa3d6f3f31299900cf71dfbd6c28450f3f58a0e7f7a347e"
 dependencies = [
  "byteorder",
  "rmp",

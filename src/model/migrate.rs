@@ -28,7 +28,7 @@ impl Migrate {
 		let mut old_buckets = vec![];
 		for res in tree.iter().map_err(GarageError::from)? {
 			let (_k, v) = res.map_err(GarageError::from)?;
-			let bucket = rmp_serde::decode::from_read_ref::<_, old_bucket::Bucket>(&v[..])
+			let bucket = rmp_serde::decode::from_slice::<old_bucket::Bucket>(&v[..])
 				.map_err(GarageError::from)?;
 			old_buckets.push(bucket);
 		}
