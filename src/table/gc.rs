@@ -376,13 +376,13 @@ impl GcTodoEntry {
 	/// what we have to do is still the same
 	pub(crate) fn remove_if_equal(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
 		let key = self.todo_table_key();
-		gc_todo_tree.db().transaction(|tx| {
-			let old_val = tx.get(gc_todo_tree, &key)?;
-			match old_val {
-				Some(ov) if ov == self.value_hash.as_slice() => {
-					tx.remove(gc_todo_tree, &key)?;
-				}
-				_ => (),
+		gc_todo_tree.db().transaction(|mut tx| {
+			let remove = match tx.get(gc_todo_tree, &key)? {
+				Some(ov) if ov == self.value_hash.as_slice() => true,
+				_ => false,
+			};
+			if remove {
+				tx.remove(gc_todo_tree, &key)?;
 			}
 			tx.commit(())
 		})?;

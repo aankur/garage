@@ -179,7 +179,7 @@ impl<T: CounterSchema> IndexCounter<T> {
 	pub fn count(&self, pk: &T::P, sk: &T::S, counts: &[(&str, i64)]) -> Result<(), Error> {
 		let tree_key = self.table.data.tree_key(pk, sk);
 
-		let new_entry = self.local_counter.db().transaction(|tx| {
+		let new_entry = self.local_counter.db().transaction(|mut tx| {
 			let mut entry = match tx.get(&self.local_counter, &tree_key[..])? {
 				Some(old_bytes) => rmp_serde::decode::from_slice::<LocalCounterEntry>(&old_bytes)
 					.map_err(Error::RmpDecode)

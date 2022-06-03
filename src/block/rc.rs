@@ -20,7 +20,7 @@ impl BlockRc {
 	/// Increment the reference counter associated to a hash.
 	/// Returns true if the RC goes from zero to nonzero.
 	pub(crate) fn block_incref(&self, hash: &Hash) -> Result<bool, Error> {
-		let old_rc = self.rc.db().transaction(|tx| {
+		let old_rc = self.rc.db().transaction(|mut tx| {
 			let old_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?);
 			match old_rc.increment().serialize() {
 				Some(x) => {
@@ -36,7 +36,7 @@ impl BlockRc {
 	/// Decrement the reference counter associated to a hash.
 	/// Returns true if the RC is now zero.
 	pub(crate) fn block_decref(&self, hash: &Hash) -> Result<bool, Error> {
-		let new_rc = self.rc.db().transaction(|tx| {
+		let new_rc = self.rc.db().transaction(|mut tx| {
 			let new_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?).decrement();
 			match new_rc.serialize() {
 				Some(x) => {
@@ -60,7 +60,7 @@ impl BlockRc {
 	/// deletion time has passed
 	pub(crate) fn clear_deleted_block_rc(&self, hash: &Hash) -> Result<(), Error> {
 		let now = now_msec();
-		self.rc.db().transaction(|tx| {
+		self.rc.db().transaction(|mut tx| {
 			let rcval = RcEntry::parse_opt(tx.get(&self.rc, &hash)?);
 			match rcval {
 				RcEntry::Deletable { at_time } if now > at_time => {

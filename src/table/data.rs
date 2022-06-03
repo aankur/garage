@@ -182,7 +182,7 @@ where
 		tree_key: &[u8],
 		f: impl Fn(Option<F::E>) -> F::E,
 	) -> Result<Option<F::E>, Error> {
-		let changed = self.store.db().transaction(|tx| {
+		let changed = self.store.db().transaction(|mut tx| {
 			let (old_entry, old_bytes, new_entry) = match tx.get(&self.store, tree_key)? {
 				Some(old_bytes) => {
 					let old_entry = self.decode_entry(&old_bytes).map_err(db::TxError::Abort)?;
@@ -203,6 +203,7 @@ where
 				.map_err(Error::RmpEncode)
 				.map_err(db::TxError::Abort)?;
 			let encoding_changed = Some(&new_bytes[..]) != old_bytes.as_ref().map(|x| &x[..]);
+			drop(old_bytes);
 
 			if value_changed || encoding_changed {
 				let new_bytes_hash = blake2sum(&new_bytes[..]);
@@ -241,15 +242,16 @@ where
 	}
 
 	pub(crate) fn delete_if_equal(self: &Arc<Self>, k: &[u8], v: &[u8]) -> Result<bool, Error> {
-		let removed = self.store.db().transaction(|tx| {
-			if let Some(cur_v) = tx.get(&self.store, k)? {
-				if cur_v == v {
-					tx.remove(&self.store, k)?;
-					tx.insert(&self.merkle_todo, k, vec![])?;
-					return Ok(true);
-				}
+		let removed = self.store.db().transaction(|mut tx| {
+			let remove = match tx.get(&self.store, k)? {
+				Some(cur_v) if cur_v == v => true,
+				_ => false,
+			};
+			if remove {
+				tx.remove(&self.store, k)?;
+				tx.insert(&self.merkle_todo, k, vec![])?;
 			}
-			Ok(false)
+			Ok(remove)
 		})?;
 
 		if removed {
@@ -267,15 +269,16 @@ where
 		k: &[u8],
 		vhash: Hash,
 	) -> Result<bool, Error> {
-		let removed = self.store.db().transaction(|tx| {
-			if let Some(cur_v) = tx.get(&self.store, k)? {
-				if blake2sum(&cur_v[..]) == vhash {
-					tx.remove(&self.store, k)?;
-					tx.insert(&self.merkle_todo, k, vec![])?;
-					return Ok(Some(cur_v.into_vec()));
-				}
+		let removed = self.store.db().transaction(|mut tx| {
+			let remove_v = match tx.get(&self.store, k)? {
+				Some(cur_v) if blake2sum(&cur_v[..]) == vhash => Some(cur_v.into_vec()),
+				_ => None,
+			};
+			if remove_v.is_some() {
+				tx.remove(&self.store, k)?;
+				tx.insert(&self.merkle_todo, k, vec![])?;
 			}
-			Ok(None)
+			Ok(remove_v)
 		})?;
 
 		if let Some(old_v) = removed {

@@ -19,7 +19,7 @@ pub use sled;
 
 impl From<sled::Error> for Error {
 	fn from(e: sled::Error) -> Error {
-		Error(format!("{}", e).into())
+		Error(format!("Sled: {}", e).into())
 	}
 }
 
@@ -162,11 +162,11 @@ impl IDb for SledDb {
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()> {
 		let trees = self.trees.read().unwrap();
 		let res = trees.0.transaction(|txtrees| {
-			let tx = SledTx {
+			let mut tx = SledTx {
 				trees: txtrees,
 				err: Cell::new(None),
 			};
-			match f.try_on(&tx) {
+			match f.try_on(&mut tx) {
 				TxFnResult::Ok => {
 					assert!(tx.err.into_inner().is_none());
 					Ok(())
@@ -217,8 +217,8 @@ impl<'a> SledTx<'a> {
 	}
 }
 
-impl<'a> ITx<'a> for SledTx<'a> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
+impl<'a> ITx for SledTx<'a> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
 		let tmp = self.save_error(tree.get(key))?;
 		Ok(tmp.map(From::from))
@@ -227,20 +227,20 @@ impl<'a> ITx<'a> for SledTx<'a> {
 		unimplemented!(".len() in transaction not supported with Sled backend")
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
 		self.save_error(tree.insert(key, value))?;
 		Ok(())
 	}
-	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
+	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
 		Ok(self.save_error(tree.remove(key))?.is_some())
 	}
 
-	fn iter(&self, _tree: usize) -> Result<ValueIter<'a>> {
+	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
-	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'a>> {
+	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 
@@ -249,7 +249,7 @@ impl<'a> ITx<'a> for SledTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 	fn range_rev<'r>(
@@ -257,7 +257,7 @@ impl<'a> ITx<'a> for SledTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 }

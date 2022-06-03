@@ -1,3 +1,4 @@
+pub mod lmdb_adapter;
 pub mod sled_adapter;
 pub mod sqlite_adapter;
 
@@ -15,8 +16,7 @@ use err_derive::Error;
 #[derive(Clone)]
 pub struct Db(pub(crate) Arc<dyn IDb>);
 
-#[derive(Clone, Copy)]
-pub struct Transaction<'a>(pub(crate) &'a dyn ITx<'a>);
+pub struct Transaction<'a>(pub(crate) &'a mut dyn ITx);
 
 #[derive(Clone)]
 pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
@@ -271,7 +271,7 @@ impl Tree {
 
 #[allow(clippy::len_without_is_empty)]
 impl<'a> Transaction<'a> {
-	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value<'a>>> {
+	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value<'_>>> {
 		self.0.get(tree.1, key.as_ref())
 	}
 	pub fn len(&self, tree: &Tree) -> Result<usize> {
@@ -279,25 +279,25 @@ impl<'a> Transaction<'a> {
 	}
 
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(
-		&self,
+		&mut self,
 		tree: &Tree,
 		key: T,
 		value: U,
 	) -> Result<()> {
 		self.0.insert(tree.1, key.as_ref(), value.as_ref())
 	}
-	pub fn remove<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<bool> {
+	pub fn remove<T: AsRef<[u8]>>(&mut self, tree: &Tree, key: T) -> Result<bool> {
 		self.0.remove(tree.1, key.as_ref())
 	}
 
-	pub fn iter(&self, tree: &Tree) -> Result<ValueIter<'a>> {
+	pub fn iter(&self, tree: &Tree) -> Result<ValueIter<'_>> {
 		self.0.iter(tree.1)
 	}
-	pub fn iter_rev(&self, tree: &Tree) -> Result<ValueIter<'a>> {
+	pub fn iter_rev(&self, tree: &Tree) -> Result<ValueIter<'_>> {
 		self.0.iter_rev(tree.1)
 	}
 
-	pub fn range<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'a>>
+	pub fn range<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -306,7 +306,7 @@ impl<'a> Transaction<'a> {
 		let eb = range.end_bound();
 		self.0.range(tree.1, get_bound(sb), get_bound(eb))
 	}
-	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'a>>
+	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -358,32 +358,32 @@ pub(crate) trait IDb: Send + Sync {
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()>;
 }
 
-pub(crate) trait ITx<'a> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>>;
+pub(crate) trait ITx {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>>;
 	fn len(&self, tree: usize) -> Result<usize>;
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
-	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool>;
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
+	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool>;
 
-	fn iter(&self, tree: usize) -> Result<ValueIter<'a>>;
-	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'a>>;
+	fn iter(&self, tree: usize) -> Result<ValueIter<'_>>;
+	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>>;
 
 	fn range<'r>(
 		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>>;
+	) -> Result<ValueIter<'_>>;
 	fn range_rev<'r>(
 		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>>;
+	) -> Result<ValueIter<'_>>;
 }
 
 pub(crate) trait ITxFn {
-	fn try_on<'a>(&'a self, tx: &'a dyn ITx<'a>) -> TxFnResult;
+	fn try_on(&self, tx: &mut dyn ITx) -> TxFnResult;
 }
 
 pub(crate) enum TxFnResult {
@@ -404,7 +404,7 @@ impl<F, R, E> ITxFn for TxFn<F, R, E>
 where
 	F: Fn(Transaction<'_>) -> TxResult<R, E>,
 {
-	fn try_on<'a>(&'a self, tx: &'a dyn ITx<'a>) -> TxFnResult {
+	fn try_on(&self, tx: &mut dyn ITx) -> TxFnResult {
 		let res = (self.function)(Transaction(tx));
 		let res2 = match &res {
 			Ok(_) => TxFnResult::Ok,

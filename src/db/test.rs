@@ -1,5 +1,6 @@
 use crate::*;
 
+use crate::lmdb_adapter::LmdbDb;
 use crate::sled_adapter::SledDb;
 use crate::sqlite_adapter::SqliteDb;
 
@@ -16,7 +17,7 @@ fn test_suite(db: Db) {
 	tree.insert(ka, va).unwrap();
 	assert_eq!(tree.get(ka).unwrap().unwrap(), va);
 
-	let res = db.transaction::<_, (), _>(|tx| {
+	let res = db.transaction::<_, (), _>(|mut tx| {
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), va);
 
 		tx.insert(&tree, ka, vb).unwrap();
@@ -28,7 +29,7 @@ fn test_suite(db: Db) {
 	assert!(matches!(res, Ok(12)));
 	assert_eq!(tree.get(ka).unwrap().unwrap(), vb);
 
-	let res = db.transaction::<(), _, _>(|tx| {
+	let res = db.transaction::<(), _, _>(|mut tx| {
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
 		tx.insert(&tree, ka, vc).unwrap();
@@ -76,6 +77,18 @@ fn test_suite(db: Db) {
 	assert_eq!((next.0.as_ref(), next.1.as_ref()), (ka, vb));
 	assert!(iter.next().is_none());
 	drop(iter);
+}
+
+#[test]
+fn test_lmdb_db() {
+	let path = mktemp::Temp::new_dir().unwrap();
+	let db = lmdb::Environment::new()
+		.set_max_dbs(100)
+		.open(&path)
+		.unwrap();
+	let db = LmdbDb::init(db);
+	test_suite(db);
+	drop(path);
 }
 
 #[test]

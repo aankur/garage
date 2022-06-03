@@ -17,7 +17,7 @@ pub use rusqlite;
 
 impl From<rusqlite::Error> for Error {
 	fn from(e: rusqlite::Error) -> Error {
-		Error(format!("{}", e).into())
+		Error(format!("Sqlite: {}", e).into())
 	}
 }
 
@@ -235,11 +235,11 @@ impl IDb for SqliteDb {
 		let mut db = self.db.lock().unwrap();
 		trace!("transaction: lock acquired");
 
-		let tx = SqliteTx {
+		let mut tx = SqliteTx {
 			tx: db.transaction()?,
 			trees: trees.as_ref(),
 		};
-		let res = match f.try_on(&tx) {
+		let res = match f.try_on(&mut tx) {
 			TxFnResult::Ok => {
 				tx.tx.commit()?;
 				Ok(())
@@ -278,8 +278,8 @@ impl<'a> SqliteTx<'a> {
 	}
 }
 
-impl<'a> ITx<'a> for SqliteTx<'a> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
+impl<'a> ITx for SqliteTx<'a> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
 		let mut stmt = self
 			.tx
@@ -300,7 +300,7 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 		}
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
 		self.tx.execute(
 			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
@@ -308,7 +308,7 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 		)?;
 		Ok(())
 	}
-	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
+	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
 		let res = self
 			.tx
@@ -316,10 +316,10 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 		Ok(res > 0)
 	}
 
-	fn iter(&self, _tree: usize) -> Result<ValueIter<'a>> {
+	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {
 		unimplemented!();
 	}
-	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'a>> {
+	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'_>> {
 		unimplemented!();
 	}
 
@@ -328,7 +328,7 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		unimplemented!();
 	}
 	fn range_rev<'r>(
@@ -336,7 +336,7 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		unimplemented!();
 	}
 }

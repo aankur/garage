@@ -137,17 +137,17 @@ where
 		self.data
 			.merkle_tree
 			.db()
-			.transaction(|tx| self.update_item_rec(tx, k, &khash, &key, new_vhash))?;
+			.transaction(|mut tx| self.update_item_rec(&mut tx, k, &khash, &key, new_vhash))?;
 
-		let deleted = self.data.merkle_todo.db().transaction(|tx| {
-			let old_val = tx.get(&self.data.merkle_todo, k)?;
-			match old_val {
-				Some(ov) if ov == vhash_by => {
-					tx.remove(&self.data.merkle_todo, k)?;
-					tx.commit(true)
-				}
-				_ => tx.commit(false),
+		let deleted = self.data.merkle_todo.db().transaction(|mut tx| {
+			let remove = match tx.get(&self.data.merkle_todo, k)? {
+				Some(ov) if ov == vhash_by => true,
+				_ => false,
+			};
+			if remove {
+				tx.remove(&self.data.merkle_todo, k)?;
 			}
+			Ok(remove)
 		})?;
 
 		if !deleted {
@@ -162,7 +162,7 @@ where
 
 	fn update_item_rec(
 		&self,
-		tx: db::Transaction<'_>,
+		tx: &mut db::Transaction<'_>,
 		k: &[u8],
 		khash: &Hash,
 		key: &MerkleNodeKey,
@@ -288,7 +288,7 @@ where
 
 	fn read_node_txn(
 		&self,
-		tx: db::Transaction<'_>,
+		tx: &mut db::Transaction<'_>,
 		k: &MerkleNodeKey,
 	) -> db::TxResult<MerkleNode, Error> {
 		let ent = tx.get(&self.data.merkle_tree, k.encode())?;
@@ -297,7 +297,7 @@ where
 
 	fn put_node_txn(
 		&self,
-		tx: db::Transaction<'_>,
+		tx: &mut db::Transaction<'_>,
 		k: &MerkleNodeKey,
 		v: &MerkleNode,
 	) -> db::TxResult<Hash, Error> {
