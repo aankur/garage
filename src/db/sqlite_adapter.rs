@@ -7,9 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 use rusqlite::{params, Connection, Rows, Statement, Transaction};
 
-use crate::{
-	Db, Error, Exporter, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
-};
+use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
 
 pub use rusqlite;
 
@@ -55,8 +53,10 @@ impl SqliteDb {
 
 impl IDb for SqliteDb {
 	fn open_tree(&self, name: &str) -> Result<usize> {
+		let name = format!("tree_{}", name.replace(":", "_COLON_"));
+
 		let mut trees = self.trees.write().unwrap();
-		if let Some(i) = trees.iter().position(|x| x == name) {
+		if let Some(i) = trees.iter().position(|x| x == &name) {
 			Ok(i)
 		} else {
 			self.db.lock().unwrap().execute(
@@ -73,6 +73,21 @@ impl IDb for SqliteDb {
 			trees.push(name.to_string());
 			Ok(i)
 		}
+	}
+
+	fn list_trees(&self) -> Result<Vec<String>> {
+		let mut trees = vec![];
+		let db = self.db.lock().unwrap();
+		let mut stmt = db.prepare(
+			"SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'tree_%'",
+		)?;
+		let mut rows = stmt.query([])?;
+		while let Some(row) = rows.next()? {
+			let name = row.get::<_, String>(0)?;
+			let name = name.replace("_COLON_", ":");
+			trees.push(name);
+		}
+		Ok(trees)
 	}
 
 	// ----
@@ -197,18 +212,6 @@ impl IDb for SqliteDb {
 			}
 		}
 	}
-
-	// ----
-
-	fn export(&self) -> Result<Exporter<'_>> {
-		unimplemented!()
-	}
-
-	fn import(&self, ex: Exporter<'_>) -> Result<()> {
-		unimplemented!()
-	}
-
-	// ----
 }
 
 // ----

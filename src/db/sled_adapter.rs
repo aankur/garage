@@ -10,8 +10,7 @@ use sled::transaction::{
 };
 
 use crate::{
-	Db, Error, Exporter, IDb, ITx, ITxFn, IValue, Result, TxError, TxFnResult, TxResult, Value,
-	ValueIter,
+	Db, Error, IDb, ITx, ITxFn, IValue, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
 };
 
 pub use sled;
@@ -83,6 +82,19 @@ impl IDb for SledDb {
 			trees.1.insert(name.to_string(), i);
 			Ok(i)
 		}
+	}
+
+	fn list_trees(&self) -> Result<Vec<String>> {
+		let mut trees = vec![];
+		for name in self.db.tree_names() {
+			let name = std::str::from_utf8(&name)
+				.map_err(|e| Error(format!("{}", e).into()))?
+				.to_string();
+			if name != "__sled__default" {
+				trees.push(name);
+			}
+		}
+		Ok(trees)
 	}
 
 	// ----
@@ -175,54 +187,6 @@ impl IDb for SledDb {
 			Err(TransactionError::Storage(s)) => Err(TxError::Db(s.into())),
 		}
 	}
-
-	// ----
-
-	fn export(&self) -> Result<Exporter<'_>> {
-		let mut trees = vec![];
-		for name in self.db.tree_names() {
-			let name = std::str::from_utf8(&name)
-				.map_err(|e| Error(format!("{}", e).into()))?
-				.to_string();
-			let tree = self.open_tree(&name)?;
-			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
-			trees.push((name, tree));
-		}
-		let trees_exporter: Exporter<'_> = Box::new(trees.into_iter().map(|(name, tree)| {
-			let iter: ValueIter<'_> = Box::new(
-				tree.iter()
-					.map(|v| v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)),
-			);
-			Ok((name, iter))
-		}));
-		Ok(trees_exporter)
-	}
-
-	fn import(&self, ex: Exporter<'_>) -> Result<()> {
-		for ex_tree in ex {
-			let (name, data) = ex_tree?;
-
-			let tree = self.open_tree(&name)?;
-			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
-			if !tree.is_empty() {
-				return Err(Error(format!("tree {} already contains data", name).into()));
-			}
-
-			let mut i = 0;
-			for item in data {
-				let (k, v) = item?;
-				tree.insert(k, v)?;
-				i += 1;
-				if i % 1000 == 0 {
-					println!("{}: imported {}", name, i);
-				}
-			}
-			println!("{}: finished importing, {} items", name, i);
-		}
-		Ok(())
-	}
-
-	// ----
 }
 
 // ----

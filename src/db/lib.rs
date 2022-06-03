@@ -23,8 +23,6 @@ pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
 
 pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + 'a>;
 
-pub type Exporter<'a> = Box<dyn std::iter::Iterator<Item = Result<(String, ValueIter<'a>)>> + 'a>;
-
 // ----
 
 pub struct Value<'a>(pub(crate) Box<dyn IValue<'a> + 'a>);
@@ -115,7 +113,7 @@ impl<'a> IValue<'a> for &'a [u8] {
 
 #[derive(Debug, Error)]
 #[error(display = "{}", _0)]
-pub struct Error(Cow<'static, str>);
+pub struct Error(pub Cow<'static, str>);
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -138,6 +136,10 @@ impl Db {
 	pub fn open_tree<S: AsRef<str>>(&self, name: S) -> Result<Tree> {
 		let tree_id = self.0.open_tree(name.as_ref())?;
 		Ok(Tree(self.0.clone(), tree_id))
+	}
+
+	pub fn list_trees(&self) -> Result<Vec<String>> {
+		self.0.list_trees()
 	}
 
 	pub fn transaction<R, E, F>(&self, fun: F) -> TxResult<R, E>
@@ -175,12 +177,33 @@ impl Db {
 		}
 	}
 
-	pub fn export(&self) -> Result<Exporter<'_>> {
-		self.0.export()
-	}
+	pub fn import(&self, other: &Db) -> Result<()> {
+		let existing_trees = self.list_trees()?;
+		if !existing_trees.is_empty() {
+			return Err(Error(format!("destination database already contains data: {:?}", existing_trees).into()));
+		}
 
-	pub fn import(&self, ex: Exporter<'_>) -> Result<()> {
-		self.0.import(ex)
+		let tree_names = other.list_trees()?;
+		for name in tree_names {
+			let tree = self.open_tree(&name)?;
+			if tree.len()? > 0 {
+				return Err(Error(format!("tree {} already contains data", name).into()));
+			}
+
+			let ex_tree = other.open_tree(&name)?;
+
+			let mut i = 0;
+			for item in ex_tree.iter()? {
+				let (k, v) = item?;
+				tree.insert(k, v)?;
+				i += 1;
+				if i % 1000 == 0 {
+					println!("{}: imported {}", name, i);
+				}
+			}
+			println!("{}: finished importing, {} items", name, i);
+		}
+		Ok(())
 	}
 }
 
@@ -293,6 +316,7 @@ impl<'a> Transaction<'a> {
 
 pub(crate) trait IDb: Send + Sync {
 	fn open_tree(&self, name: &str) -> Result<usize>;
+	fn list_trees(&self) -> Result<Vec<String>>;
 
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>>;
 	fn len(&self, tree: usize) -> Result<usize>;
@@ -317,9 +341,6 @@ pub(crate) trait IDb: Send + Sync {
 	) -> Result<ValueIter<'_>>;
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()>;
-
-	fn export(&self) -> Result<Exporter<'_>>;
-	fn import(&self, ex: Exporter<'_>) -> Result<()>;
 }
 
 pub(crate) trait ITx<'a> {
