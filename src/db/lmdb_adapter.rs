@@ -3,11 +3,12 @@ use core::ops::Bound;
 use core::pin::Pin;
 use core::ptr::NonNull;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 
-use heed::{Env, RoTxn, RwTxn, UntypedDatabase as Database};
+use heed::types::ByteSlice;
+use heed::{BytesDecode, Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, IValue, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
@@ -101,11 +102,17 @@ impl IDb for LmdbDb {
 	}
 
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
-		unimplemented!()
+		let tree = self.get_tree(tree)?;
+		let mut tx = self.db.write_txn()?;
+		let deleted = tree.delete(&mut tx, &key)?;
+		tx.commit()?;
+		Ok(deleted)
 	}
 
 	fn len(&self, tree: usize) -> Result<usize> {
-		unimplemented!()
+		let tree = self.get_tree(tree)?;
+		let tx = self.db.read_txn()?;
+		Ok(tree.len(&tx)?.try_into().unwrap())
 	}
 
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
@@ -117,11 +124,15 @@ impl IDb for LmdbDb {
 	}
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
-		unimplemented!()
+		let tree = self.get_tree(tree)?;
+		let tx = self.db.read_txn()?;
+		TxAndIterator::make(tx, |tx| Ok(tree.iter(tx)?))
 	}
 
 	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>> {
-		unimplemented!()
+		let tree = self.get_tree(tree)?;
+		let tx = self.db.read_txn()?;
+		TxAndIterator::make(tx, |tx| Ok(tree.rev_iter(tx)?))
 	}
 
 	fn range<'r>(
@@ -130,7 +141,9 @@ impl IDb for LmdbDb {
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
 	) -> Result<ValueIter<'_>> {
-		unimplemented!()
+		let tree = self.get_tree(tree)?;
+		let tx = self.db.read_txn()?;
+		TxAndIterator::make(tx, |tx| Ok(tree.range(tx, &(low, high))?))
 	}
 	fn range_rev<'r>(
 		&self,
@@ -138,7 +151,9 @@ impl IDb for LmdbDb {
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
 	) -> Result<ValueIter<'_>> {
-		unimplemented!()
+		let tree = self.get_tree(tree)?;
+		let tx = self.db.read_txn()?;
+		TxAndIterator::make(tx, |tx| Ok(tree.rev_range(tx, &(low, high))?))
 	}
 
 	// ----
@@ -260,5 +275,80 @@ impl<'a> AsRef<[u8]> for TxAndValuePin<'a> {
 impl<'a> std::borrow::Borrow<[u8]> for TxAndValuePin<'a> {
 	fn borrow(&self) -> &[u8] {
 		self.as_ref()
+	}
+}
+
+// ----
+
+type IteratorItem<'a> = heed::Result<(
+	<ByteSlice as BytesDecode<'a>>::DItem,
+	<ByteSlice as BytesDecode<'a>>::DItem,
+)>;
+
+struct TxAndIterator<'a, I>
+where
+	I: Iterator<Item = IteratorItem<'a>> + 'a,
+{
+	tx: RoTxn<'a>,
+	iter: Option<I>,
+	_pin: PhantomPinned,
+}
+
+impl<'a, I> TxAndIterator<'a, I>
+where
+	I: Iterator<Item = IteratorItem<'a>> + 'a,
+{
+	fn make<F>(tx: RoTxn<'a>, iterfun: F) -> Result<ValueIter<'a>>
+	where
+		F: FnOnce(&'a RoTxn<'a>) -> Result<I>,
+	{
+		let res = TxAndIterator {
+			tx,
+			iter: None,
+			_pin: PhantomPinned,
+		};
+		let mut boxed = Box::pin(res);
+
+		unsafe {
+			let tx = NonNull::from(&boxed.tx);
+			let iter = iterfun(tx.as_ref())?;
+
+			let mut_ref: Pin<&mut TxAndIterator<'a, I>> = Pin::as_mut(&mut boxed);
+			Pin::get_unchecked_mut(mut_ref).iter = Some(iter);
+		}
+
+		Ok(Box::new(TxAndIteratorPin(boxed)))
+	}
+}
+
+impl<'a, I> Drop for TxAndIterator<'a, I>
+where
+	I: Iterator<Item = IteratorItem<'a>> + 'a,
+{
+	fn drop(&mut self) {
+		drop(self.iter.take());
+	}
+}
+
+struct TxAndIteratorPin<'a, I: Iterator<Item = IteratorItem<'a>> + 'a>(
+	Pin<Box<TxAndIterator<'a, I>>>,
+);
+
+impl<'a, I> Iterator for TxAndIteratorPin<'a, I>
+where
+	I: Iterator<Item = IteratorItem<'a>> + 'a,
+{
+	type Item = Result<(Value<'a>, Value<'a>)>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		let iter_ref = unsafe {
+			let mut_ref: Pin<&mut TxAndIterator<'a, I>> = Pin::as_mut(&mut self.0);
+			Pin::get_unchecked_mut(mut_ref).iter.as_mut()
+		};
+		match iter_ref.unwrap().next() {
+			None => None,
+			Some(Err(e)) => Some(Err(e.into())),
+			Some(Ok((k, v))) => Some(Ok((k.into(), v.into()))),
+		}
 	}
 }
