@@ -110,9 +110,14 @@ where
 	}
 
 	fn updater_loop_iter(&self) -> Result<bool, Error> {
-		if let Some(x) = self.data.merkle_todo.iter()?.next() {
+		// TODO undo this iter hack
+		let mut iter = self.data.merkle_todo.iter()?;
+		if let Some(x) = iter.next() {
 			let (key, valhash) = x?;
-			self.update_item(&key[..], &valhash[..])?;
+			let key = key.to_vec();
+			let valhash = valhash.to_vec();
+			drop(iter);
+			self.update_item(&key, &valhash)?;
 			Ok(true)
 		} else {
 			Ok(false)

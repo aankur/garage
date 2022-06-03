@@ -5,6 +5,8 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
+use log::trace;
+
 use rusqlite::{params, Connection, Rows, Statement, Transaction};
 
 use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
@@ -53,13 +55,17 @@ impl SqliteDb {
 
 impl IDb for SqliteDb {
 	fn open_tree(&self, name: &str) -> Result<usize> {
-		let name = format!("tree_{}", name.replace(":", "_COLON_"));
+		let name = format!("tree_{}", name.replace(':', "_COLON_"));
 
 		let mut trees = self.trees.write().unwrap();
 		if let Some(i) = trees.iter().position(|x| x == &name) {
 			Ok(i)
 		} else {
-			self.db.lock().unwrap().execute(
+			trace!("open tree {}: lock db", name);
+			let db = self.db.lock().unwrap();
+			trace!("create table {}", name);
+
+			db.execute(
 				&format!(
 					"CREATE TABLE IF NOT EXISTS {} (
 						k BLOB PRIMARY KEY,
@@ -69,6 +75,8 @@ impl IDb for SqliteDb {
 				),
 				[],
 			)?;
+			trace!("table created: {}", name);
+
 			let i = trees.len();
 			trees.push(name.to_string());
 			Ok(i)
@@ -77,7 +85,11 @@ impl IDb for SqliteDb {
 
 	fn list_trees(&self) -> Result<Vec<String>> {
 		let mut trees = vec![];
+
+		trace!("list_trees: lock db");
 		let db = self.db.lock().unwrap();
+		trace!("list_trees: lock acquired");
+
 		let mut stmt = db.prepare(
 			"SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'tree_%'",
 		)?;
@@ -94,7 +106,11 @@ impl IDb for SqliteDb {
 
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
+
+		trace!("get: lock db");
 		let db = self.db.lock().unwrap();
+		trace!("get: lock acquired");
+
 		let mut stmt = db.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
 		let mut res_iter = stmt.query([key])?;
 		match res_iter.next()? {
@@ -105,14 +121,22 @@ impl IDb for SqliteDb {
 
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
+
+		trace!("remove: lock db");
 		let db = self.db.lock().unwrap();
+		trace!("remove: lock acquired");
+
 		let res = db.execute(&format!("DELETE FROM {} WHERE k = ?1", tree), params![key])?;
 		Ok(res > 0)
 	}
 
 	fn len(&self, tree: usize) -> Result<usize> {
 		let tree = self.get_tree(tree)?;
+
+		trace!("len: lock db");
 		let db = self.db.lock().unwrap();
+		trace!("len: lock acquired");
+
 		let mut stmt = db.prepare(&format!("SELECT COUNT(*) FROM {}", tree))?;
 		let mut res_iter = stmt.query([])?;
 		match res_iter.next()? {
@@ -123,7 +147,11 @@ impl IDb for SqliteDb {
 
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
+
+		trace!("insert: lock db");
 		let db = self.db.lock().unwrap();
+		trace!("insert: lock acquired");
+
 		db.execute(
 			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
 			params![key, value],
@@ -134,13 +162,23 @@ impl IDb for SqliteDb {
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		let sql = format!("SELECT k, v FROM {} ORDER BY k ASC", tree);
-		DbValueIterator::make(self.db.lock().unwrap(), &sql, [])
+
+		trace!("iter {}: lock db", tree);
+		let db = self.db.lock().unwrap();
+		trace!("iter {}: lock acquired", tree);
+
+		DbValueIterator::make(db, &sql, [])
 	}
 
 	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		let sql = format!("SELECT k, v FROM {} ORDER BY k DESC", tree);
-		DbValueIterator::make(self.db.lock().unwrap(), &sql, [])
+
+		trace!("iter_rev {}: lock db", tree);
+		let db = self.db.lock().unwrap();
+		trace!("iter_rev {}: lock acquired", tree);
+
+		DbValueIterator::make(db, &sql, [])
 	}
 
 	fn range<'r>(
@@ -158,11 +196,12 @@ impl IDb for SqliteDb {
 			.iter()
 			.map(|x| x as &dyn rusqlite::ToSql)
 			.collect::<Vec<_>>();
-		DbValueIterator::make::<&[&dyn rusqlite::ToSql]>(
-			self.db.lock().unwrap(),
-			&sql,
-			params.as_ref(),
-		)
+
+		trace!("range {}: lock db", tree);
+		let db = self.db.lock().unwrap();
+		trace!("range {}: lock acquired", tree);
+
+		DbValueIterator::make::<&[&dyn rusqlite::ToSql]>(db, &sql, params.as_ref())
 	}
 	fn range_rev<'r>(
 		&self,
@@ -179,23 +218,28 @@ impl IDb for SqliteDb {
 			.iter()
 			.map(|x| x as &dyn rusqlite::ToSql)
 			.collect::<Vec<_>>();
-		DbValueIterator::make::<&[&dyn rusqlite::ToSql]>(
-			self.db.lock().unwrap(),
-			&sql,
-			params.as_ref(),
-		)
+
+		trace!("range_rev {}: lock db", tree);
+		let db = self.db.lock().unwrap();
+		trace!("range_rev {}: lock acquired", tree);
+
+		DbValueIterator::make::<&[&dyn rusqlite::ToSql]>(db, &sql, params.as_ref())
 	}
 
 	// ----
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()> {
 		let trees = self.trees.read().unwrap();
+
+		trace!("transaction: lock db");
 		let mut db = self.db.lock().unwrap();
+		trace!("transaction: lock acquired");
+
 		let tx = SqliteTx {
 			tx: db.transaction()?,
 			trees: trees.as_ref(),
 		};
-		match f.try_on(&tx) {
+		let res = match f.try_on(&tx) {
 			TxFnResult::Ok => {
 				tx.tx.commit()?;
 				Ok(())
@@ -210,7 +254,10 @@ impl IDb for SqliteDb {
 					"(this message will be discarded)".into(),
 				)))
 			}
-		}
+		};
+
+		trace!("transaction done");
+		res
 	}
 }
 
@@ -337,6 +384,7 @@ impl<'a> DbValueIterator<'a> {
 
 impl<'a> Drop for DbValueIterator<'a> {
 	fn drop(&mut self) {
+		trace!("drop iter");
 		drop(self.iter.take());
 		drop(self.stmt.take());
 	}

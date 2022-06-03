@@ -180,7 +180,13 @@ impl Db {
 	pub fn import(&self, other: &Db) -> Result<()> {
 		let existing_trees = self.list_trees()?;
 		if !existing_trees.is_empty() {
-			return Err(Error(format!("destination database already contains data: {:?}", existing_trees).into()));
+			return Err(Error(
+				format!(
+					"destination database already contains data: {:?}",
+					existing_trees
+				)
+				.into(),
+			));
 		}
 
 		let tree_names = other.list_trees()?;

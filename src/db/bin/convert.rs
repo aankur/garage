@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use garage_db::*;
 
-use clap::{Parser};
+use clap::Parser;
 
 /// K2V command line interface
 #[derive(Parser, Debug)]
@@ -41,12 +41,10 @@ fn do_conversion(args: Args) -> Result<()> {
 fn open_db(path: PathBuf, engine: String) -> Result<Db> {
 	match engine.as_str() {
 		"sled" => {
-			let db = sled_adapter::sled::Config::default()
-				.path(&path)
-				.open()?;
+			let db = sled_adapter::sled::Config::default().path(&path).open()?;
 			Ok(sled_adapter::SledDb::init(db))
 		}
-		"sqlite" | "rusqlite" => {
+		"sqlite" | "sqlite3" | "rusqlite" => {
 			let db = sqlite_adapter::rusqlite::Connection::open(&path)?;
 			Ok(sqlite_adapter::SqliteDb::init(db))
 		}

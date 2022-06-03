@@ -32,15 +32,32 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 	let config = read_config(config_file).expect("Unable to read config file");
 
 	info!("Opening database...");
-	let mut db_path = config.metadata_dir.clone();
-	db_path.push("db");
-	let db = db::sled_adapter::sled::Config::default()
-		.path(&db_path)
-		.cache_capacity(config.sled_cache_capacity)
-		.flush_every_ms(Some(config.sled_flush_every_ms))
-		.open()
-		.expect("Unable to open sled DB");
-	let db = db::sled_adapter::SledDb::init(db);
+	let db = match config.db_engine.as_str() {
+		"sled" => {
+			let mut db_path = config.metadata_dir.clone();
+			db_path.push("db");
+			let db = db::sled_adapter::sled::Config::default()
+				.path(&db_path)
+				.cache_capacity(config.sled_cache_capacity)
+				.flush_every_ms(Some(config.sled_flush_every_ms))
+				.open()
+				.expect("Unable to open sled DB");
+			db::sled_adapter::SledDb::init(db)
+		}
+		"sqlite" => {
+			let mut db_path = config.metadata_dir.clone();
+			db_path.push("db.sqlite");
+			let db = db::sqlite_adapter::rusqlite::Connection::open(db_path)
+				.expect("Unable to open sqlite DB");
+			db::sqlite_adapter::SqliteDb::init(db)
+		}
+		e => {
+			return Err(Error::Message(format!(
+				"Unsupported DB engine: {} (options: sled, sqlite)",
+				e
+			)));
+		}
+	};
 
 	info!("Initializing background runner...");
 	let watch_cancel = netapp::util::watch_ctrl_c();
