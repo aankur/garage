@@ -43,6 +43,7 @@ fn test_suite(db: Db) {
 	let mut iter = tree.iter().unwrap();
 	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
 	assert!(iter.next().is_none());
+	drop(iter);
 
 	tree.insert(kb, vc).unwrap();
 	assert_eq!(tree.get(kb).unwrap(), Some(vc.into()));
@@ -51,19 +52,23 @@ fn test_suite(db: Db) {
 	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
 	assert_eq!(iter.next().unwrap().unwrap(), (kb.into(), vc.into()));
 	assert!(iter.next().is_none());
+	drop(iter);
 
 	let mut iter = tree.range(kint..).unwrap();
 	assert_eq!(iter.next().unwrap().unwrap(), (kb.into(), vc.into()));
 	assert!(iter.next().is_none());
+	drop(iter);
 
 	let mut iter = tree.range_rev(..kint).unwrap();
 	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
 	assert!(iter.next().is_none());
+	drop(iter);
 
 	let mut iter = tree.iter_rev().unwrap();
 	assert_eq!(iter.next().unwrap().unwrap(), (kb.into(), vc.into()));
 	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
 	assert!(iter.next().is_none());
+	drop(iter);
 }
 
 #[test]

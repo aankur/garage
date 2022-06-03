@@ -288,7 +288,7 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 // ----
 
 struct DbValueIterator<'a> {
-	db: Option<MutexGuard<'a, Connection>>,
+	db: MutexGuard<'a, Connection>,
 	stmt: Option<Statement<'a>>,
 	iter: Option<Rows<'a>>,
 	_pin: PhantomPinned,
@@ -301,7 +301,7 @@ impl<'a> DbValueIterator<'a> {
 		args: P,
 	) -> Result<ValueIter<'a>> {
 		let res = DbValueIterator {
-			db: Some(db),
+			db: db,
 			stmt: None,
 			iter: None,
 			_pin: PhantomPinned,
@@ -310,7 +310,7 @@ impl<'a> DbValueIterator<'a> {
 
 		unsafe {
 			let db = NonNull::from(&boxed.db);
-			let stmt = db.as_ref().as_ref().unwrap().prepare(&sql)?;
+			let stmt = db.as_ref().prepare(&sql)?;
 
 			let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut boxed);
 			Pin::get_unchecked_mut(mut_ref).stmt = Some(stmt);
@@ -326,6 +326,13 @@ impl<'a> DbValueIterator<'a> {
 	}
 }
 
+impl<'a> Drop for DbValueIterator<'a> {
+	fn drop(&mut self) {
+		drop(self.iter.take());
+		drop(self.stmt.take());
+	}
+}
+
 struct DbValueIteratorPin<'a>(Pin<Box<DbValueIterator<'a>>>);
 
 impl<'a> Iterator for DbValueIteratorPin<'a> {
@@ -338,17 +345,7 @@ impl<'a> Iterator for DbValueIteratorPin<'a> {
 		};
 		let row = match next {
 			Err(e) => return Some(Err(e.into())),
-			Ok(None) => {
-				// finished, drop everything
-				unsafe {
-					let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut self.0);
-					let t = Pin::get_unchecked_mut(mut_ref);
-					drop(t.iter.take());
-					drop(t.stmt.take());
-					drop(t.db.take());
-				}
-				return None;
-			}
+			Ok(None) => return None,
 			Ok(Some(r)) => r,
 		};
 		let k = match row.get::<_, Vec<u8>>(0) {
