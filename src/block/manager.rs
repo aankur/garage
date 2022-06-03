@@ -218,9 +218,17 @@ impl BlockManager {
 	/// to fix any mismatch between the two.
 	pub async fn repair_data_store(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		// 1. Repair blocks from RC table.
+		// TODO don't do this like this
+		let mut hashes = vec![];
 		for (i, entry) in self.rc.rc.iter()?.enumerate() {
 			let (hash, _) = entry?;
 			let hash = Hash::try_from(&hash[..]).unwrap();
+			hashes.push(hash);
+			if i & 0xFF == 0 && *must_exit.borrow() {
+				return Ok(());
+			}
+		}
+		for (i, hash) in hashes.into_iter().enumerate() {
 			self.put_to_resync(&hash, Duration::from_secs(0))?;
 			if i & 0xFF == 0 && *must_exit.borrow() {
 				return Ok(());
