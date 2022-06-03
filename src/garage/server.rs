@@ -32,9 +32,9 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 	let config = read_config(config_file).expect("Unable to read config file");
 
 	info!("Opening database...");
+	let mut db_path = config.metadata_dir.clone();
 	let db = match config.db_engine.as_str() {
 		"sled" => {
-			let mut db_path = config.metadata_dir.clone();
 			db_path.push("db");
 			let db = db::sled_adapter::sled::Config::default()
 				.path(&db_path)
@@ -44,8 +44,7 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 				.expect("Unable to open sled DB");
 			db::sled_adapter::SledDb::init(db)
 		}
-		"sqlite" => {
-			let mut db_path = config.metadata_dir.clone();
+		"sqlite" | "sqlite3" | "rusqlite" => {
 			db_path.push("db.sqlite");
 			let db = db::sqlite_adapter::rusqlite::Connection::open(db_path)
 				.expect("Unable to open sqlite DB");

@@ -26,9 +26,7 @@ impl BlockRc {
 				Some(x) => {
 					tx.insert(&self.rc, &hash, x)?;
 				}
-				None => {
-					tx.remove(&self.rc, &hash)?;
-				}
+				None => unreachable!(),
 			};
 			tx.commit(old_rc)
 		})?;
