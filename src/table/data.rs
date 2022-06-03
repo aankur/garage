@@ -206,12 +206,8 @@ where
 
 			if value_changed || encoding_changed {
 				let new_bytes_hash = blake2sum(&new_bytes[..]);
-				tx.insert(
-					&self.merkle_todo,
-					tree_key.to_vec(),
-					new_bytes_hash.as_slice(),
-				)?;
-				tx.insert(&self.store, tree_key.to_vec(), new_bytes)?;
+				tx.insert(&self.merkle_todo, tree_key, new_bytes_hash.as_slice())?;
+				tx.insert(&self.store, tree_key, new_bytes)?;
 				Ok(Some((old_entry, new_entry, new_bytes_hash)))
 			} else {
 				Ok(None)

@@ -29,14 +29,14 @@ pub type Exporter<'a> = Box<dyn std::iter::Iterator<Item = Result<(String, Value
 
 pub struct Value<'a>(pub(crate) Box<dyn IValue<'a> + 'a>);
 
-pub trait IValue<'a>: AsRef<[u8]> {
-	fn into_vec(&mut self) -> Vec<u8>;
+pub trait IValue<'a>: AsRef<[u8]> + core::borrow::Borrow<[u8]> {
+	fn take_maybe(&mut self) -> Vec<u8>;
 }
 
 impl<'a> Value<'a> {
 	#[inline]
 	pub fn into_vec(mut self) -> Vec<u8> {
-		self.0.into_vec()
+		self.0.take_maybe()
 	}
 }
 
@@ -50,7 +50,7 @@ impl<'a> AsRef<[u8]> for Value<'a> {
 impl<'a> std::borrow::Borrow<[u8]> for Value<'a> {
 	#[inline]
 	fn borrow(&self) -> &[u8] {
-		self.0.as_ref().as_ref()
+		self.0.as_ref().borrow()
 	}
 }
 
@@ -82,7 +82,7 @@ impl<'a> std::fmt::Debug for Value<'a> {
 }
 
 impl<'a> IValue<'a> for Vec<u8> {
-	fn into_vec(&mut self) -> Vec<u8> {
+	fn take_maybe(&mut self) -> Vec<u8> {
 		std::mem::take(self)
 	}
 }
@@ -106,7 +106,7 @@ impl<'a> From<&'a [u8]> for Value<'a> {
 }
 
 impl<'a> IValue<'a> for &'a [u8] {
-	fn into_vec(&mut self) -> Vec<u8> {
+	fn take_maybe(&mut self) -> Vec<u8> {
 		self.to_vec()
 	}
 }
@@ -175,21 +175,22 @@ impl Db {
 		}
 	}
 
-	pub fn export<'a>(&'a self) -> Result<Exporter<'a>> {
+	pub fn export(&self) -> Result<Exporter<'_>> {
 		self.0.export()
 	}
 
-	pub fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
+	pub fn import(&self, ex: Exporter<'_>) -> Result<()> {
 		self.0.import(ex)
 	}
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Tree {
 	pub fn db(&self) -> Db {
 		Db(self.0.clone())
 	}
 
-	pub fn get<'a, T: AsRef<[u8]>>(&'a self, key: T) -> Result<Option<Value<'a>>> {
+	pub fn get<T: AsRef<[u8]>>(&self, key: T) -> Result<Option<Value<'_>>> {
 		self.0.get(self.1, key.as_ref())
 	}
 	pub fn len(&self) -> Result<usize> {
@@ -199,18 +200,18 @@ impl Tree {
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<()> {
 		self.0.insert(self.1, key.as_ref(), value.as_ref())
 	}
-	pub fn remove<'a, T: AsRef<[u8]>>(&'a self, key: T) -> Result<bool> {
+	pub fn remove<T: AsRef<[u8]>>(&self, key: T) -> Result<bool> {
 		self.0.remove(self.1, key.as_ref())
 	}
 
-	pub fn iter<'a>(&'a self) -> Result<ValueIter<'a>> {
+	pub fn iter(&self) -> Result<ValueIter<'_>> {
 		self.0.iter(self.1)
 	}
-	pub fn iter_rev<'a>(&'a self) -> Result<ValueIter<'a>> {
+	pub fn iter_rev(&self) -> Result<ValueIter<'_>> {
 		self.0.iter_rev(self.1)
 	}
 
-	pub fn range<'a, K, R>(&'a self, range: R) -> Result<ValueIter<'a>>
+	pub fn range<K, R>(&self, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -219,7 +220,7 @@ impl Tree {
 		let eb = range.end_bound();
 		self.0.range(self.1, get_bound(sb), get_bound(eb))
 	}
-	pub fn range_rev<'a, K, R>(&'a self, range: R) -> Result<ValueIter<'a>>
+	pub fn range_rev<K, R>(&self, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -230,6 +231,7 @@ impl Tree {
 	}
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl<'a> Transaction<'a> {
 	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value<'a>>> {
 		self.0.get(tree.1, key.as_ref())
@@ -278,12 +280,10 @@ impl<'a> Transaction<'a> {
 
 	// ----
 
-	#[must_use]
 	pub fn abort<R, E>(self, e: E) -> TxResult<R, E> {
 		Err(TxError::Abort(e))
 	}
 
-	#[must_use]
 	pub fn commit<R, E>(self, r: R) -> TxResult<R, E> {
 		Ok(r)
 	}
@@ -294,32 +294,32 @@ impl<'a> Transaction<'a> {
 pub(crate) trait IDb: Send + Sync {
 	fn open_tree(&self, name: &str) -> Result<usize>;
 
-	fn get<'a>(&'a self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>>;
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>>;
 	fn len(&self, tree: usize) -> Result<usize>;
 
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool>;
 
-	fn iter<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>>;
-	fn iter_rev<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>>;
+	fn iter(&self, tree: usize) -> Result<ValueIter<'_>>;
+	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>>;
 
-	fn range<'a, 'r>(
-		&'a self,
+	fn range<'r>(
+		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>>;
-	fn range_rev<'a, 'r>(
-		&'a self,
+	) -> Result<ValueIter<'_>>;
+	fn range_rev<'r>(
+		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>>;
+	) -> Result<ValueIter<'_>>;
 
 	fn transaction(&self, f: &dyn ITxFn) -> TxResult<(), ()>;
 
-	fn export<'a>(&'a self) -> Result<Exporter<'a>>;
-	fn import<'a>(&self, ex: Exporter<'a>) -> Result<()>;
+	fn export(&self) -> Result<Exporter<'_>>;
+	fn import(&self, ex: Exporter<'_>) -> Result<()>;
 }
 
 pub(crate) trait ITx<'a> {

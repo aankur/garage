@@ -40,7 +40,7 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 		.flush_every_ms(Some(config.sled_flush_every_ms))
 		.open()
 		.expect("Unable to open sled DB");
-	let db = db::sled_adapter::SledDb::new(db);
+	let db = db::sled_adapter::SledDb::init(db);
 
 	info!("Initializing background runner...");
 	let watch_cancel = netapp::util::watch_ctrl_c();

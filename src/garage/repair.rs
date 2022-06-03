@@ -16,6 +16,8 @@ pub struct Repair {
 	pub garage: Arc<Garage>,
 }
 
+type OptKVPair = Option<(Vec<u8>, Vec<u8>)>;
+
 impl Repair {
 	pub async fn repair_worker(&self, opt: RepairOpt, must_exit: watch::Receiver<bool>) {
 		if let Err(e) = self.repair_worker_aux(opt, must_exit).await {
@@ -105,7 +107,7 @@ impl Repair {
 		Ok(())
 	}
 
-	fn get_next_version_after(&self, pos: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+	fn get_next_version_after(&self, pos: &[u8]) -> Result<OptKVPair, Error> {
 		match self
 			.garage
 			.version_table
@@ -161,7 +163,8 @@ impl Repair {
 		Ok(())
 	}
 
-	fn get_next_block_ref_after(&self, pos: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+	#[allow(clippy::type_complexity)]
+	fn get_next_block_ref_after(&self, pos: &[u8]) -> Result<OptKVPair, Error> {
 		match self
 			.garage
 			.block_ref_table

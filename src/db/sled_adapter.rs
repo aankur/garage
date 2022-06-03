@@ -27,7 +27,7 @@ impl From<sled::Error> for Error {
 // -- val
 
 impl<'a> IValue<'a> for sled::IVec {
-	fn into_vec(&mut self) -> Vec<u8> {
+	fn take_maybe(&mut self) -> Vec<u8> {
 		self.to_vec()
 	}
 }
@@ -52,7 +52,7 @@ pub struct SledDb {
 }
 
 impl SledDb {
-	pub fn new(db: sled::Db) -> Db {
+	pub fn init(db: sled::Db) -> Db {
 		let s = Self {
 			db,
 			trees: RwLock::new((Vec::new(), HashMap::new())),
@@ -67,7 +67,7 @@ impl SledDb {
 			.0
 			.get(i)
 			.cloned()
-			.ok_or(Error("invalid tree id".into()))
+			.ok_or_else(|| Error("invalid tree id".into()))
 	}
 }
 
@@ -87,7 +87,7 @@ impl IDb for SledDb {
 
 	// ----
 
-	fn get<'a>(&'a self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
 		Ok(tree.get(key)?.map(From::from))
 	}
@@ -108,37 +108,37 @@ impl IDb for SledDb {
 		Ok(())
 	}
 
-	fn iter<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
+	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.iter().map(|v| {
 			v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)
 		})))
 	}
 
-	fn iter_rev<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
+	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.iter().rev().map(|v| {
 			v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)
 		})))
 	}
 
-	fn range<'a, 'r>(
-		&'a self,
+	fn range<'r>(
+		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.range::<&'r [u8], _>((low, high)).map(|v| {
 			v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)
 		})))
 	}
-	fn range_rev<'a, 'r>(
-		&'a self,
+	fn range_rev<'r>(
+		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.range::<&'r [u8], _>((low, high)).rev().map(
 			|v| v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into),
@@ -178,7 +178,7 @@ impl IDb for SledDb {
 
 	// ----
 
-	fn export<'a>(&'a self) -> Result<Exporter<'a>> {
+	fn export(&self) -> Result<Exporter<'_>> {
 		let mut trees = vec![];
 		for name in self.db.tree_names() {
 			let name = std::str::from_utf8(&name)
@@ -188,17 +188,17 @@ impl IDb for SledDb {
 			let tree = self.trees.read().unwrap().0.get(tree).unwrap().clone();
 			trees.push((name, tree));
 		}
-		let trees_exporter: Exporter<'a> = Box::new(trees.into_iter().map(|(name, tree)| {
-			let iter: ValueIter<'a> = Box::new(
+		let trees_exporter: Exporter<'_> = Box::new(trees.into_iter().map(|(name, tree)| {
+			let iter: ValueIter<'_> = Box::new(
 				tree.iter()
 					.map(|v| v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)),
 			);
-			Ok((name.to_string(), iter))
+			Ok((name, iter))
 		}));
 		Ok(trees_exporter)
 	}
 
-	fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
+	fn import(&self, ex: Exporter<'_>) -> Result<()> {
 		for ex_tree in ex {
 			let (name, data) = ex_tree?;
 
@@ -234,9 +234,11 @@ struct SledTx<'a> {
 
 impl<'a> SledTx<'a> {
 	fn get_tree(&self, i: usize) -> Result<&TransactionalTree> {
-		self.trees.get(i).ok_or(Error(
-			"invalid tree id (it might have been openned after the transaction started)".into(),
-		))
+		self.trees.get(i).ok_or_else(|| {
+			Error(
+				"invalid tree id (it might have been openned after the transaction started)".into(),
+			)
+		})
 	}
 
 	fn save_error<R>(&self, v: std::result::Result<R, UnabortableTransactionError>) -> Result<R> {

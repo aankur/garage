@@ -81,13 +81,13 @@ fn test_suite(db: Db) {
 #[test]
 fn test_sled_db() {
 	let path = mktemp::Temp::new_dir().unwrap();
-	let db = SledDb::new(sled::open(path.to_path_buf()).unwrap());
+	let db = SledDb::init(sled::open(path.to_path_buf()).unwrap());
 	test_suite(db);
 	drop(path);
 }
 
 #[test]
 fn test_sqlite_db() {
-	let db = SqliteDb::new(rusqlite::Connection::open_in_memory().unwrap());
+	let db = SqliteDb::init(rusqlite::Connection::open_in_memory().unwrap());
 	test_suite(db);
 }

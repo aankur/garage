@@ -56,6 +56,8 @@ const RESYNC_RETRY_DELAY_MAX_BACKOFF_POWER: u64 = 6;
 // to delete the block locally.
 pub(crate) const BLOCK_GC_DELAY: Duration = Duration::from_secs(600);
 
+type OptKVPair = Option<(Vec<u8>, Vec<u8>)>;
+
 /// RPC messages used to share blocks of data between nodes
 #[derive(Debug, Serialize, Deserialize)]
 pub enum BlockRpc {
@@ -640,7 +642,7 @@ impl BlockManager {
 		}
 	}
 
-	fn resync_get_next(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, db::Error> {
+	fn resync_get_next(&self) -> Result<OptKVPair, db::Error> {
 		match self.resync_queue.iter()?.next() {
 			None => Ok(None),
 			Some(v) => {
@@ -970,7 +972,7 @@ impl ErrorCounter {
 		}
 	}
 
-	fn decode<'a>(data: db::Value<'a>) -> Self {
+	fn decode(data: db::Value<'_>) -> Self {
 		Self {
 			errors: u64::from_be_bytes(data[0..8].try_into().unwrap()),
 			last_try: u64::from_be_bytes(data[8..16].try_into().unwrap()),

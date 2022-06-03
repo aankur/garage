@@ -35,7 +35,7 @@ pub struct SqliteDb {
 }
 
 impl SqliteDb {
-	pub fn new(db: rusqlite::Connection) -> Db {
+	pub fn init(db: rusqlite::Connection) -> Db {
 		let s = Self {
 			db: Mutex::new(db),
 			trees: RwLock::new(Vec::new()),
@@ -49,7 +49,7 @@ impl SqliteDb {
 			.unwrap()
 			.get(i)
 			.cloned()
-			.ok_or(Error("invalid tree id".into()))
+			.ok_or_else(|| Error("invalid tree id".into()))
 	}
 }
 
@@ -77,7 +77,7 @@ impl IDb for SqliteDb {
 
 	// ----
 
-	fn get<'a>(&'a self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
 		let db = self.db.lock().unwrap();
 		let mut stmt = db.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
@@ -102,7 +102,7 @@ impl IDb for SqliteDb {
 		let mut res_iter = stmt.query([])?;
 		match res_iter.next()? {
 			None => Ok(0),
-			Some(v) => Ok(v.get::<_, usize>(0)?.into()),
+			Some(v) => Ok(v.get::<_, usize>(0)?),
 		}
 	}
 
@@ -116,24 +116,24 @@ impl IDb for SqliteDb {
 		Ok(())
 	}
 
-	fn iter<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
+	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		let sql = format!("SELECT k, v FROM {} ORDER BY k ASC", tree);
-		DbValueIterator::new(self.db.lock().unwrap(), &sql, [])
+		DbValueIterator::make(self.db.lock().unwrap(), &sql, [])
 	}
 
-	fn iter_rev<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
+	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 		let sql = format!("SELECT k, v FROM {} ORDER BY k DESC", tree);
-		DbValueIterator::new(self.db.lock().unwrap(), &sql, [])
+		DbValueIterator::make(self.db.lock().unwrap(), &sql, [])
 	}
 
-	fn range<'a, 'r>(
-		&'a self,
+	fn range<'r>(
+		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 
 		let (bounds_sql, params) = bounds_sql(low, high);
@@ -143,18 +143,18 @@ impl IDb for SqliteDb {
 			.iter()
 			.map(|x| x as &dyn rusqlite::ToSql)
 			.collect::<Vec<_>>();
-		DbValueIterator::new::<&[&dyn rusqlite::ToSql]>(
+		DbValueIterator::make::<&[&dyn rusqlite::ToSql]>(
 			self.db.lock().unwrap(),
 			&sql,
 			params.as_ref(),
 		)
 	}
-	fn range_rev<'a, 'r>(
-		&'a self,
+	fn range_rev<'r>(
+		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'a>> {
+	) -> Result<ValueIter<'_>> {
 		let tree = self.get_tree(tree)?;
 
 		let (bounds_sql, params) = bounds_sql(low, high);
@@ -164,7 +164,7 @@ impl IDb for SqliteDb {
 			.iter()
 			.map(|x| x as &dyn rusqlite::ToSql)
 			.collect::<Vec<_>>();
-		DbValueIterator::new::<&[&dyn rusqlite::ToSql]>(
+		DbValueIterator::make::<&[&dyn rusqlite::ToSql]>(
 			self.db.lock().unwrap(),
 			&sql,
 			params.as_ref(),
@@ -200,11 +200,11 @@ impl IDb for SqliteDb {
 
 	// ----
 
-	fn export<'a>(&'a self) -> Result<Exporter<'a>> {
+	fn export(&self) -> Result<Exporter<'_>> {
 		unimplemented!()
 	}
 
-	fn import<'a>(&self, ex: Exporter<'a>) -> Result<()> {
+	fn import(&self, ex: Exporter<'_>) -> Result<()> {
 		unimplemented!()
 	}
 
@@ -220,9 +220,11 @@ struct SqliteTx<'a> {
 
 impl<'a> SqliteTx<'a> {
 	fn get_tree(&self, i: usize) -> Result<String> {
-		self.trees.get(i).cloned().ok_or(Error(
-			"invalid tree id (it might have been openned after the transaction started)".into(),
-		))
+		self.trees.get(i).cloned().ok_or_else(|| {
+			Error(
+				"invalid tree id (it might have been openned after the transaction started)".into(),
+			)
+		})
 	}
 }
 
@@ -244,7 +246,7 @@ impl<'a> ITx<'a> for SqliteTx<'a> {
 		let mut res_iter = stmt.query([])?;
 		match res_iter.next()? {
 			None => Ok(0),
-			Some(v) => Ok(v.get::<_, usize>(0)?.into()),
+			Some(v) => Ok(v.get::<_, usize>(0)?),
 		}
 	}
 
@@ -299,13 +301,13 @@ struct DbValueIterator<'a> {
 }
 
 impl<'a> DbValueIterator<'a> {
-	fn new<P: rusqlite::Params>(
+	fn make<P: rusqlite::Params>(
 		db: MutexGuard<'a, Connection>,
 		sql: &str,
 		args: P,
 	) -> Result<ValueIter<'a>> {
 		let res = DbValueIterator {
-			db: db,
+			db,
 			stmt: None,
 			iter: None,
 			_pin: PhantomPinned,
@@ -314,7 +316,7 @@ impl<'a> DbValueIterator<'a> {
 
 		unsafe {
 			let db = NonNull::from(&boxed.db);
-			let stmt = db.as_ref().prepare(&sql)?;
+			let stmt = db.as_ref().prepare(sql)?;
 
 			let mut_ref: Pin<&mut DbValueIterator<'a>> = Pin::as_mut(&mut boxed);
 			Pin::get_unchecked_mut(mut_ref).stmt = Some(stmt);
