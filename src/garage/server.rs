@@ -36,6 +36,7 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 	let db = match config.db_engine.as_str() {
 		"sled" => {
 			db_path.push("db");
+			info!("Opening Sled database at: {}", db_path.display());
 			let db = db::sled_adapter::sled::Config::default()
 				.path(&db_path)
 				.cache_capacity(config.sled_cache_capacity)
@@ -46,13 +47,32 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 		}
 		"sqlite" | "sqlite3" | "rusqlite" => {
 			db_path.push("db.sqlite");
+			info!("Opening Sqlite database at: {}", db_path.display());
 			let db = db::sqlite_adapter::rusqlite::Connection::open(db_path)
 				.expect("Unable to open sqlite DB");
 			db::sqlite_adapter::SqliteDb::init(db)
 		}
+		"lmdb" | "heed" => {
+			db_path.push("db.lmdb");
+			info!("Opening LMDB database at: {}", db_path.display());
+			std::fs::create_dir_all(&db_path).expect("Unable to create LMDB data directory");
+			let map_size = if u32::MAX as usize == usize::MAX {
+				warn!("LMDB is not recommended on 32-bit systems, database size will be limited");
+				1usize << 30 // 1GB for 32-bit systems
+			} else {
+				1usize << 40 // 1TB for 64-bit systems
+			};
+
+			let db = db::lmdb_adapter::heed::EnvOpenOptions::new()
+				.max_dbs(100)
+				.map_size(map_size)
+				.open(&db_path)
+				.expect("Unable to open LMDB DB");
+			db::lmdb_adapter::LmdbDb::init(db)
+		}
 		e => {
 			return Err(Error::Message(format!(
-				"Unsupported DB engine: {} (options: sled, sqlite)",
+				"Unsupported DB engine: {} (options: sled, sqlite, lmdb)",
 				e
 			)));
 		}

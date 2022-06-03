@@ -72,7 +72,31 @@ impl IDb for LmdbDb {
 	}
 
 	fn list_trees(&self) -> Result<Vec<String>> {
-		unimplemented!()
+		let tree0 = match self.db.open_database::<heed::types::Str, ByteSlice>(None)? {
+			Some(x) => x,
+			None => return Ok(vec![]),
+		};
+
+		let mut ret = vec![];
+		let tx = self.db.read_txn()?;
+		for item in tree0.iter(&tx)? {
+			let (tree_name, _) = item?;
+			ret.push(tree_name.to_string());
+		}
+		drop(tx);
+
+		let mut ret2 = vec![];
+		for tree_name in ret {
+			if self
+				.db
+				.open_database::<ByteSlice, ByteSlice>(Some(&tree_name))?
+				.is_some()
+			{
+				ret2.push(tree_name);
+			}
+		}
+
+		Ok(ret2)
 	}
 
 	// ----

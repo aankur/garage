@@ -48,6 +48,17 @@ fn open_db(path: PathBuf, engine: String) -> Result<Db> {
 			let db = sqlite_adapter::rusqlite::Connection::open(&path)?;
 			Ok(sqlite_adapter::SqliteDb::init(db))
 		}
+		"lmdb" | "heed" => {
+			std::fs::create_dir_all(&path).map_err(|e| {
+				Error(format!("Unable to create LMDB data directory: {}", e).into())
+			})?;
+			let db = lmdb_adapter::heed::EnvOpenOptions::new()
+				.max_dbs(100)
+				.map_size(1usize << 30)
+				.open(&path)
+				.unwrap();
+			Ok(lmdb_adapter::LmdbDb::init(db))
+		}
 		e => Err(Error(format!("Invalid DB engine: {}", e).into())),
 	}
 }

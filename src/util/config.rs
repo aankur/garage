@@ -65,7 +65,7 @@ pub struct Config {
 	pub kubernetes_skip_crd: bool,
 
 	// -- DB
-	/// Database engine to use for metadata (options: sled, sqlite)
+	/// Database engine to use for metadata (options: sled, sqlite, lmdb)
 	#[serde(default = "default_db_engine")]
 	pub db_engine: String,
 
