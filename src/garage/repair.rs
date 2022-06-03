@@ -1,4 +1,3 @@
-use core::ops::Bound;
 use std::sync::Arc;
 
 use tokio::sync::watch;
@@ -15,8 +14,6 @@ use crate::*;
 pub struct Repair {
 	pub garage: Arc<Garage>,
 }
-
-type OptKVPair = Option<(Vec<u8>, Vec<u8>)>;
 
 impl Repair {
 	pub async fn repair_worker(&self, opt: RepairOpt, must_exit: watch::Receiver<bool>) {
@@ -68,8 +65,15 @@ impl Repair {
 	async fn repair_versions(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		let mut pos = vec![];
 
-		while let Some((item_key, item_bytes)) = self.get_next_version_after(&pos)? {
-			pos = item_key;
+		while *must_exit.borrow() {
+			let item_bytes = {
+				let (k, v) = match self.garage.version_table.data.store.get_gt(pos)? {
+					Some(pair) => pair,
+					None => break,
+				};
+				pos = k.into_vec();
+				v.into_vec()
+			};
 
 			let version = rmp_serde::decode::from_read_ref::<_, Version>(&item_bytes)?;
 			if version.deleted.get() {
@@ -99,36 +103,22 @@ impl Repair {
 					))
 					.await?;
 			}
-
-			if *must_exit.borrow() {
-				break;
-			}
 		}
 		Ok(())
-	}
-
-	fn get_next_version_after(&self, pos: &[u8]) -> Result<OptKVPair, Error> {
-		match self
-			.garage
-			.version_table
-			.data
-			.store
-			.range::<&[u8], _>((Bound::Excluded(pos), Bound::Unbounded))?
-			.next()
-		{
-			None => Ok(None),
-			Some(item) => {
-				let (item_key, item_bytes) = item?;
-				Ok(Some((item_key.into_vec(), item_bytes.into_vec())))
-			}
-		}
 	}
 
 	async fn repair_block_ref(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		let mut pos = vec![];
 
-		while let Some((item_key, item_bytes)) = self.get_next_block_ref_after(&pos)? {
-			pos = item_key;
+		while *must_exit.borrow() {
+			let item_bytes = {
+				let (k, v) = match self.garage.block_ref_table.data.store.get_gt(pos)? {
+					Some(pair) => pair,
+					None => break,
+				};
+				pos = k.into_vec();
+				v.into_vec()
+			};
 
 			let block_ref = rmp_serde::decode::from_read_ref::<_, BlockRef>(&item_bytes)?;
 			if block_ref.deleted.get() {
@@ -155,29 +145,7 @@ impl Repair {
 					})
 					.await?;
 			}
-
-			if *must_exit.borrow() {
-				break;
-			}
 		}
 		Ok(())
-	}
-
-	#[allow(clippy::type_complexity)]
-	fn get_next_block_ref_after(&self, pos: &[u8]) -> Result<OptKVPair, Error> {
-		match self
-			.garage
-			.block_ref_table
-			.data
-			.store
-			.range::<&[u8], _>((Bound::Excluded(pos), Bound::Unbounded))?
-			.next()
-		{
-			None => Ok(None),
-			Some(item) => {
-				let (item_key, item_bytes) = item?;
-				Ok(Some((item_key.into_vec(), item_bytes.into_vec())))
-			}
-		}
 	}
 }

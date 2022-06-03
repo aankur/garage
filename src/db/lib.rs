@@ -226,6 +226,15 @@ impl Tree {
 		self.0.len(self.1)
 	}
 
+	pub fn first(&self) -> Result<Option<(Value<'_>, Value<'_>)>> {
+		self.iter()?.next().transpose()
+	}
+	pub fn get_gt<T: AsRef<[u8]>>(&self, from: T) -> Result<Option<(Value<'_>, Value<'_>)>> {
+		self.range((Bound::Excluded(from), Bound::Unbounded))?
+			.next()
+			.transpose()
+	}
+
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<()> {
 		self.0.insert(self.1, key.as_ref(), value.as_ref())
 	}

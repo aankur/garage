@@ -56,8 +56,6 @@ const RESYNC_RETRY_DELAY_MAX_BACKOFF_POWER: u64 = 6;
 // to delete the block locally.
 pub(crate) const BLOCK_GC_DELAY: Duration = Duration::from_secs(600);
 
-type OptKVPair = Option<(Vec<u8>, Vec<u8>)>;
-
 /// RPC messages used to share blocks of data between nodes
 #[derive(Debug, Serialize, Deserialize)]
 pub enum BlockRpc {
@@ -549,7 +547,12 @@ impl BlockManager {
 	// - Ok(false) -> no block was processed, but we are ready for the next iteration
 	// - Err(_) -> a Sled error occurred when reading/writing from resync_queue/resync_errors
 	async fn resync_iter(&self, must_exit: &mut watch::Receiver<bool>) -> Result<bool, db::Error> {
-		if let Some((time_bytes, hash_bytes)) = self.resync_get_next()? {
+		let next = match self.resync_queue.first()? {
+			Some((k, v)) => Some((k.into_vec(), v.into_vec())),
+			None => None,
+		};
+
+		if let Some((time_bytes, hash_bytes)) = next {
 			let time_msec = u64::from_be_bytes(time_bytes[0..8].try_into().unwrap());
 			let now = now_msec();
 
@@ -639,16 +642,6 @@ impl BlockManager {
 				_ = must_exit.changed().fuse() => {},
 			}
 			Ok(false)
-		}
-	}
-
-	fn resync_get_next(&self) -> Result<OptKVPair, db::Error> {
-		match self.resync_queue.iter()?.next() {
-			None => Ok(None),
-			Some(v) => {
-				let (time_bytes, hash_bytes) = v?;
-				Ok(Some((time_bytes.into_vec(), hash_bytes.into_vec())))
-			}
 		}
 	}
 

@@ -107,9 +107,9 @@ impl IDb for SqliteDb {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
 
-		trace!("get: lock db");
+		trace!("get {}: lock db", tree);
 		let db = self.db.lock().unwrap();
-		trace!("get: lock acquired");
+		trace!("get {}: lock acquired", tree);
 
 		let mut stmt = db.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
 		let mut res_iter = stmt.query([key])?;
@@ -122,9 +122,9 @@ impl IDb for SqliteDb {
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
 
-		trace!("remove: lock db");
+		trace!("remove {}: lock db", tree);
 		let db = self.db.lock().unwrap();
-		trace!("remove: lock acquired");
+		trace!("remove {}: lock acquired", tree);
 
 		let res = db.execute(&format!("DELETE FROM {} WHERE k = ?1", tree), params![key])?;
 		Ok(res > 0)
@@ -133,9 +133,9 @@ impl IDb for SqliteDb {
 	fn len(&self, tree: usize) -> Result<usize> {
 		let tree = self.get_tree(tree)?;
 
-		trace!("len: lock db");
+		trace!("len {}: lock db", tree);
 		let db = self.db.lock().unwrap();
-		trace!("len: lock acquired");
+		trace!("len {}: lock acquired", tree);
 
 		let mut stmt = db.prepare(&format!("SELECT COUNT(*) FROM {}", tree))?;
 		let mut res_iter = stmt.query([])?;
@@ -148,9 +148,9 @@ impl IDb for SqliteDb {
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
 
-		trace!("insert: lock db");
+		trace!("insert {}: lock db", tree);
 		let db = self.db.lock().unwrap();
-		trace!("insert: lock acquired");
+		trace!("insert {}: lock acquired", tree);
 
 		db.execute(
 			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
