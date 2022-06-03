@@ -1015,6 +1015,7 @@ name = "garage_db"
 version = "0.8.0"
 dependencies = [
  "err-derive 0.3.1",
+ "hexdump",
  "mktemp",
  "rusqlite",
  "sled",

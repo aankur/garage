@@ -378,8 +378,11 @@ impl GcTodoEntry {
 		let key = self.todo_table_key();
 		gc_todo_tree.db().transaction(|tx| {
 			let old_val = tx.get(gc_todo_tree, &key)?;
-			if old_val == Some(self.value_hash.as_slice().into()) {
-				tx.remove(gc_todo_tree, &key)?;
+			match old_val {
+				Some(ov) if ov == self.value_hash.as_slice() => {
+					tx.remove(gc_todo_tree, &key)?;
+				}
+				_ => (),
 			}
 			tx.commit(())
 		})?;

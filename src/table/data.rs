@@ -276,7 +276,7 @@ where
 				if blake2sum(&cur_v[..]) == vhash {
 					tx.remove(&self.store, k)?;
 					tx.insert(&self.merkle_todo, k, vec![])?;
-					return Ok(Some(cur_v.into_owned()));
+					return Ok(Some(cur_v.into_vec()));
 				}
 			}
 			Ok(None)

@@ -21,10 +21,95 @@ pub struct Transaction<'a>(pub(crate) &'a dyn ITx<'a>);
 #[derive(Clone)]
 pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
 
-pub type Value<'a> = Cow<'a, [u8]>;
 pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + 'a>;
 
 pub type Exporter<'a> = Box<dyn std::iter::Iterator<Item = Result<(String, ValueIter<'a>)>> + 'a>;
+
+// ----
+
+pub struct Value<'a>(pub(crate) Box<dyn IValue<'a> + 'a>);
+
+pub trait IValue<'a>: AsRef<[u8]> {
+	fn into_vec(&mut self) -> Vec<u8>;
+}
+
+impl<'a> Value<'a> {
+	#[inline]
+	pub fn into_vec(mut self) -> Vec<u8> {
+		self.0.into_vec()
+	}
+}
+
+impl<'a> AsRef<[u8]> for Value<'a> {
+	#[inline]
+	fn as_ref(&self) -> &[u8] {
+		self.0.as_ref().as_ref()
+	}
+}
+
+impl<'a> std::borrow::Borrow<[u8]> for Value<'a> {
+	#[inline]
+	fn borrow(&self) -> &[u8] {
+		self.0.as_ref().as_ref()
+	}
+}
+
+impl<'a> core::ops::Deref for Value<'a> {
+	type Target = [u8];
+	#[inline]
+	fn deref(&self) -> &[u8] {
+		self.0.as_ref().as_ref()
+	}
+}
+
+impl<'a, T> PartialEq<T> for Value<'a>
+where
+	T: AsRef<[u8]>,
+{
+	fn eq(&self, other: &T) -> bool {
+		self.as_ref() == other.as_ref()
+	}
+}
+
+impl<'a> std::fmt::Debug for Value<'a> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		for line in hexdump::hexdump_iter(self.as_ref()) {
+			f.write_str(&line)?;
+			f.write_str("\n")?;
+		}
+		Ok(())
+	}
+}
+
+impl<'a> IValue<'a> for Vec<u8> {
+	fn into_vec(&mut self) -> Vec<u8> {
+		std::mem::take(self)
+	}
+}
+
+impl<'a> From<Value<'a>> for Vec<u8> {
+	fn from(v: Value<'a>) -> Vec<u8> {
+		v.into_vec()
+	}
+}
+
+impl<'a> From<Vec<u8>> for Value<'a> {
+	fn from(v: Vec<u8>) -> Value<'a> {
+		Value(Box::new(v))
+	}
+}
+
+impl<'a> From<&'a [u8]> for Value<'a> {
+	fn from(v: &'a [u8]) -> Value<'a> {
+		Value(Box::new(v))
+	}
+}
+
+impl<'a> IValue<'a> for &'a [u8] {
+	fn into_vec(&mut self) -> Vec<u8> {
+		self.to_vec()
+	}
+}
 
 // ----
 

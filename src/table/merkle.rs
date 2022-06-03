@@ -142,11 +142,12 @@ where
 
 		let deleted = self.data.merkle_todo.db().transaction(|tx| {
 			let old_val = tx.get(&self.data.merkle_todo, k)?;
-			if old_val == Some(vhash_by.into()) {
-				tx.remove(&self.data.merkle_todo, k)?;
-				tx.commit(true)
-			} else {
-				tx.commit(false)
+			match old_val {
+				Some(ov) if ov == vhash_by => {
+					tx.remove(&self.data.merkle_todo, k)?;
+					tx.commit(true)
+				}
+				_ => tx.commit(false),
 			}
 		})?;
 

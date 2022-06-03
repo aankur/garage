@@ -10,16 +10,41 @@ use sled::transaction::{
 };
 
 use crate::{
-	Db, Error, Exporter, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
+	Db, Error, Exporter, IDb, ITx, ITxFn, IValue, Result, TxError, TxFnResult, TxResult, Value,
+	ValueIter,
 };
 
 pub use sled;
+
+// -- err
 
 impl From<sled::Error> for Error {
 	fn from(e: sled::Error) -> Error {
 		Error(format!("{}", e).into())
 	}
 }
+
+// -- val
+
+impl<'a> IValue<'a> for sled::IVec {
+	fn into_vec(&mut self) -> Vec<u8> {
+		self.to_vec()
+	}
+}
+
+impl<'a> From<Value<'a>> for sled::IVec {
+	fn from(v: Value<'a>) -> sled::IVec {
+		sled::IVec::from(v.into_vec())
+	}
+}
+
+impl<'a> From<sled::IVec> for Value<'a> {
+	fn from(v: sled::IVec) -> Value<'a> {
+		Value(Box::new(v))
+	}
+}
+
+// -- db
 
 pub struct SledDb {
 	db: sled::Db,
@@ -64,7 +89,7 @@ impl IDb for SledDb {
 
 	fn get<'a>(&'a self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
 		let tree = self.get_tree(tree)?;
-		Ok(tree.get(key)?.map(|v| v.to_vec().into()))
+		Ok(tree.get(key)?.map(From::from))
 	}
 
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
@@ -86,16 +111,14 @@ impl IDb for SledDb {
 	fn iter<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.iter().map(|v| {
-			v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-				.map_err(Into::into)
+			v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)
 		})))
 	}
 
 	fn iter_rev<'a>(&'a self, tree: usize) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.iter().rev().map(|v| {
-			v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-				.map_err(Into::into)
+			v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)
 		})))
 	}
 
@@ -107,8 +130,7 @@ impl IDb for SledDb {
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.range::<&'r [u8], _>((low, high)).map(|v| {
-			v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-				.map_err(Into::into)
+			v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)
 		})))
 	}
 	fn range_rev<'a, 'r>(
@@ -119,10 +141,7 @@ impl IDb for SledDb {
 	) -> Result<ValueIter<'a>> {
 		let tree = self.get_tree(tree)?;
 		Ok(Box::new(tree.range::<&'r [u8], _>((low, high)).rev().map(
-			|v| {
-				v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-					.map_err(Into::into)
-			},
+			|v| v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into),
 		)))
 	}
 
@@ -170,10 +189,10 @@ impl IDb for SledDb {
 			trees.push((name, tree));
 		}
 		let trees_exporter: Exporter<'a> = Box::new(trees.into_iter().map(|(name, tree)| {
-			let iter: ValueIter<'a> = Box::new(tree.iter().map(|v| {
-				v.map(|(x, y)| (x.to_vec().into(), y.to_vec().into()))
-					.map_err(Into::into)
-			}));
+			let iter: ValueIter<'a> = Box::new(
+				tree.iter()
+					.map(|v| v.map(|(x, y)| (x.into(), y.into())).map_err(Into::into)),
+			);
 			Ok((name.to_string(), iter))
 		}));
 		Ok(trees_exporter)
@@ -192,7 +211,7 @@ impl IDb for SledDb {
 			let mut i = 0;
 			for item in data {
 				let (k, v) = item?;
-				tree.insert(k.as_ref(), v.as_ref())?;
+				tree.insert(k, v)?;
 				i += 1;
 				if i % 1000 == 0 {
 					println!("{}: imported {}", name, i);
@@ -236,7 +255,7 @@ impl<'a> ITx<'a> for SledTx<'a> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'a>>> {
 		let tree = self.get_tree(tree)?;
 		let tmp = self.save_error(tree.get(key))?;
-		Ok(tmp.map(|v| v.to_vec().into()))
+		Ok(tmp.map(From::from))
 	}
 	fn len(&self, _tree: usize) -> Result<usize> {
 		unimplemented!(".len() in transaction not supported with Sled backend")

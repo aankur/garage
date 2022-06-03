@@ -14,59 +14,66 @@ fn test_suite(db: Db) {
 	let vc: &[u8] = &b"plup"[..];
 
 	tree.insert(ka, va).unwrap();
-	assert_eq!(tree.get(ka).unwrap(), Some(va.into()));
+	assert_eq!(tree.get(ka).unwrap().unwrap(), va);
 
 	let res = db.transaction::<_, (), _>(|tx| {
-		assert_eq!(tx.get(&tree, ka).unwrap(), Some(va.into()));
+		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), va);
 
 		tx.insert(&tree, ka, vb).unwrap();
 
-		assert_eq!(tx.get(&tree, ka).unwrap(), Some(vb.into()));
+		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
 		tx.commit(12)
 	});
 	assert!(matches!(res, Ok(12)));
-	assert_eq!(tree.get(ka).unwrap(), Some(vb.into()));
+	assert_eq!(tree.get(ka).unwrap().unwrap(), vb);
 
 	let res = db.transaction::<(), _, _>(|tx| {
-		assert_eq!(tx.get(&tree, ka).unwrap(), Some(vb.into()));
+		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
 		tx.insert(&tree, ka, vc).unwrap();
 
-		assert_eq!(tx.get(&tree, ka).unwrap(), Some(vc.into()));
+		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vc);
 
 		tx.abort(42)
 	});
 	assert!(matches!(res, Err(TxError::Abort(42))));
-	assert_eq!(tree.get(ka).unwrap(), Some(vb.into()));
+	assert_eq!(tree.get(ka).unwrap().unwrap(), vb);
 
 	let mut iter = tree.iter().unwrap();
-	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (ka, vb));
 	assert!(iter.next().is_none());
 	drop(iter);
 
 	tree.insert(kb, vc).unwrap();
-	assert_eq!(tree.get(kb).unwrap(), Some(vc.into()));
+	assert_eq!(tree.get(kb).unwrap().unwrap(), vc);
 
 	let mut iter = tree.iter().unwrap();
-	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
-	assert_eq!(iter.next().unwrap().unwrap(), (kb.into(), vc.into()));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (ka, vb));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (kb, vc));
 	assert!(iter.next().is_none());
 	drop(iter);
 
 	let mut iter = tree.range(kint..).unwrap();
-	assert_eq!(iter.next().unwrap().unwrap(), (kb.into(), vc.into()));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (kb, vc));
 	assert!(iter.next().is_none());
 	drop(iter);
 
 	let mut iter = tree.range_rev(..kint).unwrap();
-	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (ka, vb));
 	assert!(iter.next().is_none());
 	drop(iter);
 
 	let mut iter = tree.iter_rev().unwrap();
-	assert_eq!(iter.next().unwrap().unwrap(), (kb.into(), vc.into()));
-	assert_eq!(iter.next().unwrap().unwrap(), (ka.into(), vb.into()));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (kb, vc));
+	let next = iter.next().unwrap().unwrap();
+	assert_eq!((next.0.as_ref(), next.1.as_ref()), (ka, vb));
 	assert!(iter.next().is_none());
 	drop(iter);
 }

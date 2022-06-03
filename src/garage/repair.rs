@@ -117,7 +117,7 @@ impl Repair {
 			None => Ok(None),
 			Some(item) => {
 				let (item_key, item_bytes) = item?;
-				Ok(Some((item_key.into_owned(), item_bytes.into_owned())))
+				Ok(Some((item_key.into_vec(), item_bytes.into_vec())))
 			}
 		}
 	}
@@ -173,7 +173,7 @@ impl Repair {
 			None => Ok(None),
 			Some(item) => {
 				let (item_key, item_bytes) = item?;
-				Ok(Some((item_key.into_owned(), item_bytes.into_owned())))
+				Ok(Some((item_key.into_vec(), item_bytes.into_vec())))
 			}
 		}
 	}

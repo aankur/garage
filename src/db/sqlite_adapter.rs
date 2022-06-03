@@ -13,6 +13,8 @@ use crate::{
 
 pub use rusqlite;
 
+// --- err
+
 impl From<rusqlite::Error> for Error {
 	fn from(e: rusqlite::Error) -> Error {
 		Error(format!("{}", e).into())
@@ -24,6 +26,8 @@ impl<T> From<rusqlite::Error> for TxError<T> {
 		TxError::Db(e.into())
 	}
 }
+
+// -- db
 
 pub struct SqliteDb {
 	db: Mutex<Connection>,

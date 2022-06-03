@@ -645,7 +645,7 @@ impl BlockManager {
 			None => Ok(None),
 			Some(v) => {
 				let (time_bytes, hash_bytes) = v?;
-				Ok(Some((time_bytes.into_owned(), hash_bytes.into_owned())))
+				Ok(Some((time_bytes.into_vec(), hash_bytes.into_vec())))
 			}
 		}
 	}
