@@ -1,3 +1,5 @@
+use core::ops::Bound;
+
 use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -218,19 +220,35 @@ impl BlockManager {
 	/// to fix any mismatch between the two.
 	pub async fn repair_data_store(&self, must_exit: &watch::Receiver<bool>) -> Result<(), Error> {
 		// 1. Repair blocks from RC table.
-		// TODO don't do this like this
-		let mut hashes = vec![];
-		for (i, entry) in self.rc.rc.iter()?.enumerate() {
-			let (hash, _) = entry?;
-			let hash = Hash::try_from(&hash[..]).unwrap();
-			hashes.push(hash);
-			if i & 0xFF == 0 && *must_exit.borrow() {
-				return Ok(());
+		let mut next_start: Option<Hash> = None;
+		loop {
+			let mut batch_of_hashes = vec![];
+			let start_bound = match next_start.as_ref() {
+				None => Bound::Unbounded,
+				Some(x) => Bound::Excluded(x.as_slice()),
+			};
+			for entry in self
+				.rc
+				.rc
+				.range::<&[u8], _>((start_bound, Bound::Unbounded))?
+			{
+				let (hash, _) = entry?;
+				let hash = Hash::try_from(&hash[..]).unwrap();
+				batch_of_hashes.push(hash);
+				if batch_of_hashes.len() >= 1000 {
+					break;
+				}
 			}
-		}
-		for (i, hash) in hashes.into_iter().enumerate() {
-			self.put_to_resync(&hash, Duration::from_secs(0))?;
-			if i & 0xFF == 0 && *must_exit.borrow() {
+			if batch_of_hashes.is_empty() {
+				break;
+			}
+
+			for hash in batch_of_hashes.into_iter() {
+				self.put_to_resync(&hash, Duration::from_secs(0))?;
+				next_start = Some(hash)
+			}
+
+			if *must_exit.borrow() {
 				return Ok(());
 			}
 		}
@@ -271,18 +289,18 @@ impl BlockManager {
 	}
 
 	/// Get lenght of resync queue
-	pub fn resync_queue_len(&self) -> usize {
-		self.resync_queue.len().unwrap() // TODO fix unwrap
+	pub fn resync_queue_len(&self) -> Result<usize, Error> {
+		Ok(self.resync_queue.len()?)
 	}
 
 	/// Get number of blocks that have an error
-	pub fn resync_errors_len(&self) -> usize {
-		self.resync_errors.len().unwrap() // TODO fix unwrap
+	pub fn resync_errors_len(&self) -> Result<usize, Error> {
+		Ok(self.resync_errors.len()?)
 	}
 
 	/// Get number of items in the refcount table
-	pub fn rc_len(&self) -> usize {
-		self.rc.rc.len().unwrap() // TODO fix unwrap
+	pub fn rc_len(&self) -> Result<usize, Error> {
+		Ok(self.rc.rc.len()?)
 	}
 
 	//// ----- Managing the reference counter ----

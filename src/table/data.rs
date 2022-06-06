@@ -318,7 +318,7 @@ where
 		}
 	}
 
-	pub fn gc_todo_len(&self) -> usize {
-		self.gc_todo.len().unwrap() // TODO fix unwrap
+	pub fn gc_todo_len(&self) -> Result<usize, Error> {
+		Ok(self.gc_todo.len()?)
 	}
 }

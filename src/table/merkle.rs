@@ -316,12 +316,12 @@ where
 		MerkleNode::decode_opt(&ent)
 	}
 
-	pub fn merkle_tree_len(&self) -> usize {
-		self.data.merkle_tree.len().unwrap() // TODO fix unwrap
+	pub fn merkle_tree_len(&self) -> Result<usize, Error> {
+		Ok(self.data.merkle_tree.len()?)
 	}
 
-	pub fn todo_len(&self) -> usize {
-		self.data.merkle_todo.len().unwrap() // TODO fix unwrap
+	pub fn todo_len(&self) -> Result<usize, Error> {
+		Ok(self.data.merkle_todo.len()?)
 	}
 }
 
