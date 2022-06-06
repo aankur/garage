@@ -1008,7 +1008,7 @@ impl ErrorCounter {
 		}
 	}
 
-	fn decode(data: &db::Value) -> Self {
+	fn decode(data: &[u8]) -> Self {
 		Self {
 			errors: u64::from_be_bytes(data[0..8].try_into().unwrap()),
 			last_try: u64::from_be_bytes(data[8..16].try_into().unwrap()),
