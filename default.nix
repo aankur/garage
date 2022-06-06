@@ -104,8 +104,8 @@ in let
     */
     (pkgs.rustBuilder.rustLib.makeOverride {
       name = "libsqlite3-sys";
-      overrideAttrs = drv: {
-        propagatedBuildInputs = drv.propagatedBuildInputs or [ ] ++ [ pkgs.sqlite ];
+      overrideArgs = old: {
+        features = old.features or [ ] ++ [ "bundled" ];
       };
     })
     (pkgs.rustBuilder.rustLib.makeOverride {
