@@ -354,7 +354,7 @@ impl MerkleNode {
 	fn decode_opt(ent: &Option<db::Value>) -> Result<Self, Error> {
 		match ent {
 			None => Ok(MerkleNode::Empty),
-			Some(v) => Ok(rmp_serde::decode::from_slice::<MerkleNode>(&v[..])?),
+			Some(v) => Ok(rmp_serde::decode::from_read_ref::<_, MerkleNode>(&v[..])?),
 		}
 	}
 

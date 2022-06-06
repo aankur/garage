@@ -270,7 +270,7 @@ impl TableSchema for ObjectTable {
 	}
 
 	fn try_migrate(bytes: &[u8]) -> Option<Self::E> {
-		let old_obj = rmp_serde::decode::from_slice::<old::Object>(bytes).ok()?;
+		let old_obj = rmp_serde::decode::from_read_ref::<_, old::Object>(bytes).ok()?;
 		Some(migrate_object(old_obj))
 	}
 }

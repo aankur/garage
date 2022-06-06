@@ -168,7 +168,7 @@ impl TableSchema for VersionTable {
 	}
 
 	fn try_migrate(bytes: &[u8]) -> Option<Self::E> {
-		let old = rmp_serde::decode::from_slice::<old::Version>(bytes).ok()?;
+		let old = rmp_serde::decode::from_read_ref::<_, old::Version>(bytes).ok()?;
 
 		let blocks = old
 			.blocks

@@ -175,7 +175,7 @@ impl TableSchema for KeyTable {
 	}
 
 	fn try_migrate(bytes: &[u8]) -> Option<Self::E> {
-		let old_k = rmp_serde::decode::from_slice::<old::Key>(bytes).ok()?;
+		let old_k = rmp_serde::decode::from_read_ref::<_, old::Key>(bytes).ok()?;
 		let name = crdt::Lww::raw(old_k.name.timestamp(), old_k.name.get().clone());
 
 		let state = if old_k.deleted.get() {

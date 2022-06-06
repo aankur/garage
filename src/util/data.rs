@@ -151,7 +151,7 @@ where
 	let mut wr = Vec::with_capacity(128);
 	let mut se = rmp_serde::Serializer::new(&mut wr)
 		.with_struct_map()
-		.with_binary();
+		.with_string_variants();
 	val.serialize(&mut se)?;
 	Ok(wr)
 }
