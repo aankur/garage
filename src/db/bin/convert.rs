@@ -54,9 +54,17 @@ fn open_db(path: PathBuf, engine: String) -> Result<Db> {
 			std::fs::create_dir_all(&path).map_err(|e| {
 				Error(format!("Unable to create LMDB data directory: {}", e).into())
 			})?;
+
+			let map_size = if u32::MAX as usize == usize::MAX {
+				eprintln!("LMDB is not recommended on 32-bit systems, database size will be limited");
+				1usize << 30 // 1GB for 32-bit systems
+			} else {
+				1usize << 40 // 1TB for 64-bit systems
+			};
+
 			let db = lmdb_adapter::heed::EnvOpenOptions::new()
 				.max_dbs(100)
-				.map_size(1usize << 30)
+				.map_size(map_size)
 				.open(&path)
 				.unwrap();
 			Ok(lmdb_adapter::LmdbDb::init(db))
