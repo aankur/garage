@@ -222,6 +222,15 @@ impl BlockManager {
 		// 1. Repair blocks from RC table.
 		let mut next_start: Option<Hash> = None;
 		loop {
+			// We have to do this complicated two-step process where we first read a bunch
+			// of hashes from the RC table, and then insert them in the to-resync queue,
+			// because of SQLite. Basically, as long as we have an iterator on a DB table,
+			// we can't do anything else on the DB. The naive approach (which we had previously)
+			// of just iterating on the RC table and inserting items one to one in the resync
+			// queue can't work here, it would just provoke a deadlock in the SQLite adapter code.
+			// This is mostly because the Rust bindings for SQLite assume a worst-case scenario
+			// where SQLite is not compiled in thread-safe mode, so we have to wrap everything
+			// in a mutex (see db/sqlite_adapter.rs).
 			let mut batch_of_hashes = vec![];
 			let start_bound = match next_start.as_ref() {
 				None => Bound::Unbounded,
