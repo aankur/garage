@@ -1,6 +1,4 @@
-use core::marker::PhantomPinned;
 use core::ops::Bound;
-use core::pin::Pin;
 use core::ptr::NonNull;
 
 use std::collections::HashMap;
@@ -272,7 +270,6 @@ where
 {
 	tx: RoTxn<'a>,
 	iter: Option<I>,
-	_pin: PhantomPinned,
 }
 
 impl<'a, I> TxAndIterator<'a, I>
@@ -283,22 +280,12 @@ where
 	where
 		F: FnOnce(&'a RoTxn<'a>) -> Result<I>,
 	{
-		let res = TxAndIterator {
-			tx,
-			iter: None,
-			_pin: PhantomPinned,
-		};
-		let mut boxed = Box::pin(res);
+		let mut res = TxAndIterator { tx, iter: None };
 
-		unsafe {
-			let tx = NonNull::from(&boxed.tx);
-			let iter = iterfun(tx.as_ref())?;
+		let tx = unsafe { NonNull::from(&res.tx).as_ref() };
+		res.iter = Some(iterfun(tx)?);
 
-			let mut_ref: Pin<&mut TxAndIterator<'a, I>> = Pin::as_mut(&mut boxed);
-			Pin::get_unchecked_mut(mut_ref).iter = Some(iter);
-		}
-
-		Ok(Box::new(TxAndIteratorPin(boxed)))
+		Ok(Box::new(res))
 	}
 }
 
@@ -311,22 +298,14 @@ where
 	}
 }
 
-struct TxAndIteratorPin<'a, I: Iterator<Item = IteratorItem<'a>> + 'a>(
-	Pin<Box<TxAndIterator<'a, I>>>,
-);
-
-impl<'a, I> Iterator for TxAndIteratorPin<'a, I>
+impl<'a, I> Iterator for TxAndIterator<'a, I>
 where
 	I: Iterator<Item = IteratorItem<'a>> + 'a,
 {
 	type Item = Result<(Value, Value)>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let iter_ref = unsafe {
-			let mut_ref: Pin<&mut TxAndIterator<'a, I>> = Pin::as_mut(&mut self.0);
-			Pin::get_unchecked_mut(mut_ref).iter.as_mut()
-		};
-		match iter_ref.unwrap().next() {
+		match self.iter.as_mut().unwrap().next() {
 			None => None,
 			Some(Err(e)) => Some(Err(e.into())),
 			Some(Ok((k, v))) => Some(Ok((k.to_vec(), v.to_vec()))),
