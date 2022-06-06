@@ -19,35 +19,29 @@ impl BlockRc {
 
 	/// Increment the reference counter associated to a hash.
 	/// Returns true if the RC goes from zero to nonzero.
-	pub(crate) fn block_incref(&self, hash: &Hash) -> Result<bool, Error> {
-		let old_rc = self.rc.db().transaction(|mut tx| {
-			let old_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?);
-			match old_rc.increment().serialize() {
-				Some(x) => {
-					tx.insert(&self.rc, &hash, x)?;
-				}
-				None => unreachable!(),
-			};
-			tx.commit(old_rc)
-		})?;
+	pub(crate) fn block_incref(&self, tx: &mut db::Transaction, hash: &Hash) -> db::Result<bool> {
+		let old_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?);
+		match old_rc.increment().serialize() {
+			Some(x) => {
+				tx.insert(&self.rc, &hash, x)?;
+			}
+			None => unreachable!(),
+		};
 		Ok(old_rc.is_zero())
 	}
 
 	/// Decrement the reference counter associated to a hash.
 	/// Returns true if the RC is now zero.
-	pub(crate) fn block_decref(&self, hash: &Hash) -> Result<bool, Error> {
-		let new_rc = self.rc.db().transaction(|mut tx| {
-			let new_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?).decrement();
-			match new_rc.serialize() {
-				Some(x) => {
-					tx.insert(&self.rc, &hash, x)?;
-				}
-				None => {
-					tx.remove(&self.rc, &hash)?;
-				}
-			};
-			tx.commit(new_rc)
-		})?;
+	pub(crate) fn block_decref(&self, tx: &mut db::Transaction, hash: &Hash) -> db::Result<bool> {
+		let new_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?).decrement();
+		match new_rc.serialize() {
+			Some(x) => {
+				tx.insert(&self.rc, &hash, x)?;
+			}
+			None => {
+				tx.remove(&self.rc, &hash)?;
+			}
+		};
 		Ok(matches!(new_rc, RcEntry::Deletable { .. }))
 	}
 

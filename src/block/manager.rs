@@ -289,28 +289,41 @@ impl BlockManager {
 
 	/// Increment the number of time a block is used, putting it to resynchronization if it is
 	/// required, but not known
-	pub fn block_incref(&self, hash: &Hash) -> Result<(), Error> {
-		if self.rc.block_incref(hash)? {
+	pub fn block_incref(self: &Arc<Self>, tx: &mut db::Transaction, hash: Hash) -> db::Result<()> {
+		if self.rc.block_incref(tx, &hash)? {
 			// When the reference counter is incremented, there is
 			// normally a node that is responsible for sending us the
 			// data of the block. However that operation may fail,
 			// so in all cases we add the block here to the todo list
 			// to check later that it arrived correctly, and if not
 			// we will fecth it from someone.
-			self.put_to_resync(hash, 2 * BLOCK_RW_TIMEOUT)?;
+			let this = self.clone();
+			tokio::spawn(async move {
+				tokio::time::sleep(Duration::from_secs(1)).await;
+				if let Err(e) = this.put_to_resync(&hash, 2 * BLOCK_RW_TIMEOUT) {
+					error!("Block {:?} could not be put in resync queue: {}.", hash, e);
+				}
+			});
 		}
 		Ok(())
 	}
 
 	/// Decrement the number of time a block is used
-	pub fn block_decref(&self, hash: &Hash) -> Result<(), Error> {
-		if self.rc.block_decref(hash)? {
+	pub fn block_decref(self: &Arc<Self>, tx: &mut db::Transaction, hash: Hash) -> db::Result<()> {
+		if self.rc.block_decref(tx, &hash)? {
 			// When the RC is decremented, it might drop to zero,
 			// indicating that we don't need the block.
 			// There is a delay before we garbage collect it;
 			// make sure that it is handled in the resync loop
 			// after that delay has passed.
-			self.put_to_resync(hash, BLOCK_GC_DELAY + Duration::from_secs(10))?;
+			let this = self.clone();
+			tokio::spawn(async move {
+				tokio::time::sleep(Duration::from_secs(1)).await;
+				if let Err(e) = this.put_to_resync(&hash, BLOCK_GC_DELAY + Duration::from_secs(10))
+				{
+					error!("Block {:?} could not be put in resync queue: {}.", hash, e);
+				}
+			});
 		}
 		Ok(())
 	}
@@ -510,12 +523,12 @@ impl BlockManager {
 		});
 	}
 
-	fn put_to_resync(&self, hash: &Hash, delay: Duration) -> Result<(), db::Error> {
+	fn put_to_resync(&self, hash: &Hash, delay: Duration) -> db::Result<()> {
 		let when = now_msec() + delay.as_millis() as u64;
 		self.put_to_resync_at(hash, when)
 	}
 
-	fn put_to_resync_at(&self, hash: &Hash, when: u64) -> Result<(), db::Error> {
+	fn put_to_resync_at(&self, hash: &Hash, when: u64) -> db::Result<()> {
 		trace!("Put resync_queue: {} {:?}", when, hash);
 		let mut key = u64::to_be_bytes(when).to_vec();
 		key.extend(hash.as_ref());

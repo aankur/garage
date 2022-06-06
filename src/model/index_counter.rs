@@ -116,8 +116,14 @@ impl<T: CounterSchema> TableSchema for CounterTable<T> {
 	type E = CounterEntry<T>;
 	type Filter = (DeletedFilter, Vec<Uuid>);
 
-	fn updated(&self, _old: Option<&Self::E>, _new: Option<&Self::E>) {
+	fn updated(
+		&self,
+		_tx: &mut db::Transaction,
+		_old: Option<&Self::E>,
+		_new: Option<&Self::E>,
+	) -> db::Result<()> {
 		// nothing for now
+		Ok(())
 	}
 
 	fn matches_filter(entry: &Self::E, filter: &Self::Filter) -> bool {
@@ -176,36 +182,36 @@ impl<T: CounterSchema> IndexCounter<T> {
 		this
 	}
 
-	pub fn count(&self, pk: &T::P, sk: &T::S, counts: &[(&str, i64)]) -> Result<(), Error> {
+	pub fn count(
+		&self,
+		tx: &mut db::Transaction,
+		pk: &T::P,
+		sk: &T::S,
+		counts: &[(&str, i64)],
+	) -> db::TxResult<(), Error> {
 		let tree_key = self.table.data.tree_key(pk, sk);
 
-		let new_entry = self.local_counter.db().transaction(|mut tx| {
-			let mut entry = match tx.get(&self.local_counter, &tree_key[..])? {
-				Some(old_bytes) => {
-					rmp_serde::decode::from_read_ref::<_, LocalCounterEntry>(&old_bytes)
-						.map_err(Error::RmpDecode)
-						.map_err(db::TxError::Abort)?
-				}
-				None => LocalCounterEntry {
-					values: BTreeMap::new(),
-				},
-			};
+		let mut entry = match tx.get(&self.local_counter, &tree_key[..])? {
+			Some(old_bytes) => rmp_serde::decode::from_read_ref::<_, LocalCounterEntry>(&old_bytes)
+				.map_err(Error::RmpDecode)
+				.map_err(db::TxError::Abort)?,
+			None => LocalCounterEntry {
+				values: BTreeMap::new(),
+			},
+		};
 
-			for (s, inc) in counts.iter() {
-				let mut ent = entry.values.entry(s.to_string()).or_insert((0, 0));
-				ent.0 += 1;
-				ent.1 += *inc;
-			}
+		for (s, inc) in counts.iter() {
+			let mut ent = entry.values.entry(s.to_string()).or_insert((0, 0));
+			ent.0 += 1;
+			ent.1 += *inc;
+		}
 
-			let new_entry_bytes = rmp_to_vec_all_named(&entry)
-				.map_err(Error::RmpEncode)
-				.map_err(db::TxError::Abort)?;
-			tx.insert(&self.local_counter, &tree_key[..], new_entry_bytes)?;
+		let new_entry_bytes = rmp_to_vec_all_named(&entry)
+			.map_err(Error::RmpEncode)
+			.map_err(db::TxError::Abort)?;
+		tx.insert(&self.local_counter, &tree_key[..], new_entry_bytes)?;
 
-			Ok(entry)
-		})?;
-
-		if let Err(e) = self.propagate_tx.send((pk.clone(), sk.clone(), new_entry)) {
+		if let Err(e) = self.propagate_tx.send((pk.clone(), sk.clone(), entry)) {
 			error!(
 				"Could not propagate updated counter values, failed to send to channel: {}",
 				e
