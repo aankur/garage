@@ -11,7 +11,7 @@ use heed::types::ByteSlice;
 use heed::{BytesDecode, Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
 use crate::{
-	Db, Error, IDb, ITx, ITxFn, IValue, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
+	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
 };
 
 pub use heed;
@@ -101,28 +101,15 @@ impl IDb for LmdbDb {
 
 	// ----
 
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 
-		let res = TxAndValue {
-			tx: self.db.read_txn()?,
-			value: NonNull::dangling(),
-			_pin: PhantomPinned,
-		};
-		let mut boxed = Box::pin(res);
-
-		unsafe {
-			let tx = NonNull::from(&boxed.tx);
-			let val = match tree.get(tx.as_ref(), &key)? {
-				None => return Ok(None),
-				Some(v) => v,
-			};
-
-			let mut_ref: Pin<&mut TxAndValue<'_>> = Pin::as_mut(&mut boxed);
-			Pin::get_unchecked_mut(mut_ref).value = NonNull::from(&val);
+		let tx = self.db.read_txn()?;
+		let val = tree.get(&tx, &key)?;
+		match val {
+			None => Ok(None),
+			Some(v) => Ok(Some(v.to_vec())),
 		}
-
-		Ok(Some(Value(Box::new(TxAndValuePin(boxed)))))
 	}
 
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
@@ -227,13 +214,10 @@ impl<'a, 'db> LmdbTx<'a, 'db> {
 }
 
 impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		match tree.get(&self.tx, &key)? {
-			Some(v) => {
-				let v: &'_ [u8] = v;
-				Ok(Some(v.into()))
-			}
+			Some(v) => Ok(Some(v.to_vec())),
 			None => Ok(None),
 		}
 	}
@@ -274,34 +258,6 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		_high: Bound<&'r [u8]>,
 	) -> Result<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
-	}
-}
-
-// ----
-
-struct TxAndValue<'a> {
-	tx: RoTxn<'a>,
-	value: NonNull<&'a [u8]>,
-	_pin: PhantomPinned,
-}
-
-struct TxAndValuePin<'a>(Pin<Box<TxAndValue<'a>>>);
-
-impl<'a> IValue<'a> for TxAndValuePin<'a> {
-	fn take_maybe(&mut self) -> Vec<u8> {
-		self.as_ref().to_vec()
-	}
-}
-
-impl<'a> AsRef<[u8]> for TxAndValuePin<'a> {
-	fn as_ref(&self) -> &[u8] {
-		unsafe { self.0.value.as_ref() }
-	}
-}
-
-impl<'a> std::borrow::Borrow<[u8]> for TxAndValuePin<'a> {
-	fn borrow(&self) -> &[u8] {
-		self.as_ref()
 	}
 }
 
@@ -365,7 +321,7 @@ impl<'a, I> Iterator for TxAndIteratorPin<'a, I>
 where
 	I: Iterator<Item = IteratorItem<'a>> + 'a,
 {
-	type Item = Result<(Value<'a>, Value<'a>)>;
+	type Item = Result<(Value, Value)>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let iter_ref = unsafe {
@@ -375,11 +331,7 @@ where
 		match iter_ref.unwrap().next() {
 			None => None,
 			Some(Err(e)) => Some(Err(e.into())),
-			Some(Ok((k, v))) => {
-				let k: &'a [u8] = k;
-				let v: &'a [u8] = v;
-				Some(Ok((k.into(), v.into())))
-			}
+			Some(Ok((k, v))) => Some(Ok((k.to_vec(), v.to_vec()))),
 		}
 	}
 }

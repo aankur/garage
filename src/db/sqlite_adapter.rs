@@ -105,7 +105,7 @@ impl IDb for SqliteDb {
 
 	// ----
 
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		trace!("get {}: lock db", tree);
 		let this = self.0.lock().unwrap();
 		trace!("get {}: lock acquired", tree);
@@ -118,7 +118,7 @@ impl IDb for SqliteDb {
 		let mut res_iter = stmt.query([key])?;
 		match res_iter.next()? {
 			None => Ok(None),
-			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?.into())),
+			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?)),
 		}
 	}
 
@@ -279,7 +279,7 @@ impl<'a> SqliteTx<'a> {
 }
 
 impl<'a> ITx for SqliteTx<'a> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		let mut stmt = self
 			.tx
@@ -287,7 +287,7 @@ impl<'a> ITx for SqliteTx<'a> {
 		let mut res_iter = stmt.query([key])?;
 		match res_iter.next()? {
 			None => Ok(None),
-			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?.into())),
+			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?)),
 		}
 	}
 	fn len(&self, tree: usize) -> Result<usize> {
@@ -394,7 +394,7 @@ impl<'a> Drop for DbValueIterator<'a> {
 struct DbValueIteratorPin<'a>(Pin<Box<DbValueIterator<'a>>>);
 
 impl<'a> Iterator for DbValueIteratorPin<'a> {
-	type Item = Result<(Value<'a>, Value<'a>)>;
+	type Item = Result<(Value, Value)>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let next = unsafe {
@@ -414,7 +414,7 @@ impl<'a> Iterator for DbValueIteratorPin<'a> {
 			Err(e) => return Some(Err(e.into())),
 			Ok(y) => y,
 		};
-		Some(Ok((k.into(), v.into())))
+		Some(Ok((k, v)))
 	}
 }
 

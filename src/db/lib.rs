@@ -21,93 +21,8 @@ pub struct Transaction<'a>(pub(crate) &'a mut dyn ITx);
 #[derive(Clone)]
 pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
 
-pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value<'a>, Value<'a>)>> + 'a>;
-
-// ----
-
-pub struct Value<'a>(pub(crate) Box<dyn IValue<'a> + 'a>);
-
-pub trait IValue<'a>: AsRef<[u8]> + core::borrow::Borrow<[u8]> {
-	fn take_maybe(&mut self) -> Vec<u8>;
-}
-
-impl<'a> Value<'a> {
-	#[inline]
-	pub fn into_vec(mut self) -> Vec<u8> {
-		self.0.take_maybe()
-	}
-}
-
-impl<'a> AsRef<[u8]> for Value<'a> {
-	#[inline]
-	fn as_ref(&self) -> &[u8] {
-		self.0.as_ref().as_ref()
-	}
-}
-
-impl<'a> std::borrow::Borrow<[u8]> for Value<'a> {
-	#[inline]
-	fn borrow(&self) -> &[u8] {
-		self.0.as_ref().borrow()
-	}
-}
-
-impl<'a> core::ops::Deref for Value<'a> {
-	type Target = [u8];
-	#[inline]
-	fn deref(&self) -> &[u8] {
-		self.0.as_ref().as_ref()
-	}
-}
-
-impl<'a, T> PartialEq<T> for Value<'a>
-where
-	T: AsRef<[u8]>,
-{
-	fn eq(&self, other: &T) -> bool {
-		self.as_ref() == other.as_ref()
-	}
-}
-
-impl<'a> std::fmt::Debug for Value<'a> {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		for line in hexdump::hexdump_iter(self.as_ref()) {
-			f.write_str(&line)?;
-			f.write_str("\n")?;
-		}
-		Ok(())
-	}
-}
-
-impl<'a> IValue<'a> for Vec<u8> {
-	fn take_maybe(&mut self) -> Vec<u8> {
-		std::mem::take(self)
-	}
-}
-
-impl<'a> From<Value<'a>> for Vec<u8> {
-	fn from(v: Value<'a>) -> Vec<u8> {
-		v.into_vec()
-	}
-}
-
-impl<'a> From<Vec<u8>> for Value<'a> {
-	fn from(v: Vec<u8>) -> Value<'a> {
-		Value(Box::new(v))
-	}
-}
-
-impl<'a> From<&'a [u8]> for Value<'a> {
-	fn from(v: &'a [u8]) -> Value<'a> {
-		Value(Box::new(v))
-	}
-}
-
-impl<'a> IValue<'a> for &'a [u8] {
-	fn take_maybe(&mut self) -> Vec<u8> {
-		self.to_vec()
-	}
-}
+pub type Value = Vec<u8>;
+pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value, Value)>> + 'a>;
 
 // ----
 
@@ -228,17 +143,17 @@ impl Tree {
 		Db(self.0.clone())
 	}
 
-	pub fn get<T: AsRef<[u8]>>(&self, key: T) -> Result<Option<Value<'_>>> {
+	pub fn get<T: AsRef<[u8]>>(&self, key: T) -> Result<Option<Value>> {
 		self.0.get(self.1, key.as_ref())
 	}
 	pub fn len(&self) -> Result<usize> {
 		self.0.len(self.1)
 	}
 
-	pub fn first(&self) -> Result<Option<(Value<'_>, Value<'_>)>> {
+	pub fn first(&self) -> Result<Option<(Value, Value)>> {
 		self.iter()?.next().transpose()
 	}
-	pub fn get_gt<T: AsRef<[u8]>>(&self, from: T) -> Result<Option<(Value<'_>, Value<'_>)>> {
+	pub fn get_gt<T: AsRef<[u8]>>(&self, from: T) -> Result<Option<(Value, Value)>> {
 		self.range((Bound::Excluded(from), Bound::Unbounded))?
 			.next()
 			.transpose()
@@ -280,7 +195,7 @@ impl Tree {
 
 #[allow(clippy::len_without_is_empty)]
 impl<'a> Transaction<'a> {
-	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value<'_>>> {
+	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value>> {
 		self.0.get(tree.1, key.as_ref())
 	}
 	pub fn len(&self, tree: &Tree) -> Result<usize> {
@@ -342,7 +257,7 @@ pub(crate) trait IDb: Send + Sync {
 	fn open_tree(&self, name: &str) -> Result<usize>;
 	fn list_trees(&self) -> Result<Vec<String>>;
 
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>>;
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
 	fn len(&self, tree: usize) -> Result<usize>;
 
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
@@ -368,7 +283,7 @@ pub(crate) trait IDb: Send + Sync {
 }
 
 pub(crate) trait ITx {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>>;
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
 	fn len(&self, tree: usize) -> Result<usize>;
 
 	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;

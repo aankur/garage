@@ -72,8 +72,8 @@ impl Repair {
 					Some(pair) => pair,
 					None => break,
 				};
-				pos = k.into_vec();
-				v.into_vec()
+				pos = k;
+				v
 			};
 
 			i += 1;
@@ -124,8 +124,8 @@ impl Repair {
 					Some(pair) => pair,
 					None => break,
 				};
-				pos = k.into_vec();
-				v.into_vec()
+				pos = k;
+				v
 			};
 
 			i += 1;

@@ -292,7 +292,7 @@ where
 		k: &MerkleNodeKey,
 	) -> db::TxResult<MerkleNode, Error> {
 		let ent = tx.get(&self.data.merkle_tree, k.encode())?;
-		MerkleNode::decode_opt(ent).map_err(db::TxError::Abort)
+		MerkleNode::decode_opt(&ent).map_err(db::TxError::Abort)
 	}
 
 	fn put_node_txn(
@@ -316,7 +316,7 @@ where
 	// Access a node in the Merkle tree, used by the sync protocol
 	pub(crate) fn read_node(&self, k: &MerkleNodeKey) -> Result<MerkleNode, Error> {
 		let ent = self.data.merkle_tree.get(k.encode())?;
-		MerkleNode::decode_opt(ent)
+		MerkleNode::decode_opt(&ent)
 	}
 
 	pub fn merkle_tree_len(&self) -> usize {
@@ -351,7 +351,7 @@ impl MerkleNodeKey {
 }
 
 impl MerkleNode {
-	fn decode_opt(ent: Option<db::Value<'_>>) -> Result<Self, Error> {
+	fn decode_opt(ent: &Option<db::Value>) -> Result<Self, Error> {
 		match ent {
 			None => Ok(MerkleNode::Empty),
 			Some(v) => Ok(rmp_serde::decode::from_slice::<MerkleNode>(&v[..])?),

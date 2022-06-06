@@ -555,11 +555,7 @@ impl BlockManager {
 	// - Ok(false) -> no block was processed, but we are ready for the next iteration
 	// - Err(_) -> a Sled error occurred when reading/writing from resync_queue/resync_errors
 	async fn resync_iter(&self, must_exit: &mut watch::Receiver<bool>) -> Result<bool, db::Error> {
-		let next = self
-			.resync_queue
-			.first()?
-			.map(|(k, v)| (k.into_vec(), v.into_vec()));
-		if let Some((time_bytes, hash_bytes)) = next {
+		if let Some((time_bytes, hash_bytes)) = self.resync_queue.first()? {
 			let time_msec = u64::from_be_bytes(time_bytes[0..8].try_into().unwrap());
 			let now = now_msec();
 
@@ -567,7 +563,7 @@ impl BlockManager {
 				let hash = Hash::try_from(&hash_bytes[..]).unwrap();
 
 				if let Some(ec) = self.resync_errors.get(hash.as_slice())? {
-					let ec = ErrorCounter::decode(ec);
+					let ec = ErrorCounter::decode(&ec);
 					if now < ec.next_try() {
 						// if next retry after an error is not yet,
 						// don't do resync and return early, but still
@@ -608,7 +604,7 @@ impl BlockManager {
 					warn!("Error when resyncing {:?}: {}", hash, e);
 
 					let err_counter = match self.resync_errors.get(hash.as_slice())? {
-						Some(ec) => ErrorCounter::decode(ec).add1(now + 1),
+						Some(ec) => ErrorCounter::decode(&ec).add1(now + 1),
 						None => ErrorCounter::new(now + 1),
 					};
 
@@ -972,7 +968,7 @@ impl ErrorCounter {
 		}
 	}
 
-	fn decode(data: db::Value<'_>) -> Self {
+	fn decode(data: &db::Value) -> Self {
 		Self {
 			errors: u64::from_be_bytes(data[0..8].try_into().unwrap()),
 			last_try: u64::from_be_bytes(data[8..16].try_into().unwrap()),

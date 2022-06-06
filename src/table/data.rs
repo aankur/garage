@@ -138,7 +138,7 @@ where
 				}
 			};
 			if keep {
-				ret.push(Arc::new(ByteBuf::from(value.as_ref())));
+				ret.push(Arc::new(ByteBuf::from(value)));
 			}
 			if ret.len() >= limit {
 				break;
@@ -271,7 +271,7 @@ where
 	) -> Result<bool, Error> {
 		let removed = self.store.db().transaction(|mut tx| {
 			let remove_v = match tx.get(&self.store, k)? {
-				Some(cur_v) if blake2sum(&cur_v[..]) == vhash => Some(cur_v.into_vec()),
+				Some(cur_v) if blake2sum(&cur_v[..]) == vhash => Some(cur_v),
 				_ => None,
 			};
 			if remove_v.is_some() {

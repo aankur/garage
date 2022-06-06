@@ -260,7 +260,7 @@ where
 
 			for item in self.data.store.range(begin.to_vec()..end.to_vec())? {
 				let (key, value) = item?;
-				items.push((key.to_vec(), Arc::new(ByteBuf::from(value.as_ref()))));
+				items.push((key.to_vec(), Arc::new(ByteBuf::from(value))));
 
 				if items.len() >= 1024 {
 					break;
