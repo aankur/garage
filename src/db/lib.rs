@@ -139,40 +139,50 @@ impl Db {
 
 #[allow(clippy::len_without_is_empty)]
 impl Tree {
+	#[inline]
 	pub fn db(&self) -> Db {
 		Db(self.0.clone())
 	}
 
+	#[inline]
 	pub fn get<T: AsRef<[u8]>>(&self, key: T) -> Result<Option<Value>> {
 		self.0.get(self.1, key.as_ref())
 	}
+	#[inline]
 	pub fn len(&self) -> Result<usize> {
 		self.0.len(self.1)
 	}
 
+	#[inline]
 	pub fn first(&self) -> Result<Option<(Value, Value)>> {
 		self.iter()?.next().transpose()
 	}
+	#[inline]
 	pub fn get_gt<T: AsRef<[u8]>>(&self, from: T) -> Result<Option<(Value, Value)>> {
 		self.range((Bound::Excluded(from), Bound::Unbounded))?
 			.next()
 			.transpose()
 	}
 
+	#[inline]
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<()> {
 		self.0.insert(self.1, key.as_ref(), value.as_ref())
 	}
+	#[inline]
 	pub fn remove<T: AsRef<[u8]>>(&self, key: T) -> Result<bool> {
 		self.0.remove(self.1, key.as_ref())
 	}
 
+	#[inline]
 	pub fn iter(&self) -> Result<ValueIter<'_>> {
 		self.0.iter(self.1)
 	}
+	#[inline]
 	pub fn iter_rev(&self) -> Result<ValueIter<'_>> {
 		self.0.iter_rev(self.1)
 	}
 
+	#[inline]
 	pub fn range<K, R>(&self, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
@@ -182,6 +192,7 @@ impl Tree {
 		let eb = range.end_bound();
 		self.0.range(self.1, get_bound(sb), get_bound(eb))
 	}
+	#[inline]
 	pub fn range_rev<K, R>(&self, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
@@ -195,13 +206,16 @@ impl Tree {
 
 #[allow(clippy::len_without_is_empty)]
 impl<'a> Transaction<'a> {
+	#[inline]
 	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value>> {
 		self.0.get(tree.1, key.as_ref())
 	}
+	#[inline]
 	pub fn len(&self, tree: &Tree) -> Result<usize> {
 		self.0.len(tree.1)
 	}
 
+	#[inline]
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(
 		&mut self,
 		tree: &Tree,
@@ -210,17 +224,21 @@ impl<'a> Transaction<'a> {
 	) -> Result<()> {
 		self.0.insert(tree.1, key.as_ref(), value.as_ref())
 	}
+	#[inline]
 	pub fn remove<T: AsRef<[u8]>>(&mut self, tree: &Tree, key: T) -> Result<bool> {
 		self.0.remove(tree.1, key.as_ref())
 	}
 
+	#[inline]
 	pub fn iter(&self, tree: &Tree) -> Result<ValueIter<'_>> {
 		self.0.iter(tree.1)
 	}
+	#[inline]
 	pub fn iter_rev(&self, tree: &Tree) -> Result<ValueIter<'_>> {
 		self.0.iter_rev(tree.1)
 	}
 
+	#[inline]
 	pub fn range<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
@@ -230,6 +248,7 @@ impl<'a> Transaction<'a> {
 		let eb = range.end_bound();
 		self.0.range(tree.1, get_bound(sb), get_bound(eb))
 	}
+	#[inline]
 	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
@@ -242,10 +261,12 @@ impl<'a> Transaction<'a> {
 
 	// ----
 
+	#[inline]
 	pub fn abort<R, E>(self, e: E) -> TxResult<R, E> {
 		Err(TxError::Abort(e))
 	}
 
+	#[inline]
 	pub fn commit<R, E>(self, r: R) -> TxResult<R, E> {
 		Ok(r)
 	}

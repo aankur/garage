@@ -56,7 +56,9 @@ fn open_db(path: PathBuf, engine: String) -> Result<Db> {
 			})?;
 
 			let map_size = if u32::MAX as usize == usize::MAX {
-				eprintln!("LMDB is not recommended on 32-bit systems, database size will be limited");
+				eprintln!(
+					"LMDB is not recommended on 32-bit systems, database size will be limited"
+				);
 				1usize << 30 // 1GB for 32-bit systems
 			} else {
 				1usize << 40 // 1TB for 64-bit systems
