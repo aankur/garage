@@ -101,7 +101,7 @@ impl IDb for LmdbDb {
 		let tree = self.get_tree(tree)?;
 
 		let tx = self.db.read_txn()?;
-		let val = tree.get(&tx, &key)?;
+		let val = tree.get(&tx, key)?;
 		match val {
 			None => Ok(None),
 			Some(v) => Ok(Some(v.to_vec())),
@@ -111,7 +111,7 @@ impl IDb for LmdbDb {
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
 		let mut tx = self.db.write_txn()?;
-		let deleted = tree.delete(&mut tx, &key)?;
+		let deleted = tree.delete(&mut tx, key)?;
 		tx.commit()?;
 		Ok(deleted)
 	}
@@ -125,7 +125,7 @@ impl IDb for LmdbDb {
 	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = self.get_tree(tree)?;
 		let mut tx = self.db.write_txn()?;
-		tree.put(&mut tx, &key, &value)?;
+		tree.put(&mut tx, key, value)?;
 		tx.commit()?;
 		Ok(())
 	}
@@ -212,7 +212,7 @@ impl<'a, 'db> LmdbTx<'a, 'db> {
 impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
-		match tree.get(&self.tx, &key)? {
+		match tree.get(&self.tx, key)? {
 			Some(v) => Ok(Some(v.to_vec())),
 			None => Ok(None),
 		}
@@ -223,12 +223,12 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 
 	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
 		let tree = *self.get_tree(tree)?;
-		tree.put(&mut self.tx, &key, &value)?;
+		tree.put(&mut self.tx, key, value)?;
 		Ok(())
 	}
 	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = *self.get_tree(tree)?;
-		let deleted = tree.delete(&mut self.tx, &key)?;
+		let deleted = tree.delete(&mut self.tx, key)?;
 		Ok(deleted)
 	}
 
