@@ -140,10 +140,7 @@ where
 			.transaction(|mut tx| self.update_item_rec(&mut tx, k, &khash, &key, new_vhash))?;
 
 		let deleted = self.data.merkle_todo.db().transaction(|mut tx| {
-			let remove = match tx.get(&self.data.merkle_todo, k)? {
-				Some(ov) if ov == vhash_by => true,
-				_ => false,
-			};
+			let remove = matches!(tx.get(&self.data.merkle_todo, k)?, Some(ov) if ov == vhash_by);
 			if remove {
 				tx.remove(&self.data.merkle_todo, k)?;
 			}

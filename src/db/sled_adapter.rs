@@ -9,9 +9,7 @@ use sled::transaction::{
 	UnabortableTransactionError,
 };
 
-use crate::{
-	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
-};
+use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
 
 pub use sled;
 

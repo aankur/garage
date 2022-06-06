@@ -10,9 +10,7 @@ use std::sync::{Arc, RwLock};
 use heed::types::ByteSlice;
 use heed::{BytesDecode, Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
-use crate::{
-	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter,
-};
+use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
 
 pub use heed;
 

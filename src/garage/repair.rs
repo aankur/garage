@@ -67,13 +67,12 @@ impl Repair {
 		let mut i = 0;
 
 		while !*must_exit.borrow() {
-			let item_bytes = {
-				let (k, v) = match self.garage.version_table.data.store.get_gt(pos)? {
-					Some(pair) => pair,
-					None => break,
-				};
-				pos = k;
-				v
+			let item_bytes = match self.garage.version_table.data.store.get_gt(pos)? {
+				Some((k, v)) => {
+					pos = k;
+					v
+				}
+				None => break,
 			};
 
 			i += 1;
@@ -119,13 +118,12 @@ impl Repair {
 		let mut i = 0;
 
 		while !*must_exit.borrow() {
-			let item_bytes = {
-				let (k, v) = match self.garage.block_ref_table.data.store.get_gt(pos)? {
-					Some(pair) => pair,
-					None => break,
-				};
-				pos = k;
-				v
+			let item_bytes = match self.garage.block_ref_table.data.store.get_gt(pos)? {
+				Some((k, v)) => {
+					pos = k;
+					v
+				}
+				None => break,
 			};
 
 			i += 1;
