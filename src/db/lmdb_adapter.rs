@@ -230,7 +230,10 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value<'_>>> {
 		let tree = self.get_tree(tree)?;
 		match tree.get(&self.tx, &key)? {
-			Some(v) => Ok(Some(Value(Box::new(v)))),
+			Some(v) => {
+				let v: &'_ [u8] = v;
+				Ok(Some(v.into()))
+			}
 			None => Ok(None),
 		}
 	}
@@ -372,7 +375,11 @@ where
 		match iter_ref.unwrap().next() {
 			None => None,
 			Some(Err(e)) => Some(Err(e.into())),
-			Some(Ok((k, v))) => Some(Ok((k.into(), v.into()))),
+			Some(Ok((k, v))) => {
+				let k: &'a [u8] = k;
+				let v: &'a [u8] = v;
+				Some(Ok((k.into(), v.into())))
+			}
 		}
 	}
 }

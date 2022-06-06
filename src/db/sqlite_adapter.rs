@@ -97,6 +97,7 @@ impl IDb for SqliteDb {
 		while let Some(row) = rows.next()? {
 			let name = row.get::<_, String>(0)?;
 			let name = name.replace("_COLON_", ":");
+			let name = name.strip_prefix("tree_").unwrap().to_string();
 			trees.push(name);
 		}
 		Ok(trees)

@@ -25,6 +25,8 @@ struct Args {
 
 fn main() {
 	let args = Args::parse();
+	pretty_env_logger::init();
+
 	match do_conversion(args) {
 		Ok(()) => println!("Success!"),
 		Err(e) => eprintln!("Error: {}", e),

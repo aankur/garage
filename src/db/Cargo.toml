@@ -27,9 +27,10 @@ sled = "0.34"
 
 # cli deps
 clap = { version = "3.1.18", optional = true, features = ["derive", "env"] }
+pretty_env_logger = { version = "0.4", optional = true }
 
 [dev-dependencies]
 mktemp = "0.4"
 
 [features]
-cli = ["clap"]
+cli = ["clap", "pretty_env_logger"]

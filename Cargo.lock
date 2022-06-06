@@ -1060,6 +1060,7 @@ dependencies = [
  "hexdump",
  "log",
  "mktemp",
+ "pretty_env_logger",
  "rusqlite",
  "sled",
 ]

@@ -198,16 +198,25 @@ impl Db {
 
 			let ex_tree = other.open_tree(&name)?;
 
-			let mut i = 0;
-			for item in ex_tree.iter()? {
-				let (k, v) = item?;
-				tree.insert(k, v)?;
-				i += 1;
-				if i % 1000 == 0 {
-					println!("{}: imported {}", name, i);
+			let tx_res = self.transaction(|mut tx| {
+				let mut i = 0;
+				for item in ex_tree.iter()? {
+					let (k, v) = item?;
+					tx.insert(&tree, k, v)?;
+					i += 1;
+					if i % 1000 == 0 {
+						println!("{}: imported {}", name, i);
+					}
 				}
-			}
-			println!("{}: finished importing, {} items", name, i);
+				Ok::<_, TxError<()>>(i)
+			});
+			let total = match tx_res {
+				Err(TxError::Db(e)) => return Err(e),
+				Err(TxError::Abort(_)) => unreachable!(),
+				Ok(x) => x,
+			};
+
+			println!("{}: finished importing, {} items", name, total);
 		}
 		Ok(())
 	}
