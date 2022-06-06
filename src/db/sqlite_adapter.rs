@@ -48,10 +48,10 @@ impl SqliteDb {
 }
 
 impl SqliteDbInner {
-	fn get_tree(&self, i: usize) -> Result<String> {
+	fn get_tree(&self, i: usize) -> Result<&'_ str> {
 		self.trees
 			.get(i)
-			.cloned()
+			.map(String::as_str)
 			.ok_or_else(|| Error("invalid tree id".into()))
 	}
 }
@@ -269,8 +269,8 @@ struct SqliteTx<'a> {
 }
 
 impl<'a> SqliteTx<'a> {
-	fn get_tree(&self, i: usize) -> Result<String> {
-		self.trees.get(i).cloned().ok_or_else(|| {
+	fn get_tree(&self, i: usize) -> Result<&'_ str> {
+		self.trees.get(i).map(String::as_ref).ok_or_else(|| {
 			Error(
 				"invalid tree id (it might have been openned after the transaction started)".into(),
 			)
