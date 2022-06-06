@@ -26,10 +26,12 @@ impl TableMetrics {
 				.u64_value_observer(
 					"table.merkle_updater_todo_queue_length",
 					move |observer| {
-						observer.observe(
-							merkle_todo.len().unwrap() as u64, // TODO fix unwrap
-							&[KeyValue::new("table_name", table_name)],
-						)
+						if let Ok(v) = merkle_todo.len() {
+							observer.observe(
+								v as u64,
+								&[KeyValue::new("table_name", table_name)],
+							);
+						}
 					},
 				)
 				.with_description("Merkle tree updater TODO queue length")
@@ -38,10 +40,12 @@ impl TableMetrics {
 				.u64_value_observer(
 					"table.gc_todo_queue_length",
 					move |observer| {
-						observer.observe(
-							gc_todo.len().unwrap() as u64, // TODO fix unwrap
-							&[KeyValue::new("table_name", table_name)],
-						)
+						if let Ok(v) = gc_todo.len() {
+							observer.observe(
+								v as u64,
+								&[KeyValue::new("table_name", table_name)],
+							);
+						}
 					},
 				)
 				.with_description("Table garbage collector TODO queue length")

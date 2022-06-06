@@ -28,7 +28,9 @@ impl BlockManagerMetrics {
 		Self {
 			_resync_queue_len: meter
 				.u64_value_observer("block.resync_queue_length", move |observer| {
-					observer.observe(resync_queue.len().unwrap() as u64, &[]) // TODO fix unwrap
+					if let Ok(v) = resync_queue.len() {
+						observer.observe(v as u64, &[]);
+					}
 				})
 				.with_description(
 					"Number of block hashes queued for local check and possible resync",
@@ -36,7 +38,9 @@ impl BlockManagerMetrics {
 				.init(),
 			_resync_errored_blocks: meter
 				.u64_value_observer("block.resync_errored_blocks", move |observer| {
-					observer.observe(resync_errors.len().unwrap() as u64, &[]) // TODO fix unwrap
+					if let Ok(v) = resync_errors.len() {
+						observer.observe(v as u64, &[]);
+					}
 				})
 				.with_description("Number of block hashes whose last resync resulted in an error")
 				.init(),

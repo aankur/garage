@@ -603,9 +603,16 @@ impl SyncTodo {
 			let retain = nodes.contains(&my_id);
 			if !retain {
 				// Check if we have some data to send, otherwise skip
-				if data.store.range(begin..end).unwrap().next().is_none() {
-					// TODO fix unwrap
-					continue;
+				match data.store.range(begin..end) {
+					Ok(mut iter) => {
+						if iter.next().is_none() {
+							continue;
+						}
+					}
+					Err(e) => {
+						warn!("DB error in add_full_sync: {}", e);
+						continue;
+					}
 				}
 			}
 
