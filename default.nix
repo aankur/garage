@@ -95,25 +95,6 @@ in let
           features = if release then [ "kubernetes-discovery" ] else [];
         };
     })
-
-    /*
-     We are now depending on sqlite3 and lmdb to provide alternative
-     storage backends for Garage. But these crates don't know what
-     system libraries they need, so we add them here manually:
-     `sqlite3` for `libsqlite3-sys` and `lmdb` for `lmdb-rkv-sys`
-    */
-    (pkgs.rustBuilder.rustLib.makeOverride {
-      name = "libsqlite3-sys";
-      overrideArgs = old: {
-        features = old.features or [ ] ++ [ "bundled" ];
-      };
-    })
-    (pkgs.rustBuilder.rustLib.makeOverride {
-      name = "lmdb-rkv-sys";
-      overrideAttrs = drv: {
-        propagatedBuildInputs = drv.propagatedBuildInputs or [ ] ++ [ pkgs.lmdb ];
-      };
-    })
   ];
 
   packageFun = import ./Cargo.nix;
