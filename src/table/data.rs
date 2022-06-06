@@ -243,7 +243,7 @@ where
 
 	pub(crate) fn delete_if_equal(self: &Arc<Self>, k: &[u8], v: &[u8]) -> Result<bool, Error> {
 		let removed = self.store.db().transaction(|mut tx| {
-			let remove = matches!(tx.get(&self.store, k)?, Some(cur_v) if cur_v == v => true);
+			let remove = matches!(tx.get(&self.store, k)?, Some(cur_v) if cur_v == v);
 			if remove {
 				tx.remove(&self.store, k)?;
 				tx.insert(&self.merkle_todo, k, vec![])?;

@@ -384,7 +384,7 @@ impl GcTodoEntry {
 		let key = self.todo_table_key();
 		gc_todo_tree.db().transaction(|mut tx| {
 			let remove =
-				matches!(tx.get(gc_todo_tree, &key)? Some(ov) if ov == self.value_hash.as_slice());
+				matches!(tx.get(gc_todo_tree, &key)?, Some(ov) if ov == self.value_hash.as_slice());
 			if remove {
 				tx.remove(gc_todo_tree, &key)?;
 			}
