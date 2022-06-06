@@ -101,18 +101,16 @@ where
 	async fn gc_loop_iter(&self) -> Result<Option<Duration>, Error> {
 		let now = now_msec();
 
-		let mut entries = vec![];
-		let mut excluded = vec![];
-
 		// List entries in the GC todo list
 		// These entries are put there when a tombstone is inserted in the table
 		// (see update_entry in data.rs)
+		let mut candidates = vec![];
 		for entry_kv in self.data.gc_todo.iter()? {
 			let (k, vhash) = entry_kv?;
-			let mut todo_entry = GcTodoEntry::parse(&k, &vhash);
+			let todo_entry = GcTodoEntry::parse(&k, &vhash);
 
 			if todo_entry.deletion_time() > now {
-				if entries.is_empty() && excluded.is_empty() {
+				if candidates.is_empty() {
 					// If the earliest entry in the todo list shouldn't yet be processed,
 					// return a duration to wait in the loop
 					return Ok(Some(Duration::from_millis(
@@ -124,15 +122,23 @@ where
 				}
 			}
 
-			let vhash = Hash::try_from(&vhash[..]).unwrap();
+			candidates.push(todo_entry);
+			if candidates.len() >= 2 * TABLE_GC_BATCH_SIZE {
+				break;
+			}
+		}
 
+		let mut entries = vec![];
+		let mut excluded = vec![];
+		for mut todo_entry in candidates {
 			// Check if the tombstone is still the current value of the entry.
 			// If not, we don't actually want to GC it, and we will remove it
 			// from the gc_todo table later (below).
+			let vhash = todo_entry.value_hash;
 			todo_entry.value = self
 				.data
 				.store
-				.get(&k[..])?
+				.get(&todo_entry.key[..])?
 				.filter(|v| blake2sum(&v[..]) == vhash)
 				.map(|v| v.to_vec());
 
