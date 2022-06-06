@@ -230,7 +230,7 @@ impl BlockManager {
 			// queue can't work here, it would just provoke a deadlock in the SQLite adapter code.
 			// This is mostly because the Rust bindings for SQLite assume a worst-case scenario
 			// where SQLite is not compiled in thread-safe mode, so we have to wrap everything
-			// in a mutex (see db/sqlite_adapter.rs).
+			// in a mutex (see db/sqlite_adapter.rs and discussion in PR #322).
 			let mut batch_of_hashes = vec![];
 			let start_bound = match next_start.as_ref() {
 				None => Bound::Unbounded,
