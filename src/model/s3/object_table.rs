@@ -239,7 +239,7 @@ impl TableSchema for ObjectTable {
 		_tx: &mut db::Transaction,
 		old: Option<&Self::E>,
 		new: Option<&Self::E>,
-	) -> db::Result<()> {
+	) -> db::TxOpResult<()> {
 		let version_table = self.version_table.clone();
 		let old = old.cloned();
 		let new = new.cloned();

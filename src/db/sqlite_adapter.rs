@@ -10,7 +10,10 @@ use log::trace;
 
 use rusqlite::{params, Connection, Rows, Statement, Transaction};
 
-use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
+use crate::{
+	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
+	Value, ValueIter,
+};
 
 pub use rusqlite;
 
@@ -22,9 +25,9 @@ impl From<rusqlite::Error> for Error {
 	}
 }
 
-impl<T> From<rusqlite::Error> for TxError<T> {
-	fn from(e: rusqlite::Error) -> TxError<T> {
-		TxError::Db(e.into())
+impl From<rusqlite::Error> for TxOpError {
+	fn from(e: rusqlite::Error) -> TxOpError {
+		TxOpError(e.into())
 	}
 }
 
@@ -260,20 +263,24 @@ impl IDb for SqliteDb {
 		let this_mut_ref: &mut SqliteDbInner = this.borrow_mut();
 
 		let mut tx = SqliteTx {
-			tx: this_mut_ref.db.transaction()?,
+			tx: this_mut_ref
+				.db
+				.transaction()
+				.map_err(Error::from)
+				.map_err(TxError::Db)?,
 			trees: &this_mut_ref.trees,
 		};
 		let res = match f.try_on(&mut tx) {
 			TxFnResult::Ok => {
-				tx.tx.commit()?;
+				tx.tx.commit().map_err(Error::from).map_err(TxError::Db)?;
 				Ok(())
 			}
 			TxFnResult::Abort => {
-				tx.tx.rollback()?;
+				tx.tx.rollback().map_err(Error::from).map_err(TxError::Db)?;
 				Err(TxError::Abort(()))
 			}
 			TxFnResult::DbErr => {
-				tx.tx.rollback()?;
+				tx.tx.rollback().map_err(Error::from).map_err(TxError::Db)?;
 				Err(TxError::Db(Error(
 					"(this message will be discarded)".into(),
 				)))
@@ -293,15 +300,15 @@ struct SqliteTx<'a> {
 }
 
 impl<'a> SqliteTx<'a> {
-	fn get_tree(&self, i: usize) -> Result<&'_ str> {
+	fn get_tree(&self, i: usize) -> TxOpResult<&'_ str> {
 		self.trees.get(i).map(String::as_ref).ok_or_else(|| {
-			Error(
+			TxOpError(Error(
 				"invalid tree id (it might have been openned after the transaction started)".into(),
-			)
+			))
 		})
 	}
 
-	fn internal_get(&self, tree: &str, key: &[u8]) -> Result<Option<Value>> {
+	fn internal_get(&self, tree: &str, key: &[u8]) -> TxOpResult<Option<Value>> {
 		let mut stmt = self
 			.tx
 			.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
@@ -314,11 +321,11 @@ impl<'a> SqliteTx<'a> {
 }
 
 impl<'a> ITx for SqliteTx<'a> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+	fn get(&self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		self.internal_get(tree, key)
 	}
-	fn len(&self, tree: usize) -> Result<usize> {
+	fn len(&self, tree: usize) -> TxOpResult<usize> {
 		let tree = self.get_tree(tree)?;
 		let mut stmt = self.tx.prepare(&format!("SELECT COUNT(*) FROM {}", tree))?;
 		let mut res_iter = stmt.query([])?;
@@ -328,7 +335,7 @@ impl<'a> ITx for SqliteTx<'a> {
 		}
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		let old_val = self.internal_get(tree, key)?;
 
@@ -351,7 +358,7 @@ impl<'a> ITx for SqliteTx<'a> {
 
 		Ok(old_val)
 	}
-	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+	fn remove(&mut self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		let old_val = self.internal_get(tree, key)?;
 
@@ -365,10 +372,10 @@ impl<'a> ITx for SqliteTx<'a> {
 		Ok(old_val)
 	}
 
-	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {
+	fn iter(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!();
 	}
-	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'_>> {
+	fn iter_rev(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!();
 	}
 
@@ -377,7 +384,7 @@ impl<'a> ITx for SqliteTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'_>> {
+	) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!();
 	}
 	fn range_rev<'r>(
@@ -385,7 +392,7 @@ impl<'a> ITx for SqliteTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'_>> {
+	) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!();
 	}
 }

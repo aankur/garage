@@ -93,7 +93,7 @@ pub trait TableSchema: Send + Sync {
 		_tx: &mut db::Transaction,
 		_old: Option<&Self::E>,
 		_new: Option<&Self::E>,
-	) -> db::Result<()> {
+	) -> db::TxOpResult<()> {
 		Ok(())
 	}
 

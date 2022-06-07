@@ -34,6 +34,9 @@ pub struct Error(pub Cow<'static, str>);
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub struct TxOpError(pub(crate) Error);
+pub type TxOpResult<T> = std::result::Result<T, TxOpError>;
+
 #[derive(Debug)]
 pub enum TxError<E> {
 	Abort(E),
@@ -41,9 +44,17 @@ pub enum TxError<E> {
 }
 pub type TxResult<R, E> = std::result::Result<R, TxError<E>>;
 
-impl<E> From<Error> for TxError<E> {
-	fn from(e: Error) -> TxError<E> {
-		TxError::Db(e)
+impl<E> From<TxOpError> for TxError<E> {
+	fn from(e: TxOpError) -> TxError<E> {
+		TxError::Db(e.0)
+	}
+}
+
+pub fn unabort<R, E>(res: TxResult<R, E>) -> TxOpResult<std::result::Result<R, E>> {
+	match res {
+		Ok(v) => Ok(Ok(v)),
+		Err(TxError::Abort(e)) => Ok(Err(e)),
+		Err(TxError::Db(e)) => Err(TxOpError(e)),
 	}
 }
 
@@ -117,19 +128,19 @@ impl Db {
 
 			let tx_res = self.transaction(|mut tx| {
 				let mut i = 0;
-				for item in ex_tree.iter()? {
-					let (k, v) = item?;
+				for item in ex_tree.iter().map_err(TxError::Abort)? {
+					let (k, v) = item.map_err(TxError::Abort)?;
 					tx.insert(&tree, k, v)?;
 					i += 1;
 					if i % 1000 == 0 {
 						println!("{}: imported {}", name, i);
 					}
 				}
-				Ok::<_, TxError<()>>(i)
+				tx.commit(i)
 			});
 			let total = match tx_res {
 				Err(TxError::Db(e)) => return Err(e),
-				Err(TxError::Abort(_)) => unreachable!(),
+				Err(TxError::Abort(e)) => return Err(e),
 				Ok(x) => x,
 			};
 
@@ -215,11 +226,11 @@ impl Tree {
 #[allow(clippy::len_without_is_empty)]
 impl<'a> Transaction<'a> {
 	#[inline]
-	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> Result<Option<Value>> {
+	pub fn get<T: AsRef<[u8]>>(&self, tree: &Tree, key: T) -> TxOpResult<Option<Value>> {
 		self.0.get(tree.1, key.as_ref())
 	}
 	#[inline]
-	pub fn len(&self, tree: &Tree) -> Result<usize> {
+	pub fn len(&self, tree: &Tree) -> TxOpResult<usize> {
 		self.0.len(tree.1)
 	}
 
@@ -230,26 +241,26 @@ impl<'a> Transaction<'a> {
 		tree: &Tree,
 		key: T,
 		value: U,
-	) -> Result<Option<Value>> {
+	) -> TxOpResult<Option<Value>> {
 		self.0.insert(tree.1, key.as_ref(), value.as_ref())
 	}
 	/// Returns the old value if there was one
 	#[inline]
-	pub fn remove<T: AsRef<[u8]>>(&mut self, tree: &Tree, key: T) -> Result<Option<Value>> {
+	pub fn remove<T: AsRef<[u8]>>(&mut self, tree: &Tree, key: T) -> TxOpResult<Option<Value>> {
 		self.0.remove(tree.1, key.as_ref())
 	}
 
 	#[inline]
-	pub fn iter(&self, tree: &Tree) -> Result<ValueIter<'_>> {
+	pub fn iter(&self, tree: &Tree) -> TxOpResult<ValueIter<'_>> {
 		self.0.iter(tree.1)
 	}
 	#[inline]
-	pub fn iter_rev(&self, tree: &Tree) -> Result<ValueIter<'_>> {
+	pub fn iter_rev(&self, tree: &Tree) -> TxOpResult<ValueIter<'_>> {
 		self.0.iter_rev(tree.1)
 	}
 
 	#[inline]
-	pub fn range<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'_>>
+	pub fn range<K, R>(&self, tree: &Tree, range: R) -> TxOpResult<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -259,7 +270,7 @@ impl<'a> Transaction<'a> {
 		self.0.range(tree.1, get_bound(sb), get_bound(eb))
 	}
 	#[inline]
-	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> Result<ValueIter<'_>>
+	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> TxOpResult<ValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -314,27 +325,27 @@ pub(crate) trait IDb: Send + Sync {
 }
 
 pub(crate) trait ITx {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
-	fn len(&self, tree: usize) -> Result<usize>;
+	fn get(&self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>>;
+	fn len(&self, tree: usize) -> TxOpResult<usize>;
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>>;
-	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> TxOpResult<Option<Value>>;
+	fn remove(&mut self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>>;
 
-	fn iter(&self, tree: usize) -> Result<ValueIter<'_>>;
-	fn iter_rev(&self, tree: usize) -> Result<ValueIter<'_>>;
+	fn iter(&self, tree: usize) -> TxOpResult<ValueIter<'_>>;
+	fn iter_rev(&self, tree: usize) -> TxOpResult<ValueIter<'_>>;
 
 	fn range<'r>(
 		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'_>>;
+	) -> TxOpResult<ValueIter<'_>>;
 	fn range_rev<'r>(
 		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'_>>;
+	) -> TxOpResult<ValueIter<'_>>;
 }
 
 pub(crate) trait ITxFn {

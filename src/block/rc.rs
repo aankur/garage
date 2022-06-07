@@ -19,7 +19,11 @@ impl BlockRc {
 
 	/// Increment the reference counter associated to a hash.
 	/// Returns true if the RC goes from zero to nonzero.
-	pub(crate) fn block_incref(&self, tx: &mut db::Transaction, hash: &Hash) -> db::Result<bool> {
+	pub(crate) fn block_incref(
+		&self,
+		tx: &mut db::Transaction,
+		hash: &Hash,
+	) -> db::TxOpResult<bool> {
 		let old_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?);
 		match old_rc.increment().serialize() {
 			Some(x) => tx.insert(&self.rc, &hash, x)?,
@@ -30,7 +34,11 @@ impl BlockRc {
 
 	/// Decrement the reference counter associated to a hash.
 	/// Returns true if the RC is now zero.
-	pub(crate) fn block_decref(&self, tx: &mut db::Transaction, hash: &Hash) -> db::Result<bool> {
+	pub(crate) fn block_decref(
+		&self,
+		tx: &mut db::Transaction,
+		hash: &Hash,
+	) -> db::TxOpResult<bool> {
 		let new_rc = RcEntry::parse_opt(tx.get(&self.rc, &hash)?).decrement();
 		match new_rc.serialize() {
 			Some(x) => tx.insert(&self.rc, &hash, x)?,

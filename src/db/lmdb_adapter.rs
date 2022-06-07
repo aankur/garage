@@ -8,7 +8,10 @@ use std::sync::{Arc, RwLock};
 use heed::types::ByteSlice;
 use heed::{BytesDecode, Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
-use crate::{Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxResult, Value, ValueIter};
+use crate::{
+	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
+	Value, ValueIter,
+};
 
 pub use heed;
 
@@ -20,9 +23,9 @@ impl From<heed::Error> for Error {
 	}
 }
 
-impl<T> From<heed::Error> for TxError<T> {
-	fn from(e: heed::Error) -> TxError<T> {
-		TxError::Db(e.into())
+impl From<heed::Error> for TxOpError {
+	fn from(e: heed::Error) -> TxOpError {
+		TxOpError(e.into())
 	}
 }
 
@@ -171,21 +174,25 @@ impl IDb for LmdbDb {
 		let trees = self.trees.read().unwrap();
 		let mut tx = LmdbTx {
 			trees: &trees.0[..],
-			tx: self.db.write_txn()?,
+			tx: self
+				.db
+				.write_txn()
+				.map_err(Error::from)
+				.map_err(TxError::Db)?,
 		};
 
 		let res = f.try_on(&mut tx);
 		match res {
 			TxFnResult::Ok => {
-				tx.tx.commit()?;
+				tx.tx.commit().map_err(Error::from).map_err(TxError::Db)?;
 				Ok(())
 			}
 			TxFnResult::Abort => {
-				tx.tx.abort()?;
+				tx.tx.abort().map_err(Error::from).map_err(TxError::Db)?;
 				Err(TxError::Abort(()))
 			}
 			TxFnResult::DbErr => {
-				tx.tx.abort()?;
+				tx.tx.abort().map_err(Error::from).map_err(TxError::Db)?;
 				Err(TxError::Db(Error(
 					"(this message will be discarded)".into(),
 				)))
@@ -202,44 +209,44 @@ struct LmdbTx<'a, 'db> {
 }
 
 impl<'a, 'db> LmdbTx<'a, 'db> {
-	fn get_tree(&self, i: usize) -> Result<&Database> {
+	fn get_tree(&self, i: usize) -> TxOpResult<&Database> {
 		self.trees.get(i).ok_or_else(|| {
-			Error(
+			TxOpError(Error(
 				"invalid tree id (it might have been openned after the transaction started)".into(),
-			)
+			))
 		})
 	}
 }
 
 impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+	fn get(&self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		match tree.get(&self.tx, key)? {
 			Some(v) => Ok(Some(v.to_vec())),
 			None => Ok(None),
 		}
 	}
-	fn len(&self, _tree: usize) -> Result<usize> {
+	fn len(&self, _tree: usize) -> TxOpResult<usize> {
 		unimplemented!(".len() in transaction not supported with LMDB backend")
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = *self.get_tree(tree)?;
 		let old_val = tree.get(&self.tx, key)?.map(Vec::from);
 		tree.put(&mut self.tx, key, value)?;
 		Ok(old_val)
 	}
-	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+	fn remove(&mut self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = *self.get_tree(tree)?;
 		let old_val = tree.get(&self.tx, key)?.map(Vec::from);
 		tree.delete(&mut self.tx, key)?;
 		Ok(old_val)
 	}
 
-	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {
+	fn iter(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
-	fn iter_rev(&self, _tree: usize) -> Result<ValueIter<'_>> {
+	fn iter_rev(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
 
@@ -248,7 +255,7 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'_>> {
+	) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
 	fn range_rev<'r>(
@@ -256,7 +263,7 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> Result<ValueIter<'_>> {
+	) -> TxOpResult<ValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
 }

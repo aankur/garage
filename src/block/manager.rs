@@ -325,7 +325,11 @@ impl BlockManager {
 
 	/// Increment the number of time a block is used, putting it to resynchronization if it is
 	/// required, but not known
-	pub fn block_incref(self: &Arc<Self>, tx: &mut db::Transaction, hash: Hash) -> db::Result<()> {
+	pub fn block_incref(
+		self: &Arc<Self>,
+		tx: &mut db::Transaction,
+		hash: Hash,
+	) -> db::TxOpResult<()> {
 		if self.rc.block_incref(tx, &hash)? {
 			// When the reference counter is incremented, there is
 			// normally a node that is responsible for sending us the
@@ -344,7 +348,11 @@ impl BlockManager {
 	}
 
 	/// Decrement the number of time a block is used
-	pub fn block_decref(self: &Arc<Self>, tx: &mut db::Transaction, hash: Hash) -> db::Result<()> {
+	pub fn block_decref(
+		self: &Arc<Self>,
+		tx: &mut db::Transaction,
+		hash: Hash,
+	) -> db::TxOpResult<()> {
 		if self.rc.block_decref(tx, &hash)? {
 			// When the RC is decremented, it might drop to zero,
 			// indicating that we don't need the block.

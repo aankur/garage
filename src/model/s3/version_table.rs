@@ -144,7 +144,7 @@ impl TableSchema for VersionTable {
 		_tx: &mut db::Transaction,
 		old: Option<&Self::E>,
 		new: Option<&Self::E>,
-	) -> db::Result<()> {
+	) -> db::TxOpResult<()> {
 		let block_ref_table = self.block_ref_table.clone();
 		let old = old.cloned();
 		let new = new.cloned();

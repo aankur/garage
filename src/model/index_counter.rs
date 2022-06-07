@@ -121,7 +121,7 @@ impl<T: CounterSchema> TableSchema for CounterTable<T> {
 		_tx: &mut db::Transaction,
 		_old: Option<&Self::E>,
 		_new: Option<&Self::E>,
-	) -> db::Result<()> {
+	) -> db::TxOpResult<()> {
 		// nothing for now
 		Ok(())
 	}

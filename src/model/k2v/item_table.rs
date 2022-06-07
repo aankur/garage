@@ -227,7 +227,7 @@ impl TableSchema for K2VItemTable {
 		tx: &mut db::Transaction,
 		old: Option<&Self::E>,
 		new: Option<&Self::E>,
-	) -> db::Result<()> {
+	) -> db::TxOpResult<()> {
 		// 1. Count
 		let (old_entries, old_conflicts, old_values, old_bytes) = match old {
 			None => (0, 0, 0, 0),
@@ -245,7 +245,7 @@ impl TableSchema for K2VItemTable {
 			.map(|e| &e.partition.partition_key)
 			.unwrap_or_else(|| &new.unwrap().partition.partition_key);
 
-		match self.counter_table.count(
+		let counter_res = self.counter_table.count(
 			tx,
 			&count_pk,
 			count_sk,
@@ -255,18 +255,15 @@ impl TableSchema for K2VItemTable {
 				(VALUES, new_values - old_values),
 				(BYTES, new_bytes - old_bytes),
 			],
-		) {
-			Ok(()) => (),
-			Err(db::TxError::Db(e)) => return Err(e),
-			Err(db::TxError::Abort(e)) => {
-				// This result can be returned by `counter_table.count()` for instance
-				// if messagepack serialization or deserialization fails at some step.
-				// Warn admin but ignore this error for now, that's all we can do.
-				error!(
-					"Unable to update K2V item counter for bucket {:?} partition {}: {}. Index values will be wrong!",
-					count_pk, count_sk, e
-				);
-			}
+		);
+		if let Err(e) = db::unabort(counter_res)? {
+			// This result can be returned by `counter_table.count()` for instance
+			// if messagepack serialization or deserialization fails at some step.
+			// Warn admin but ignore this error for now, that's all we can do.
+			error!(
+				"Unable to update K2V item counter for bucket {:?} partition {}: {}. Index values will be wrong!",
+				count_pk, count_sk, e
+			);
 		}
 
 		// 2. Notify

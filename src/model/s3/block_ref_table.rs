@@ -58,7 +58,7 @@ impl TableSchema for BlockRefTable {
 		tx: &mut db::Transaction,
 		old: Option<&Self::E>,
 		new: Option<&Self::E>,
-	) -> db::Result<()> {
+	) -> db::TxOpResult<()> {
 		#[allow(clippy::or_fun_call)]
 		let block = old.or(new).unwrap().block;
 		let was_before = old.map(|x| !x.deleted.get()).unwrap_or(false);
