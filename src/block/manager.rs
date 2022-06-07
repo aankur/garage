@@ -335,7 +335,6 @@ impl BlockManager {
 			// we will fecth it from someone.
 			let this = self.clone();
 			tokio::spawn(async move {
-				tokio::time::sleep(Duration::from_secs(1)).await;
 				if let Err(e) = this.put_to_resync(&hash, 2 * BLOCK_RW_TIMEOUT) {
 					error!("Block {:?} could not be put in resync queue: {}.", hash, e);
 				}
@@ -354,7 +353,6 @@ impl BlockManager {
 			// after that delay has passed.
 			let this = self.clone();
 			tokio::spawn(async move {
-				tokio::time::sleep(Duration::from_secs(1)).await;
 				if let Err(e) = this.put_to_resync(&hash, BLOCK_GC_DELAY + Duration::from_secs(10))
 				{
 					error!("Block {:?} could not be put in resync queue: {}.", hash, e);
