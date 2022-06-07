@@ -20,6 +20,7 @@ use opentelemetry::{
 };
 
 use garage_db as db;
+use garage_db::counted_tree_hack::CountedTree;
 
 use garage_util::data::*;
 use garage_util::error::*;
@@ -94,9 +95,9 @@ pub struct BlockManager {
 
 	rc: BlockRc,
 
-	resync_queue: db::Tree,
+	resync_queue: CountedTree,
 	resync_notify: Notify,
-	resync_errors: db::Tree,
+	resync_errors: CountedTree,
 
 	system: Arc<System>,
 	endpoint: Arc<Endpoint<BlockRpc, Self>>,
@@ -126,10 +127,14 @@ impl BlockManager {
 		let resync_queue = db
 			.open_tree("block_local_resync_queue")
 			.expect("Unable to open block_local_resync_queue tree");
+		let resync_queue =
+			CountedTree::new(resync_queue).expect("Could not count block_local_resync_queue");
 
 		let resync_errors = db
 			.open_tree("block_local_resync_errors")
 			.expect("Unable to open block_local_resync_errors tree");
+		let resync_errors =
+			CountedTree::new(resync_errors).expect("Could not count block_local_resync_errors");
 
 		let endpoint = system
 			.netapp
@@ -299,12 +304,16 @@ impl BlockManager {
 
 	/// Get lenght of resync queue
 	pub fn resync_queue_len(&self) -> Result<usize, Error> {
-		Ok(self.resync_queue.len()?)
+		// This currently can't return an error because the CountedTree hack
+		// doesn't error on .len(), but this will change when we remove the hack
+		// (hopefully someday!)
+		Ok(self.resync_queue.len())
 	}
 
 	/// Get number of blocks that have an error
 	pub fn resync_errors_len(&self) -> Result<usize, Error> {
-		Ok(self.resync_errors.len()?)
+		// (see resync_queue_len comment)
+		Ok(self.resync_errors.len())
 	}
 
 	/// Get number of items in the refcount table

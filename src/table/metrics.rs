@@ -1,6 +1,7 @@
 use opentelemetry::{global, metrics::*, KeyValue};
 
 use garage_db as db;
+use garage_db::counted_tree_hack::CountedTree;
 
 /// TableMetrics reference all counter used for metrics
 pub struct TableMetrics {
@@ -19,7 +20,7 @@ pub struct TableMetrics {
 	pub(crate) sync_items_received: Counter<u64>,
 }
 impl TableMetrics {
-	pub fn new(table_name: &'static str, merkle_todo: db::Tree, gc_todo: db::Tree) -> Self {
+	pub fn new(table_name: &'static str, merkle_todo: db::Tree, gc_todo: CountedTree) -> Self {
 		let meter = global::meter(table_name);
 		TableMetrics {
 			_merkle_todo_len: meter
@@ -40,12 +41,10 @@ impl TableMetrics {
 				.u64_value_observer(
 					"table.gc_todo_queue_length",
 					move |observer| {
-						if let Ok(v) = gc_todo.len() {
-							observer.observe(
-								v as u64,
-								&[KeyValue::new("table_name", table_name)],
-							);
-						}
+						observer.observe(
+							gc_todo.len() as u64,
+							&[KeyValue::new("table_name", table_name)],
+						);
 					},
 				)
 				.with_description("Table garbage collector TODO queue length")

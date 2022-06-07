@@ -1,6 +1,6 @@
 use opentelemetry::{global, metrics::*};
 
-use garage_db as db;
+use garage_db::counted_tree_hack::CountedTree;
 
 /// TableMetrics reference all counter used for metrics
 pub struct BlockManagerMetrics {
@@ -23,14 +23,12 @@ pub struct BlockManagerMetrics {
 }
 
 impl BlockManagerMetrics {
-	pub fn new(resync_queue: db::Tree, resync_errors: db::Tree) -> Self {
+	pub fn new(resync_queue: CountedTree, resync_errors: CountedTree) -> Self {
 		let meter = global::meter("garage_model/block");
 		Self {
 			_resync_queue_len: meter
 				.u64_value_observer("block.resync_queue_length", move |observer| {
-					if let Ok(v) = resync_queue.len() {
-						observer.observe(v as u64, &[]);
-					}
+					observer.observe(resync_queue.len() as u64, &[]);
 				})
 				.with_description(
 					"Number of block hashes queued for local check and possible resync",
@@ -38,9 +36,7 @@ impl BlockManagerMetrics {
 				.init(),
 			_resync_errored_blocks: meter
 				.u64_value_observer("block.resync_errored_blocks", move |observer| {
-					if let Ok(v) = resync_errors.len() {
-						observer.observe(v as u64, &[]);
-					}
+					observer.observe(resync_errors.len() as u64, &[]);
 				})
 				.with_description("Number of block hashes whose last resync resulted in an error")
 				.init(),

@@ -54,6 +54,17 @@ impl SqliteDbInner {
 			.map(String::as_str)
 			.ok_or_else(|| Error("invalid tree id".into()))
 	}
+
+	fn internal_get(&self, tree: &str, key: &[u8]) -> Result<Option<Value>> {
+		let mut stmt = self
+			.db
+			.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
+		let mut res_iter = stmt.query([key])?;
+		match res_iter.next()? {
+			None => Ok(None),
+			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?)),
+		}
+	}
 }
 
 impl IDb for SqliteDb {
@@ -111,15 +122,7 @@ impl IDb for SqliteDb {
 		trace!("get {}: lock acquired", tree);
 
 		let tree = this.get_tree(tree)?;
-
-		let mut stmt = this
-			.db
-			.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
-		let mut res_iter = stmt.query([key])?;
-		match res_iter.next()? {
-			None => Ok(None),
-			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?)),
-		}
+		this.internal_get(tree, key)
 	}
 
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
@@ -148,17 +151,18 @@ impl IDb for SqliteDb {
 		}
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
 		trace!("insert {}: lock db", tree);
 		let this = self.0.lock().unwrap();
 		trace!("insert {}: lock acquired", tree);
 
 		let tree = this.get_tree(tree)?;
+		let old_val = this.internal_get(tree, key)?;
 		this.db.execute(
 			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
 			params![key, value],
 		)?;
-		Ok(())
+		Ok(old_val.is_none())
 	}
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
@@ -276,11 +280,8 @@ impl<'a> SqliteTx<'a> {
 			)
 		})
 	}
-}
 
-impl<'a> ITx for SqliteTx<'a> {
-	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
-		let tree = self.get_tree(tree)?;
+	fn internal_get(&self, tree: &str, key: &[u8]) -> Result<Option<Value>> {
 		let mut stmt = self
 			.tx
 			.prepare(&format!("SELECT v FROM {} WHERE k = ?1", tree))?;
@@ -289,6 +290,13 @@ impl<'a> ITx for SqliteTx<'a> {
 			None => Ok(None),
 			Some(v) => Ok(Some(v.get::<_, Vec<u8>>(0)?)),
 		}
+	}
+}
+
+impl<'a> ITx for SqliteTx<'a> {
+	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+		let tree = self.get_tree(tree)?;
+		self.internal_get(tree, key)
 	}
 	fn len(&self, tree: usize) -> Result<usize> {
 		let tree = self.get_tree(tree)?;
@@ -300,13 +308,14 @@ impl<'a> ITx for SqliteTx<'a> {
 		}
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
+		let old_val = self.internal_get(tree, key)?;
 		self.tx.execute(
 			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
 			params![key, value],
 		)?;
-		Ok(())
+		Ok(old_val.is_none())
 	}
 	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;

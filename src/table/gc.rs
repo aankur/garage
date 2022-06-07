@@ -12,7 +12,7 @@ use futures::select;
 use futures_util::future::*;
 use tokio::sync::watch;
 
-use garage_db as db;
+use garage_db::counted_tree_hack::CountedTree;
 
 use garage_util::data::*;
 use garage_util::error::*;
@@ -370,7 +370,7 @@ impl GcTodoEntry {
 	}
 
 	/// Saves the GcTodoEntry in the gc_todo tree
-	pub(crate) fn save(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
+	pub(crate) fn save(&self, gc_todo_tree: &CountedTree) -> Result<(), Error> {
 		gc_todo_tree.insert(self.todo_table_key(), self.value_hash.as_slice())?;
 		Ok(())
 	}
@@ -380,16 +380,12 @@ impl GcTodoEntry {
 	/// This is usefull to remove a todo entry only under the condition
 	/// that it has not changed since the time it was read, i.e.
 	/// what we have to do is still the same
-	pub(crate) fn remove_if_equal(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
-		let key = self.todo_table_key();
-		gc_todo_tree.db().transaction(|mut tx| {
-			let remove =
-				matches!(tx.get(gc_todo_tree, &key)?, Some(ov) if ov == self.value_hash.as_slice());
-			if remove {
-				tx.remove(gc_todo_tree, &key)?;
-			}
-			tx.commit(())
-		})?;
+	pub(crate) fn remove_if_equal(&self, gc_todo_tree: &CountedTree) -> Result<(), Error> {
+		gc_todo_tree.compare_and_swap::<_, _, &[u8]>(
+			&self.todo_table_key(),
+			Some(self.value_hash),
+			None,
+		)?;
 		Ok(())
 	}
 

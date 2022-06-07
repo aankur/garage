@@ -2,6 +2,8 @@ pub mod lmdb_adapter;
 pub mod sled_adapter;
 pub mod sqlite_adapter;
 
+pub mod counted_tree_hack;
+
 #[cfg(test)]
 pub mod test;
 
@@ -164,10 +166,13 @@ impl Tree {
 			.transpose()
 	}
 
+	/// True if item didn't exist before, false if item already existed
+	/// and was replaced.
 	#[inline]
-	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<()> {
+	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(&self, key: T, value: U) -> Result<bool> {
 		self.0.insert(self.1, key.as_ref(), value.as_ref())
 	}
+	/// True if item was removed, false if item already didn't exist
 	#[inline]
 	pub fn remove<T: AsRef<[u8]>>(&self, key: T) -> Result<bool> {
 		self.0.remove(self.1, key.as_ref())
@@ -215,15 +220,18 @@ impl<'a> Transaction<'a> {
 		self.0.len(tree.1)
 	}
 
+	/// True if item didn't exist before, false if item already existed
+	/// and was replaced.
 	#[inline]
 	pub fn insert<T: AsRef<[u8]>, U: AsRef<[u8]>>(
 		&mut self,
 		tree: &Tree,
 		key: T,
 		value: U,
-	) -> Result<()> {
+	) -> Result<bool> {
 		self.0.insert(tree.1, key.as_ref(), value.as_ref())
 	}
+	/// True if item was removed, false if item already didn't exist
 	#[inline]
 	pub fn remove<T: AsRef<[u8]>>(&mut self, tree: &Tree, key: T) -> Result<bool> {
 		self.0.remove(tree.1, key.as_ref())
@@ -281,7 +289,7 @@ pub(crate) trait IDb: Send + Sync {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
 	fn len(&self, tree: usize) -> Result<usize>;
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool>;
 	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool>;
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>>;
@@ -307,7 +315,7 @@ pub(crate) trait ITx {
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
 	fn len(&self, tree: usize) -> Result<usize>;
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()>;
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool>;
 	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool>;
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>>;

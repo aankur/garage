@@ -122,12 +122,13 @@ impl IDb for LmdbDb {
 		Ok(tree.len(&tx)?.try_into().unwrap())
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
 		let mut tx = self.db.write_txn()?;
+		let old_val = tree.get(&tx, key)?.map(Vec::from);
 		tree.put(&mut tx, key, value)?;
 		tx.commit()?;
-		Ok(())
+		Ok(old_val.is_none())
 	}
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
@@ -221,10 +222,11 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		unimplemented!(".len() in transaction not supported with LMDB backend")
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
 		let tree = *self.get_tree(tree)?;
+		let old_val = tree.get(&self.tx, key)?.map(Vec::from);
 		tree.put(&mut self.tx, key, value)?;
-		Ok(())
+		Ok(old_val.is_none())
 	}
 	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = *self.get_tree(tree)?;

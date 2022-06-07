@@ -93,10 +93,10 @@ impl IDb for SledDb {
 		Ok(tree.len())
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
-		tree.insert(key, value)?;
-		Ok(())
+		let old_val = tree.insert(key, value)?;
+		Ok(old_val.is_none())
 	}
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
@@ -206,10 +206,10 @@ impl<'a> ITx for SledTx<'a> {
 		unimplemented!(".len() in transaction not supported with Sled backend")
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<()> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
-		self.save_error(tree.insert(key, value))?;
-		Ok(())
+		let old_val = self.save_error(tree.insert(key, value))?;
+		Ok(old_val.is_none())
 	}
 	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
 		let tree = self.get_tree(tree)?;
