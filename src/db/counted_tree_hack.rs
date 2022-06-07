@@ -30,7 +30,7 @@ impl CountedTree {
 	}
 
 	pub fn len(&self) -> usize {
-		self.0.len.load(Ordering::Relaxed)
+		self.0.len.load(Ordering::SeqCst)
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -58,7 +58,7 @@ impl CountedTree {
 	{
 		let old_val = self.0.tree.insert(key, value)?;
 		if old_val.is_none() {
-			self.0.len.fetch_add(1, Ordering::Relaxed);
+			self.0.len.fetch_add(1, Ordering::SeqCst);
 		}
 		Ok(old_val)
 	}
@@ -66,7 +66,7 @@ impl CountedTree {
 	pub fn remove<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Value>> {
 		let old_val = self.0.tree.remove(key)?;
 		if old_val.is_some() {
-			self.0.len.fetch_sub(1, Ordering::Relaxed);
+			self.0.len.fetch_sub(1, Ordering::SeqCst);
 		}
 		Ok(old_val)
 	}
@@ -85,9 +85,14 @@ impl CountedTree {
 		let old_some = expected_old.is_some();
 		let new_some = new.is_some();
 
-		match self.0.tree.db().transaction(|mut tx| {
+		let tx_res = self.0.tree.db().transaction(|mut tx| {
 			let old_val = tx.get(&self.0.tree, &key)?;
-			if old_val.as_ref().map(|x| &x[..]) == expected_old.as_ref().map(AsRef::as_ref) {
+			let is_same = match (&old_val, &expected_old) {
+				(None, None) => true,
+				(Some(x), Some(y)) if x == y.as_ref() => true,
+				_ => false,
+			};
+			if is_same {
 				match &new {
 					Some(v) => {
 						tx.insert(&self.0.tree, &key, v)?;
@@ -100,14 +105,16 @@ impl CountedTree {
 			} else {
 				tx.abort(())
 			}
-		}) {
+		});
+
+		match tx_res {
 			Ok(()) => {
 				match (old_some, new_some) {
 					(false, true) => {
-						self.0.len.fetch_add(1, Ordering::Relaxed);
+						self.0.len.fetch_add(1, Ordering::SeqCst);
 					}
 					(true, false) => {
-						self.0.len.fetch_sub(1, Ordering::Relaxed);
+						self.0.len.fetch_sub(1, Ordering::SeqCst);
 					}
 					_ => (),
 				}
