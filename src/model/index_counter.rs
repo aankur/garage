@@ -116,16 +116,6 @@ impl<T: CounterSchema> TableSchema for CounterTable<T> {
 	type E = CounterEntry<T>;
 	type Filter = (DeletedFilter, Vec<Uuid>);
 
-	fn updated(
-		&self,
-		_tx: &mut db::Transaction,
-		_old: Option<&Self::E>,
-		_new: Option<&Self::E>,
-	) -> db::TxOpResult<()> {
-		// nothing for now
-		Ok(())
-	}
-
 	fn matches_filter(entry: &Self::E, filter: &Self::Filter) -> bool {
 		if filter.0 == DeletedFilter::Any {
 			return true;
