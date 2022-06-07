@@ -35,10 +35,11 @@ pub struct Error(pub Cow<'static, str>);
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Debug, Error)]
+#[error(display = "{}", _0)]
 pub struct TxOpError(pub(crate) Error);
 pub type TxOpResult<T> = std::result::Result<T, TxOpError>;
 
-#[derive(Debug)]
 pub enum TxError<E> {
 	Abort(E),
 	Db(Error),

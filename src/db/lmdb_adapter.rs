@@ -203,12 +203,12 @@ impl IDb for LmdbDb {
 
 // ----
 
-struct LmdbTx<'a, 'db> {
-	trees: &'db [Database],
+struct LmdbTx<'a> {
+	trees: &'a [Database],
 	tx: RwTxn<'a, 'a>,
 }
 
-impl<'a, 'db> LmdbTx<'a, 'db> {
+impl<'a> LmdbTx<'a> {
 	fn get_tree(&self, i: usize) -> TxOpResult<&Database> {
 		self.trees.get(i).ok_or_else(|| {
 			TxOpError(Error(
@@ -218,7 +218,7 @@ impl<'a, 'db> LmdbTx<'a, 'db> {
 	}
 }
 
-impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
+impl<'a> ITx for LmdbTx<'a> {
 	fn get(&self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		match tree.get(&self.tx, key)? {
