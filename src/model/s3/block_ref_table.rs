@@ -59,7 +59,6 @@ impl TableSchema for BlockRefTable {
 		old: Option<&Self::E>,
 		new: Option<&Self::E>,
 	) -> db::TxOpResult<()> {
-		#[allow(clippy::or_fun_call)]
 		let block = old.or(new).unwrap().block;
 		let was_before = old.map(|x| !x.deleted.get()).unwrap_or(false);
 		let is_after = new.map(|x| !x.deleted.get()).unwrap_or(false);
