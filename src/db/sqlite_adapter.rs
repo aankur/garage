@@ -125,18 +125,6 @@ impl IDb for SqliteDb {
 		this.internal_get(tree, key)
 	}
 
-	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
-		trace!("remove {}: lock db", tree);
-		let this = self.0.lock().unwrap();
-		trace!("remove {}: lock acquired", tree);
-
-		let tree = this.get_tree(tree)?;
-		let res = this
-			.db
-			.execute(&format!("DELETE FROM {} WHERE k = ?1", tree), params![key])?;
-		Ok(res > 0)
-	}
-
 	fn len(&self, tree: usize) -> Result<usize> {
 		trace!("len {}: lock db", tree);
 		let this = self.0.lock().unwrap();
@@ -151,18 +139,50 @@ impl IDb for SqliteDb {
 		}
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>> {
 		trace!("insert {}: lock db", tree);
 		let this = self.0.lock().unwrap();
 		trace!("insert {}: lock acquired", tree);
 
 		let tree = this.get_tree(tree)?;
 		let old_val = this.internal_get(tree, key)?;
-		this.db.execute(
-			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
-			params![key, value],
-		)?;
-		Ok(old_val.is_none())
+
+		match &old_val {
+			Some(_) => {
+				let n = this.db.execute(
+					&format!("UPDATE {} SET v = ?2 WHERE k = ?1", tree),
+					params![key, value],
+				)?;
+				assert_eq!(n, 1);
+			}
+			None => {
+				let n = this.db.execute(
+					&format!("INSERT INTO {} (k, v) VALUES (?1, ?2)", tree),
+					params![key, value],
+				)?;
+				assert_eq!(n, 1);
+			}
+		}
+
+		Ok(old_val)
+	}
+
+	fn remove(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+		trace!("remove {}: lock db", tree);
+		let this = self.0.lock().unwrap();
+		trace!("remove {}: lock acquired", tree);
+
+		let tree = this.get_tree(tree)?;
+		let old_val = this.internal_get(tree, key)?;
+
+		if old_val.is_some() {
+			let n = this
+				.db
+				.execute(&format!("DELETE FROM {} WHERE k = ?1", tree), params![key])?;
+			assert_eq!(n, 1);
+		}
+
+		Ok(old_val)
 	}
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
@@ -308,21 +328,41 @@ impl<'a> ITx for SqliteTx<'a> {
 		}
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		let old_val = self.internal_get(tree, key)?;
-		self.tx.execute(
-			&format!("INSERT OR REPLACE INTO {} (k, v) VALUES (?1, ?2)", tree),
-			params![key, value],
-		)?;
-		Ok(old_val.is_none())
+
+		match &old_val {
+			Some(_) => {
+				let n = self.tx.execute(
+					&format!("UPDATE {} SET v = ?2 WHERE k = ?1", tree),
+					params![key, value],
+				)?;
+				assert_eq!(n, 1);
+			}
+			None => {
+				let n = self.tx.execute(
+					&format!("INSERT INTO {} (k, v) VALUES (?1, ?2)", tree),
+					params![key, value],
+				)?;
+				assert_eq!(n, 1);
+			}
+		}
+
+		Ok(old_val)
 	}
-	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
+	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
-		let res = self
-			.tx
-			.execute(&format!("DELETE FROM {} WHERE k = ?1", tree), params![key])?;
-		Ok(res > 0)
+		let old_val = self.internal_get(tree, key)?;
+
+		if old_val.is_some() {
+			let n = self
+				.tx
+				.execute(&format!("DELETE FROM {} WHERE k = ?1", tree), params![key])?;
+			assert_eq!(n, 1);
+		}
+
+		Ok(old_val)
 	}
 
 	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {

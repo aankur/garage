@@ -51,35 +51,25 @@ impl CountedTree {
 
 	// ---- writing functions ----
 
-	pub fn insert<K, V>(&self, key: K, value: V) -> Result<bool>
+	pub fn insert<K, V>(&self, key: K, value: V) -> Result<Option<Value>>
 	where
 		K: AsRef<[u8]>,
 		V: AsRef<[u8]>,
 	{
-		let inserted = self.0.tree.insert(key, value)?;
-		if inserted {
+		let old_val = self.0.tree.insert(key, value)?;
+		if old_val.is_none() {
 			self.0.len.fetch_add(1, Ordering::Relaxed);
 		}
-		Ok(inserted)
+		Ok(old_val)
 	}
 
-	pub fn remove<K: AsRef<[u8]>>(&self, key: K) -> Result<bool> {
-		let removed = self.0.tree.remove(key)?;
-		if removed {
+	pub fn remove<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Value>> {
+		let old_val = self.0.tree.remove(key)?;
+		if old_val.is_some() {
 			self.0.len.fetch_sub(1, Ordering::Relaxed);
 		}
-		Ok(removed)
+		Ok(old_val)
 	}
-
-	/*
-	pub fn pop_min(&self) -> Result<Option<(Value, Value)>> {
-		let res = self.0.tree.pop_min();
-		if let Ok(Some(_)) = &res {
-			self.0.len.fetch_sub(1, Ordering::Relaxed);
-		};
-		res
-	}
-	*/
 
 	pub fn compare_and_swap<K, OV, NV>(
 		&self,

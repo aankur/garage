@@ -14,13 +14,13 @@ fn test_suite(db: Db) {
 	let vb: &[u8] = &b"plip"[..];
 	let vc: &[u8] = &b"plup"[..];
 
-	tree.insert(ka, va).unwrap();
+	assert!(tree.insert(ka, va).unwrap().is_none());
 	assert_eq!(tree.get(ka).unwrap().unwrap(), va);
 
 	let res = db.transaction::<_, (), _>(|mut tx| {
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), va);
 
-		tx.insert(&tree, ka, vb).unwrap();
+		assert_eq!(tx.insert(&tree, ka, vb).unwrap().unwrap(), va);
 
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
@@ -32,7 +32,7 @@ fn test_suite(db: Db) {
 	let res = db.transaction::<(), _, _>(|mut tx| {
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
-		tx.insert(&tree, ka, vc).unwrap();
+		assert_eq!(tx.insert(&tree, ka, vc).unwrap().unwrap(), vb);
 
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vc);
 
@@ -47,7 +47,7 @@ fn test_suite(db: Db) {
 	assert!(iter.next().is_none());
 	drop(iter);
 
-	tree.insert(kb, vc).unwrap();
+	assert!(tree.insert(kb, vc).unwrap().is_none());
 	assert_eq!(tree.get(kb).unwrap().unwrap(), vc);
 
 	let mut iter = tree.iter().unwrap();

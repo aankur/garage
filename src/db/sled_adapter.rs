@@ -83,20 +83,21 @@ impl IDb for SledDb {
 		Ok(val.map(|x| x.to_vec()))
 	}
 
-	fn remove(&self, tree: usize, key: &[u8]) -> Result<bool> {
-		let tree = self.get_tree(tree)?;
-		Ok(tree.remove(key)?.is_some())
-	}
-
 	fn len(&self, tree: usize) -> Result<usize> {
 		let tree = self.get_tree(tree)?;
 		Ok(tree.len())
 	}
 
-	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
+	fn insert(&self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		let old_val = tree.insert(key, value)?;
-		Ok(old_val.is_none())
+		Ok(old_val.map(|x| x.to_vec()))
+	}
+
+	fn remove(&self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
+		let tree = self.get_tree(tree)?;
+		let old_val = tree.remove(key)?;
+		Ok(old_val.map(|x| x.to_vec()))
 	}
 
 	fn iter(&self, tree: usize) -> Result<ValueIter<'_>> {
@@ -206,14 +207,15 @@ impl<'a> ITx for SledTx<'a> {
 		unimplemented!(".len() in transaction not supported with Sled backend")
 	}
 
-	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<bool> {
+	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
 		let old_val = self.save_error(tree.insert(key, value))?;
-		Ok(old_val.is_none())
+		Ok(old_val.map(|x| x.to_vec()))
 	}
-	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<bool> {
+	fn remove(&mut self, tree: usize, key: &[u8]) -> Result<Option<Value>> {
 		let tree = self.get_tree(tree)?;
-		Ok(self.save_error(tree.remove(key))?.is_some())
+		let old_val = self.save_error(tree.remove(key))?;
+		Ok(old_val.map(|x| x.to_vec()))
 	}
 
 	fn iter(&self, _tree: usize) -> Result<ValueIter<'_>> {
