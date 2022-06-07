@@ -72,7 +72,7 @@ impl SqliteDbInner {
 
 impl IDb for SqliteDb {
 	fn engine(&self) -> String {
-		"Sqlite3 (using rusqlite crate)".into()
+		format!("sqlite3 v{} (using rusqlite crate)", rusqlite::version())
 	}
 
 	fn open_tree(&self, name: &str) -> Result<usize> {
