@@ -154,22 +154,12 @@ impl IDb for SqliteDb {
 		let tree = this.get_tree(tree)?;
 		let old_val = this.internal_get(tree, key)?;
 
-		match &old_val {
-			Some(_) => {
-				let n = this.db.execute(
-					&format!("UPDATE {} SET v = ?2 WHERE k = ?1", tree),
-					params![key, value],
-				)?;
-				assert_eq!(n, 1);
-			}
-			None => {
-				let n = this.db.execute(
-					&format!("INSERT INTO {} (k, v) VALUES (?1, ?2)", tree),
-					params![key, value],
-				)?;
-				assert_eq!(n, 1);
-			}
-		}
+		let sql = match &old_val {
+			Some(_) => format!("UPDATE {} SET v = ?2 WHERE k = ?1", tree),
+			None => format!("INSERT INTO {} (k, v) VALUES (?1, ?2)", tree),
+		};
+		let n = this.db.execute(&sql, params![key, value])?;
+		assert_eq!(n, 1);
 
 		Ok(old_val)
 	}
@@ -343,22 +333,12 @@ impl<'a> ITx for SqliteTx<'a> {
 		let tree = self.get_tree(tree)?;
 		let old_val = self.internal_get(tree, key)?;
 
-		match &old_val {
-			Some(_) => {
-				let n = self.tx.execute(
-					&format!("UPDATE {} SET v = ?2 WHERE k = ?1", tree),
-					params![key, value],
-				)?;
-				assert_eq!(n, 1);
-			}
-			None => {
-				let n = self.tx.execute(
-					&format!("INSERT INTO {} (k, v) VALUES (?1, ?2)", tree),
-					params![key, value],
-				)?;
-				assert_eq!(n, 1);
-			}
-		}
+		let sql = match &old_val {
+			Some(_) => format!("UPDATE {} SET v = ?2 WHERE k = ?1", tree),
+			None => format!("INSERT INTO {} (k, v) VALUES (?1, ?2)", tree),
+		};
+		let n = self.tx.execute(&sql, params![key, value])?;
+		assert_eq!(n, 1);
 
 		Ok(old_val)
 	}
