@@ -18,10 +18,10 @@ use err_derive::Error;
 #[derive(Clone)]
 pub struct Db(pub(crate) Arc<dyn IDb>);
 
-pub struct Transaction<'a>(pub(crate) &'a mut dyn ITx);
+pub struct Transaction<'a>(&'a mut dyn ITx);
 
 #[derive(Clone)]
-pub struct Tree(pub(crate) Arc<dyn IDb>, pub(crate) usize);
+pub struct Tree(Arc<dyn IDb>, usize);
 
 pub type Value = Vec<u8>;
 pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value, Value)>> + 'a>;
