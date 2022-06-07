@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, Rows, Statement, Transaction};
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
-	Value, ValueIter,
+	Value, ValueIter, TxValueIter
 };
 
 pub use rusqlite;
@@ -372,10 +372,10 @@ impl<'a> ITx for SqliteTx<'a> {
 		Ok(old_val)
 	}
 
-	fn iter(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
+	fn iter(&self, _tree: usize) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!();
 	}
-	fn iter_rev(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
+	fn iter_rev(&self, _tree: usize) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!();
 	}
 
@@ -384,7 +384,7 @@ impl<'a> ITx for SqliteTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>> {
+	) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!();
 	}
 	fn range_rev<'r>(
@@ -392,7 +392,7 @@ impl<'a> ITx for SqliteTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>> {
+	) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!();
 	}
 }

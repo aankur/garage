@@ -11,7 +11,7 @@ use sled::transaction::{
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
-	Value, ValueIter,
+	Value, ValueIter, TxValueIter
 };
 
 pub use sled;
@@ -230,10 +230,10 @@ impl<'a> ITx for SledTx<'a> {
 		Ok(old_val.map(|x| x.to_vec()))
 	}
 
-	fn iter(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
+	fn iter(&self, _tree: usize) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
-	fn iter_rev(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
+	fn iter_rev(&self, _tree: usize) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 
@@ -242,7 +242,7 @@ impl<'a> ITx for SledTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>> {
+	) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 	fn range_rev<'r>(
@@ -250,7 +250,7 @@ impl<'a> ITx for SledTx<'a> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>> {
+	) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with Sled backend");
 	}
 }

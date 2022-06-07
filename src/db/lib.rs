@@ -25,6 +25,7 @@ pub struct Tree(Arc<dyn IDb>, usize);
 
 pub type Value = Vec<u8>;
 pub type ValueIter<'a> = Box<dyn std::iter::Iterator<Item = Result<(Value, Value)>> + 'a>;
+pub type TxValueIter<'a> = Box<dyn std::iter::Iterator<Item = TxOpResult<(Value, Value)>> + 'a>;
 
 // ----
 
@@ -251,16 +252,16 @@ impl<'a> Transaction<'a> {
 	}
 
 	#[inline]
-	pub fn iter(&self, tree: &Tree) -> TxOpResult<ValueIter<'_>> {
+	pub fn iter(&self, tree: &Tree) -> TxOpResult<TxValueIter<'_>> {
 		self.0.iter(tree.1)
 	}
 	#[inline]
-	pub fn iter_rev(&self, tree: &Tree) -> TxOpResult<ValueIter<'_>> {
+	pub fn iter_rev(&self, tree: &Tree) -> TxOpResult<TxValueIter<'_>> {
 		self.0.iter_rev(tree.1)
 	}
 
 	#[inline]
-	pub fn range<K, R>(&self, tree: &Tree, range: R) -> TxOpResult<ValueIter<'_>>
+	pub fn range<K, R>(&self, tree: &Tree, range: R) -> TxOpResult<TxValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -270,7 +271,7 @@ impl<'a> Transaction<'a> {
 		self.0.range(tree.1, get_bound(sb), get_bound(eb))
 	}
 	#[inline]
-	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> TxOpResult<ValueIter<'_>>
+	pub fn range_rev<K, R>(&self, tree: &Tree, range: R) -> TxOpResult<TxValueIter<'_>>
 	where
 		K: AsRef<[u8]>,
 		R: RangeBounds<K>,
@@ -331,21 +332,21 @@ pub(crate) trait ITx {
 	fn insert(&mut self, tree: usize, key: &[u8], value: &[u8]) -> TxOpResult<Option<Value>>;
 	fn remove(&mut self, tree: usize, key: &[u8]) -> TxOpResult<Option<Value>>;
 
-	fn iter(&self, tree: usize) -> TxOpResult<ValueIter<'_>>;
-	fn iter_rev(&self, tree: usize) -> TxOpResult<ValueIter<'_>>;
+	fn iter(&self, tree: usize) -> TxOpResult<TxValueIter<'_>>;
+	fn iter_rev(&self, tree: usize) -> TxOpResult<TxValueIter<'_>>;
 
 	fn range<'r>(
 		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>>;
+	) -> TxOpResult<TxValueIter<'_>>;
 	fn range_rev<'r>(
 		&self,
 		tree: usize,
 		low: Bound<&'r [u8]>,
 		high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>>;
+	) -> TxOpResult<TxValueIter<'_>>;
 }
 
 pub(crate) trait ITxFn {

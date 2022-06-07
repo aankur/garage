@@ -10,7 +10,7 @@ use heed::{BytesDecode, Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
-	Value, ValueIter,
+	Value, ValueIter, TxValueIter
 };
 
 pub use heed;
@@ -243,10 +243,10 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		Ok(old_val)
 	}
 
-	fn iter(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
+	fn iter(&self, _tree: usize) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
-	fn iter_rev(&self, _tree: usize) -> TxOpResult<ValueIter<'_>> {
+	fn iter_rev(&self, _tree: usize) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
 
@@ -255,7 +255,7 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>> {
+	) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
 	fn range_rev<'r>(
@@ -263,7 +263,7 @@ impl<'a, 'db> ITx for LmdbTx<'a, 'db> {
 		_tree: usize,
 		_low: Bound<&'r [u8]>,
 		_high: Bound<&'r [u8]>,
-	) -> TxOpResult<ValueIter<'_>> {
+	) -> TxOpResult<TxValueIter<'_>> {
 		unimplemented!("Iterators in transactions not supported with LMDB backend");
 	}
 }
