@@ -33,6 +33,7 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 
 	info!("Opening database...");
 	let mut db_path = config.metadata_dir.clone();
+	std::fs::create_dir_all(&db_path).expect("Unable to create Garage meta data directory");
 	let db = match config.db_engine.as_str() {
 		"sled" => {
 			db_path.push("db");
