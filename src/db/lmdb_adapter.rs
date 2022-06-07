@@ -10,7 +10,7 @@ use heed::{BytesDecode, Env, RoTxn, RwTxn, UntypedDatabase as Database};
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
-	Value, ValueIter, TxValueIter
+	TxValueIter, Value, ValueIter,
 };
 
 pub use heed;

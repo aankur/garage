@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, Rows, Statement, Transaction};
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
-	Value, ValueIter, TxValueIter
+	TxValueIter, Value, ValueIter,
 };
 
 pub use rusqlite;

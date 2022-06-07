@@ -11,7 +11,7 @@ use sled::transaction::{
 
 use crate::{
 	Db, Error, IDb, ITx, ITxFn, Result, TxError, TxFnResult, TxOpError, TxOpResult, TxResult,
-	Value, ValueIter, TxValueIter
+	TxValueIter, Value, ValueIter,
 };
 
 pub use sled;
