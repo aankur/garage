@@ -57,6 +57,10 @@ impl LmdbDb {
 }
 
 impl IDb for LmdbDb {
+	fn engine(&self) -> String {
+		"LMDB (using Heed crate)".into()
+	}
+
 	fn open_tree(&self, name: &str) -> Result<usize> {
 		let mut trees = self.trees.write().unwrap();
 		if let Some(i) = trees.1.get(name) {

@@ -672,6 +672,7 @@ impl AdminRpcHandler {
 			self.garage.system.garage_version(),
 		)
 		.unwrap();
+		writeln!(&mut ret, "\nDatabase engine: {}", self.garage.db.engine()).unwrap();
 
 		// Gather ring statistics
 		let ring = self.garage.system.ring.borrow().clone();

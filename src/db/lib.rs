@@ -63,6 +63,10 @@ pub fn unabort<R, E>(res: TxResult<R, E>) -> TxOpResult<std::result::Result<R, E
 // ----
 
 impl Db {
+	pub fn engine(&self) -> String {
+		self.0.engine()
+	}
+
 	pub fn open_tree<S: AsRef<str>>(&self, name: S) -> Result<Tree> {
 		let tree_id = self.0.open_tree(name.as_ref())?;
 		Ok(Tree(self.0.clone(), tree_id))
@@ -298,6 +302,7 @@ impl<'a> Transaction<'a> {
 // ---- Internal interfaces
 
 pub(crate) trait IDb: Send + Sync {
+	fn engine(&self) -> String;
 	fn open_tree(&self, name: &str) -> Result<usize>;
 	fn list_trees(&self) -> Result<Vec<String>>;
 

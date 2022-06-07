@@ -58,6 +58,10 @@ impl SledDb {
 }
 
 impl IDb for SledDb {
+	fn engine(&self) -> String {
+		"Sled".into()
+	}
+
 	fn open_tree(&self, name: &str) -> Result<usize> {
 		let mut trees = self.trees.write().unwrap();
 		if let Some(i) = trees.1.get(name) {

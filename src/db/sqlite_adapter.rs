@@ -71,6 +71,10 @@ impl SqliteDbInner {
 }
 
 impl IDb for SqliteDb {
+	fn engine(&self) -> String {
+		"Sqlite3 (using rusqlite crate)".into()
+	}
+
 	fn open_tree(&self, name: &str) -> Result<usize> {
 		let name = format!("tree_{}", name.replace(':', "_COLON_"));
 		let mut this = self.0.lock().unwrap();
