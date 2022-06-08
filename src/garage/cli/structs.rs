@@ -33,9 +33,14 @@ pub enum Command {
 	#[structopt(name = "migrate")]
 	Migrate(MigrateOpt),
 
-	/// Start repair of node data
+	/// Start repair of node data on remote node
 	#[structopt(name = "repair")]
 	Repair(RepairOpt),
+
+	/// Offline reparation of node data (these repairs must be run offline
+	/// directly on the server node)
+	#[structopt(name = "offline-repair")]
+	OfflineRepair(OfflineRepairOpt),
 
 	/// Gather node statistics
 	#[structopt(name = "stats")]
@@ -403,6 +408,23 @@ pub enum RepairWhat {
 		#[structopt(name = "tranquility", default_value = "2")]
 		tranquility: u32,
 	},
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug, Clone)]
+pub struct OfflineRepairOpt {
+	/// Confirm the launch of the repair operation
+	#[structopt(long = "yes")]
+	pub yes: bool,
+
+	#[structopt(subcommand)]
+	pub what: OfflineRepairWhat,
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug, Eq, PartialEq, Clone)]
+pub enum OfflineRepairWhat {
+	/// Repair K2V item counters
+	#[structopt(name = "k2v_item_counters")]
+	K2VItemCounters,
 }
 
 #[derive(Serialize, Deserialize, StructOpt, Debug, Clone)]

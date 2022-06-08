@@ -6,6 +6,7 @@ use garage_db as db;
 
 use garage_util::background::*;
 use garage_util::config::*;
+use garage_util::error::Error;
 
 use garage_rpc::system::System;
 
@@ -73,7 +74,56 @@ pub struct GarageK2V {
 
 impl Garage {
 	/// Create and run garage
-	pub fn new(config: Config, db: db::Db, background: Arc<BackgroundRunner>) -> Arc<Self> {
+	pub fn new(config: Config, background: Arc<BackgroundRunner>) -> Result<Arc<Self>, Error> {
+		info!("Opening database...");
+		let mut db_path = config.metadata_dir.clone();
+		std::fs::create_dir_all(&db_path).expect("Unable to create Garage meta data directory");
+		let db = match config.db_engine.as_str() {
+			"sled" => {
+				db_path.push("db");
+				info!("Opening Sled database at: {}", db_path.display());
+				let db = db::sled_adapter::sled::Config::default()
+					.path(&db_path)
+					.cache_capacity(config.sled_cache_capacity)
+					.flush_every_ms(Some(config.sled_flush_every_ms))
+					.open()
+					.expect("Unable to open sled DB");
+				db::sled_adapter::SledDb::init(db)
+			}
+			"sqlite" | "sqlite3" | "rusqlite" => {
+				db_path.push("db.sqlite");
+				info!("Opening Sqlite database at: {}", db_path.display());
+				let db = db::sqlite_adapter::rusqlite::Connection::open(db_path)
+					.expect("Unable to open sqlite DB");
+				db::sqlite_adapter::SqliteDb::init(db)
+			}
+			"lmdb" | "heed" => {
+				db_path.push("db.lmdb");
+				info!("Opening LMDB database at: {}", db_path.display());
+				std::fs::create_dir_all(&db_path).expect("Unable to create LMDB data directory");
+				let map_size =
+					if u32::MAX as usize == usize::MAX {
+						warn!("LMDB is not recommended on 32-bit systems, database size will be limited");
+						1usize << 30 // 1GB for 32-bit systems
+					} else {
+						1usize << 40 // 1TB for 64-bit systems
+					};
+
+				let db = db::lmdb_adapter::heed::EnvOpenOptions::new()
+					.max_dbs(100)
+					.map_size(map_size)
+					.open(&db_path)
+					.expect("Unable to open LMDB DB");
+				db::lmdb_adapter::LmdbDb::init(db)
+			}
+			e => {
+				return Err(Error::Message(format!(
+					"Unsupported DB engine: {} (options: sled, sqlite, lmdb)",
+					e
+				)));
+			}
+		};
+
 		let network_key = NetworkKey::from_slice(
 			&hex::decode(&config.rpc_secret).expect("Invalid RPC secret key")[..],
 		)
@@ -171,9 +221,8 @@ impl Garage {
 		#[cfg(feature = "k2v")]
 		let k2v = GarageK2V::new(system.clone(), &db, meta_rep_param);
 
-		info!("Initialize Garage...");
-
-		Arc::new(Self {
+		// -- done --
+		Ok(Arc::new(Self {
 			config,
 			db,
 			background,
@@ -187,7 +236,7 @@ impl Garage {
 			block_ref_table,
 			#[cfg(feature = "k2v")]
 			k2v,
-		})
+		}))
 	}
 
 	pub fn bucket_helper(&self) -> helper::bucket::BucketHelper {

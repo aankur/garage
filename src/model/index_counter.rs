@@ -1,3 +1,4 @@
+use core::ops::Bound;
 use std::collections::{hash_map, BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -12,9 +13,10 @@ use garage_rpc::ring::Ring;
 use garage_rpc::system::System;
 use garage_util::data::*;
 use garage_util::error::*;
+use garage_util::time::*;
 
 use garage_table::crdt::*;
-use garage_table::replication::TableShardedReplication;
+use garage_table::replication::*;
 use garage_table::*;
 
 pub trait CountedItem: Clone + PartialEq + Send + Sync + 'static {
@@ -139,7 +141,7 @@ impl<T: CountedItem> TableSchema for CounterTable<T> {
 pub struct IndexCounter<T: CountedItem> {
 	this_node: Uuid,
 	local_counter: db::Tree,
-	propagate_tx: mpsc::UnboundedSender<(T::CP, T::CS, LocalCounterEntry)>,
+	propagate_tx: mpsc::UnboundedSender<(T::CP, T::CS, LocalCounterEntry<T>)>,
 	pub table: Arc<Table<CounterTable<T>, TableShardedReplication>>,
 }
 
@@ -203,17 +205,22 @@ impl<T: CountedItem> IndexCounter<T> {
 		let tree_key = self.table.data.tree_key(pk, sk);
 
 		let mut entry = match tx.get(&self.local_counter, &tree_key[..])? {
-			Some(old_bytes) => rmp_serde::decode::from_read_ref::<_, LocalCounterEntry>(&old_bytes)
-				.map_err(Error::RmpDecode)
-				.map_err(db::TxError::Abort)?,
+			Some(old_bytes) => {
+				rmp_serde::decode::from_read_ref::<_, LocalCounterEntry<T>>(&old_bytes)
+					.map_err(Error::RmpDecode)
+					.map_err(db::TxError::Abort)?
+			}
 			None => LocalCounterEntry {
+				pk: pk.clone(),
+				sk: sk.clone(),
 				values: BTreeMap::new(),
 			},
 		};
 
+		let now = now_msec();
 		for (s, inc) in counts.iter() {
 			let mut ent = entry.values.entry(s.to_string()).or_insert((0, 0));
-			ent.0 += 1;
+			ent.0 = std::cmp::max(ent.0 + 1, now);
 			ent.1 += *inc;
 		}
 
@@ -234,7 +241,7 @@ impl<T: CountedItem> IndexCounter<T> {
 
 	async fn propagate_loop(
 		self: Arc<Self>,
-		mut propagate_rx: mpsc::UnboundedReceiver<(T::CP, T::CS, LocalCounterEntry)>,
+		mut propagate_rx: mpsc::UnboundedReceiver<(T::CP, T::CS, LocalCounterEntry<T>)>,
 		must_exit: watch::Receiver<bool>,
 	) {
 		// This loop batches updates to counters to be sent all at once.
@@ -257,7 +264,7 @@ impl<T: CountedItem> IndexCounter<T> {
 
 			if let Some((pk, sk, counters)) = ent {
 				let tree_key = self.table.data.tree_key(&pk, &sk);
-				let dist_entry = counters.into_counter_entry::<T>(self.this_node, pk, sk);
+				let dist_entry = counters.into_counter_entry(self.this_node);
 				match buf.entry(tree_key) {
 					hash_map::Entry::Vacant(e) => {
 						e.insert(dist_entry);
@@ -293,23 +300,153 @@ impl<T: CountedItem> IndexCounter<T> {
 			}
 		}
 	}
+
+	pub fn offline_recount_all<TS, TR>(
+		&self,
+		counted_table: &Arc<Table<TS, TR>>,
+	) -> Result<(), Error>
+	where
+		TS: TableSchema<E = T>,
+		TR: TableReplication,
+	{
+		let save_counter_entry = |entry: CounterEntry<T>| -> Result<(), Error> {
+			let entry_k = self
+				.table
+				.data
+				.tree_key(entry.partition_key(), entry.sort_key());
+			self.table
+				.data
+				.update_entry_with(&entry_k, |ent| match ent {
+					Some(mut ent) => {
+						ent.merge(&entry);
+						ent
+					}
+					None => entry.clone(),
+				})?;
+			Ok(())
+		};
+
+		// 1. Set all old local counters to zero
+		let now = now_msec();
+		let mut next_start: Option<Vec<u8>> = None;
+		loop {
+			let low_bound = match next_start.take() {
+				Some(v) => Bound::Excluded(v),
+				None => Bound::Unbounded,
+			};
+			let mut batch = vec![];
+			for item in self.local_counter.range((low_bound, Bound::Unbounded))? {
+				batch.push(item?);
+				if batch.len() > 1000 {
+					break;
+				}
+			}
+
+			if batch.is_empty() {
+				break;
+			}
+
+			for (local_counter_k, local_counter) in batch {
+				let mut local_counter =
+					rmp_serde::decode::from_read_ref::<_, LocalCounterEntry<T>>(&local_counter)?;
+
+				for (_, tv) in local_counter.values.iter_mut() {
+					tv.0 = std::cmp::max(tv.0 + 1, now);
+					tv.1 = 0;
+				}
+
+				let local_counter_bytes = rmp_to_vec_all_named(&local_counter)?;
+				self.local_counter
+					.insert(&local_counter_k, &local_counter_bytes)?;
+
+				let counter_entry = local_counter.into_counter_entry(self.this_node);
+				save_counter_entry(counter_entry)?;
+
+				next_start = Some(local_counter_k);
+			}
+		}
+
+		// 2. Recount all table entries
+		let now = now_msec();
+		let mut next_start: Option<Vec<u8>> = None;
+		loop {
+			let low_bound = match next_start.take() {
+				Some(v) => Bound::Excluded(v),
+				None => Bound::Unbounded,
+			};
+			let mut batch = vec![];
+			for item in counted_table
+				.data
+				.store
+				.range((low_bound, Bound::Unbounded))?
+			{
+				batch.push(item?);
+				if batch.len() > 1000 {
+					break;
+				}
+			}
+
+			if batch.is_empty() {
+				break;
+			}
+
+			for (counted_entry_k, counted_entry) in batch {
+				let counted_entry = counted_table.data.decode_entry(&counted_entry)?;
+
+				let pk = counted_entry.counter_partition_key();
+				let sk = counted_entry.counter_sort_key();
+				let counts = counted_entry.counts();
+
+				let local_counter_key = self.table.data.tree_key(pk, sk);
+				let mut local_counter = match self.local_counter.get(&local_counter_key)? {
+					Some(old_bytes) => {
+						let ent = rmp_serde::decode::from_read_ref::<_, LocalCounterEntry<T>>(
+							&old_bytes,
+						)?;
+						assert!(ent.pk == *pk);
+						assert!(ent.sk == *sk);
+						ent
+					}
+					None => LocalCounterEntry {
+						pk: pk.clone(),
+						sk: sk.clone(),
+						values: BTreeMap::new(),
+					},
+				};
+				for (s, v) in counts.iter() {
+					let mut tv = local_counter.values.entry(s.to_string()).or_insert((0, 0));
+					tv.0 = std::cmp::max(tv.0 + 1, now);
+					tv.1 += v;
+				}
+
+				let local_counter_bytes = rmp_to_vec_all_named(&local_counter)?;
+				self.local_counter
+					.insert(&local_counter_key, local_counter_bytes)?;
+
+				let counter_entry = local_counter.into_counter_entry(self.this_node);
+				save_counter_entry(counter_entry)?;
+
+				next_start = Some(counted_entry_k);
+			}
+		}
+
+		// Done
+		Ok(())
+	}
 }
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-struct LocalCounterEntry {
+struct LocalCounterEntry<T: CountedItem> {
+	pk: T::CP,
+	sk: T::CS,
 	values: BTreeMap<String, (u64, i64)>,
 }
 
-impl LocalCounterEntry {
-	fn into_counter_entry<T: CountedItem>(
-		self,
-		this_node: Uuid,
-		pk: T::CP,
-		sk: T::CS,
-	) -> CounterEntry<T> {
+impl<T: CountedItem> LocalCounterEntry<T> {
+	fn into_counter_entry(self, this_node: Uuid) -> CounterEntry<T> {
 		CounterEntry {
-			pk,
-			sk,
+			pk: self.pk,
+			sk: self.sk,
 			values: self
 				.values
 				.into_iter()
