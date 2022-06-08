@@ -240,7 +240,7 @@ impl TableSchema for K2VItemTable {
 }
 
 impl CountedItem for K2VItem {
-	const COUNTER_TABLE_NAME: &'static str = "k2v_index_counter";
+	const COUNTER_TABLE_NAME: &'static str = "k2v_index_counter_v2";
 
 	// Partition key = bucket id
 	type CP = Uuid;

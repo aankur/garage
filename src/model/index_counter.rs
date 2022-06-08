@@ -158,7 +158,7 @@ impl<T: CountedItem> IndexCounter<T> {
 		let this = Arc::new(Self {
 			this_node: system.id,
 			local_counter: db
-				.open_tree(format!("local_counter:{}", T::COUNTER_TABLE_NAME))
+				.open_tree(format!("local_counter_v2:{}", T::COUNTER_TABLE_NAME))
 				.expect("Unable to open local counter tree"),
 			propagate_tx,
 			table: Table::new(
@@ -346,6 +346,7 @@ impl<T: CountedItem> IndexCounter<T> {
 				break;
 			}
 
+			info!("zeroing old counters... ({})", hex::encode(&batch[0].0));
 			for (local_counter_k, local_counter) in batch {
 				let mut local_counter =
 					rmp_serde::decode::from_read_ref::<_, LocalCounterEntry<T>>(&local_counter)?;
@@ -390,6 +391,7 @@ impl<T: CountedItem> IndexCounter<T> {
 				break;
 			}
 
+			info!("counting entries... ({})", hex::encode(&batch[0].0));
 			for (counted_entry_k, counted_entry) in batch {
 				let counted_entry = counted_table.data.decode_entry(&counted_entry)?;
 
