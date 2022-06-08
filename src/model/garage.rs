@@ -23,10 +23,9 @@ use crate::s3::version_table::*;
 use crate::bucket_alias_table::*;
 use crate::bucket_table::*;
 use crate::helper;
+use crate::index_counter::*;
 use crate::key_table::*;
 
-#[cfg(feature = "k2v")]
-use crate::index_counter::*;
 #[cfg(feature = "k2v")]
 use crate::k2v::{item_table::*, poll::*, rpc::*};
 
@@ -53,6 +52,8 @@ pub struct Garage {
 
 	/// Table containing S3 objects
 	pub object_table: Arc<Table<ObjectTable, TableShardedReplication>>,
+	/// Counting table containing object counters
+	pub object_counter_table: Arc<IndexCounter<Object>>,
 	/// Table containing S3 object versions
 	pub version_table: Arc<Table<VersionTable, TableShardedReplication>>,
 	/// Table containing S3 block references (not blocks themselves)
@@ -205,12 +206,16 @@ impl Garage {
 			&db,
 		);
 
+		info!("Initialize object counter table...");
+		let object_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
+
 		info!("Initialize object_table...");
 		#[allow(clippy::redundant_clone)]
 		let object_table = Table::new(
 			ObjectTable {
 				background: background.clone(),
 				version_table: version_table.clone(),
+				object_counter_table: object_counter_table.clone(),
 			},
 			meta_rep_param.clone(),
 			system.clone(),
@@ -232,6 +237,7 @@ impl Garage {
 			bucket_alias_table,
 			key_table,
 			object_table,
+			object_counter_table,
 			version_table,
 			block_ref_table,
 			#[cfg(feature = "k2v")]

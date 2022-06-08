@@ -38,6 +38,11 @@ pub async fn offline_repair(config_file: PathBuf, opt: OfflineRepairOpt) -> Resu
 			#[cfg(not(feature = "k2v"))]
 			error!("K2V not enabled in this build.");
 		}
+		OfflineRepairWhat::ObjectCounters => {
+			garage
+				.object_counter_table
+				.offline_recount_all(&garage.object_table)?;
+		}
 	}
 
 	info!("Repair operation finished, shutting down Garage internals...");

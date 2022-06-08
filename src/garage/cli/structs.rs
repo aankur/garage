@@ -425,6 +425,9 @@ pub enum OfflineRepairWhat {
 	/// Repair K2V item counters
 	#[structopt(name = "k2v_item_counters")]
 	K2VItemCounters,
+	/// Repair object counters
+	#[structopt(name = "object_counters")]
+	ObjectCounters,
 }
 
 #[derive(Serialize, Deserialize, StructOpt, Debug, Clone)]

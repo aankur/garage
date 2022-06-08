@@ -39,7 +39,11 @@ pub enum AdminRpc {
 	// Replies
 	Ok(String),
 	BucketList(Vec<Bucket>),
-	BucketInfo(Bucket, HashMap<String, Key>),
+	BucketInfo {
+		bucket: Bucket,
+		relevant_keys: HashMap<String, Key>,
+		counters: HashMap<String, i64>,
+	},
 	KeyList(Vec<(String, String)>),
 	KeyInfo(Key, HashMap<Uuid, Bucket>),
 }
@@ -104,6 +108,15 @@ impl AdminRpcHandler {
 			.get_existing_bucket(bucket_id)
 			.await?;
 
+		let counters = self
+			.garage
+			.object_counter_table
+			.table
+			.get(&EmptyKey, &bucket_id)
+			.await?
+			.map(|x| x.filtered_values(&self.garage.system.ring.borrow()))
+			.unwrap_or_default();
+
 		let mut relevant_keys = HashMap::new();
 		for (k, _) in bucket
 			.state
@@ -139,7 +152,11 @@ impl AdminRpcHandler {
 			}
 		}
 
-		Ok(AdminRpc::BucketInfo(bucket, relevant_keys))
+		Ok(AdminRpc::BucketInfo {
+			bucket,
+			relevant_keys,
+			counters,
+		})
 	}
 
 	#[allow(clippy::ptr_arg)]
