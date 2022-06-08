@@ -27,7 +27,7 @@ use crate::key_table::*;
 #[cfg(feature = "k2v")]
 use crate::index_counter::*;
 #[cfg(feature = "k2v")]
-use crate::k2v::{counter_table::*, item_table::*, poll::*, rpc::*};
+use crate::k2v::{item_table::*, poll::*, rpc::*};
 
 /// An entire Garage full of data
 pub struct Garage {
@@ -66,7 +66,7 @@ pub struct GarageK2V {
 	/// Table containing K2V items
 	pub item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
 	/// Indexing table containing K2V item counters
-	pub counter_table: Arc<IndexCounter<K2VCounterTable>>,
+	pub counter_table: Arc<IndexCounter<K2VItem>>,
 	/// K2V RPC handler
 	pub rpc: Arc<K2VRpcHandler>,
 }
