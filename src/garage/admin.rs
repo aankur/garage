@@ -38,7 +38,10 @@ pub enum AdminRpc {
 
 	// Replies
 	Ok(String),
-	BucketList(Vec<Bucket>),
+	BucketList {
+		buckets: Vec<Bucket>,
+		counters: HashMap<Uuid, HashMap<String, i64>>,
+	},
 	BucketInfo {
 		bucket: Bucket,
 		relevant_keys: HashMap<String, Key>,
@@ -91,7 +94,25 @@ impl AdminRpcHandler {
 				EnumerationOrder::Forward,
 			)
 			.await?;
-		Ok(AdminRpc::BucketList(buckets))
+
+		let ring = self.garage.system.ring.borrow().clone();
+		let counters = self
+			.garage
+			.object_counter_table
+			.table
+			.get_range(
+				&EmptyKey,
+				None,
+				Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
+				15000,
+				EnumerationOrder::Forward,
+			)
+			.await?
+			.iter()
+			.map(|x| (x.sk, x.filtered_values(&ring)))
+			.collect::<HashMap<_, _>>();
+
+		Ok(AdminRpc::BucketList { buckets, counters })
 	}
 
 	async fn handle_bucket_info(&self, query: &BucketOpt) -> Result<AdminRpc, Error> {

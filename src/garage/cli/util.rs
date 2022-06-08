@@ -9,11 +9,11 @@ use garage_model::bucket_table::*;
 use garage_model::key_table::*;
 use garage_model::s3::object_table::{BYTES, OBJECTS, UNFINISHED_UPLOADS};
 
-pub fn print_bucket_list(bl: Vec<Bucket>) {
+pub fn print_bucket_list(buckets: Vec<Bucket>, counters: HashMap<Uuid, HashMap<String, i64>>) {
 	println!("List of buckets:");
 
 	let mut table = vec![];
-	for bucket in bl {
+	for bucket in buckets {
 		let aliases = bucket
 			.aliases()
 			.iter()
@@ -30,11 +30,24 @@ pub fn print_bucket_list(bl: Vec<Bucket>) {
 			[((k, n), _, _)] => format!("{}:{}", k, n),
 			s => format!("[{} local aliases]", s.len()),
 		};
+
+		let counters_tb = match counters.get(&bucket.id) {
+			Some(c) => format!(
+				"\t{}\t{}\t{}",
+				bytesize::ByteSize::b(c.get(BYTES).cloned().unwrap_or_default() as u64)
+					.to_string_as(true),
+				c.get(OBJECTS).cloned().unwrap_or_default(),
+				c.get(UNFINISHED_UPLOADS).cloned().unwrap_or_default(),
+			),
+			None => "".into(),
+		};
+
 		table.push(format!(
-			"\t{}\t{}\t{}",
+			"\t{}\t{}\t{}{}",
 			aliases.join(","),
 			local_aliases_n,
-			hex::encode(bucket.id)
+			hex::encode(bucket.id),
+			counters_tb
 		));
 	}
 	format_table(table);
