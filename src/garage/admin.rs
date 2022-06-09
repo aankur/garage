@@ -29,6 +29,7 @@ use crate::repair::online::OnlineRepair;
 pub const ADMIN_RPC_PATH: &str = "garage/admin_rpc.rs/Rpc";
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum AdminRpc {
 	BucketOperation(BucketOperation),
 	KeyOperation(KeyOperation),
