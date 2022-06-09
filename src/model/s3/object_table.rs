@@ -315,9 +315,12 @@ impl CountedItem for Object {
 	}
 
 	fn counts(&self) -> Vec<(&'static str, i64)> {
-		let n_objects = if self.is_tombstone() { 0 } else { 1 };
-
 		let versions = self.versions();
+		let n_objects = if versions.iter().any(|v| v.is_data()) {
+			0
+		} else {
+			1
+		};
 		let n_unfinished_uploads = versions
 			.iter()
 			.filter(|v| matches!(v.state, ObjectVersionState::Uploading(_)))

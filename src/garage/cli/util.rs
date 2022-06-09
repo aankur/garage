@@ -154,7 +154,7 @@ pub fn print_bucket_info(
 			let size =
 				bytesize::ByteSize::b(counters.get(BYTES).cloned().unwrap_or_default() as u64);
 			println!(
-				"Size: {} ({})",
+				"\nSize: {} ({})",
 				size.to_string_as(true),
 				size.to_string_as(false)
 			);
@@ -170,7 +170,23 @@ pub fn print_bucket_info(
 					.unwrap_or_default()
 			);
 
-			println!("Website access: {}", p.website_config.get().is_some());
+			println!("\nWebsite access: {}", p.website_config.get().is_some());
+
+			let quotas = p.quotas.get();
+			if quotas.max_size.is_some() || quotas.max_objects.is_some() {
+				println!("\nQuotas:");
+				if let Some(ms) = quotas.max_size {
+					let ms = bytesize::ByteSize::b(ms);
+					println!(
+						" maximum size: {} ({})",
+						ms.to_string_as(true),
+						ms.to_string_as(false)
+					);
+				}
+				if let Some(mo) = quotas.max_objects {
+					println!(" maximum number of objects: {}", mo);
+				}
+			}
 
 			println!("\nGlobal aliases:");
 			for (alias, _, active) in p.aliases.items().iter() {

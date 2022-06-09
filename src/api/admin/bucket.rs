@@ -14,6 +14,7 @@ use garage_model::bucket_alias_table::*;
 use garage_model::bucket_table::*;
 use garage_model::garage::Garage;
 use garage_model::permission::*;
+use garage_model::s3::object_table::*;
 
 use crate::admin::error::*;
 use crate::admin::key::ApiBucketKeyPerm;
@@ -32,10 +33,28 @@ pub async fn handle_list_buckets(garage: &Arc<Garage>) -> Result<Response<Body>,
 		)
 		.await?;
 
+	let ring = garage.system.ring.borrow().clone();
+	let counters = garage
+		.object_counter_table
+		.table
+		.get_range(
+			&EmptyKey,
+			None,
+			Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
+			15000,
+			EnumerationOrder::Forward,
+		)
+		.await?
+		.iter()
+		.map(|x| (x.sk, x.filtered_values(&ring)))
+		.collect::<HashMap<_, _>>();
+
 	let res = buckets
 		.into_iter()
 		.map(|b| {
 			let state = b.state.as_option().unwrap();
+			let empty_cnts = HashMap::new();
+			let cnts = counters.get(&b.id).unwrap_or(&empty_cnts);
 			ListBucketResultItem {
 				id: hex::encode(b.id),
 				global_aliases: state
@@ -55,6 +74,9 @@ pub async fn handle_list_buckets(garage: &Arc<Garage>) -> Result<Response<Body>,
 						alias: n.to_string(),
 					})
 					.collect::<Vec<_>>(),
+				objects: cnts.get(OBJECTS).cloned().unwrap_or_default(),
+				bytes: cnts.get(BYTES).cloned().unwrap_or_default(),
+				unfinshed_uploads: cnts.get(UNFINISHED_UPLOADS).cloned().unwrap_or_default(),
 			}
 		})
 		.collect::<Vec<_>>();
@@ -68,6 +90,9 @@ struct ListBucketResultItem {
 	id: String,
 	global_aliases: Vec<String>,
 	local_aliases: Vec<BucketLocalAlias>,
+	objects: i64,
+	bytes: i64,
+	unfinshed_uploads: i64,
 }
 
 #[derive(Serialize)]
@@ -75,6 +100,13 @@ struct ListBucketResultItem {
 struct BucketLocalAlias {
 	access_key_id: String,
 	alias: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiBucketQuotas {
+	max_size: Option<u64>,
+	max_objects: Option<u64>,
 }
 
 pub async fn handle_get_bucket_info(
@@ -107,6 +139,14 @@ async fn bucket_info_results(
 		.bucket_helper()
 		.get_existing_bucket(bucket_id)
 		.await?;
+
+	let counters = garage
+		.object_counter_table
+		.table
+		.get(&EmptyKey, &bucket_id)
+		.await?
+		.map(|x| x.filtered_values(&garage.system.ring.borrow()))
+		.unwrap_or_default();
 
 	let mut relevant_keys = HashMap::new();
 	for (k, _) in bucket
@@ -148,6 +188,7 @@ async fn bucket_info_results(
 
 	let state = bucket.state.as_option().unwrap();
 
+	let quotas = state.quotas.get();
 	let res =
 		GetBucketInfoResult {
 			id: hex::encode(&bucket.id),
@@ -191,6 +232,16 @@ async fn bucket_info_results(
 					}
 				})
 				.collect::<Vec<_>>(),
+			objects: counters.get(OBJECTS).cloned().unwrap_or_default(),
+			bytes: counters.get(BYTES).cloned().unwrap_or_default(),
+			unfinshed_uploads: counters
+				.get(UNFINISHED_UPLOADS)
+				.cloned()
+				.unwrap_or_default(),
+			quotas: ApiBucketQuotas {
+				max_size: quotas.max_size,
+				max_objects: quotas.max_objects,
+			},
 		};
 
 	Ok(json_ok_response(&res)?)
@@ -205,6 +256,10 @@ struct GetBucketInfoResult {
 	#[serde(default)]
 	website_config: Option<GetBucketInfoWebsiteResult>,
 	keys: Vec<GetBucketInfoKey>,
+	objects: i64,
+	bytes: i64,
+	unfinshed_uploads: i64,
+	quotas: ApiBucketQuotas,
 }
 
 #[derive(Serialize)]
