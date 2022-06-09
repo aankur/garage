@@ -180,6 +180,10 @@ pub enum BucketOperation {
 	/// Expose as website or not
 	#[structopt(name = "website")]
 	Website(WebsiteOpt),
+
+	/// Set the quotas for this bucket
+	#[structopt(name = "set-quotas")]
+	SetQuotas(SetQuotasOpt),
 }
 
 #[derive(Serialize, Deserialize, StructOpt, Debug)]
@@ -264,6 +268,21 @@ pub struct PermBucketOpt {
 
 	/// Bucket name
 	pub bucket: String,
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug)]
+pub struct SetQuotasOpt {
+	/// Bucket name
+	pub bucket: String,
+
+	/// Set a maximum size for the bucket (specify a size e.g. in MiB or GiB,
+	/// or `none` for no size restriction)
+	#[structopt(long = "max-size")]
+	pub max_size: Option<String>,
+
+	/// Set a maximum number of objects for the bucket (or `none` for no restriction)
+	#[structopt(long = "max-objects")]
+	pub max_objects: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, StructOpt, Debug)]

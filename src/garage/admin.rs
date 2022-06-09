@@ -80,6 +80,7 @@ impl AdminRpcHandler {
 			BucketOperation::Allow(query) => self.handle_bucket_allow(query).await,
 			BucketOperation::Deny(query) => self.handle_bucket_deny(query).await,
 			BucketOperation::Website(query) => self.handle_bucket_website(query).await,
+			BucketOperation::SetQuotas(query) => self.handle_bucket_set_quotas(query).await,
 		}
 	}
 
@@ -468,6 +469,60 @@ impl AdminRpcHandler {
 		};
 
 		Ok(AdminRpc::Ok(msg))
+	}
+
+	async fn handle_bucket_set_quotas(&self, query: &SetQuotasOpt) -> Result<AdminRpc, Error> {
+		let bucket_id = self
+			.garage
+			.bucket_helper()
+			.resolve_global_bucket_name(&query.bucket)
+			.await?
+			.ok_or_bad_request("Bucket not found")?;
+
+		let mut bucket = self
+			.garage
+			.bucket_helper()
+			.get_existing_bucket(bucket_id)
+			.await?;
+		let bucket_state = bucket.state.as_option_mut().unwrap();
+
+		if query.max_size.is_none() && query.max_objects.is_none() {
+			return Err(Error::BadRequest(
+				"You must specify either --max-size or --max-objects (or both) for this command to do something.".to_string(),
+			));
+		}
+
+		let mut quotas = bucket_state.quotas.get().clone();
+
+		match query.max_size.as_ref().map(String::as_ref) {
+			Some("none") => quotas.max_size = None,
+			Some(v) => {
+				let bs = v
+					.parse::<bytesize::ByteSize>()
+					.ok_or_bad_request(format!("Invalid size specified: {}", v))?;
+				quotas.max_size = Some(bs.as_u64());
+			}
+			_ => (),
+		}
+
+		match query.max_objects.as_ref().map(String::as_ref) {
+			Some("none") => quotas.max_objects = None,
+			Some(v) => {
+				let mo = v
+					.parse::<u64>()
+					.ok_or_bad_request(format!("Invalid number specified: {}", v))?;
+				quotas.max_objects = Some(mo);
+			}
+			_ => (),
+		}
+
+		bucket_state.quotas.update(quotas);
+		self.garage.bucket_table.insert(&bucket).await?;
+
+		Ok(AdminRpc::Ok(format!(
+			"Quotas updated for {}",
+			&query.bucket
+		)))
 	}
 
 	async fn handle_key_cmd(&self, cmd: &KeyOperation) -> Result<AdminRpc, Error> {
