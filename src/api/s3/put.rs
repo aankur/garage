@@ -260,7 +260,7 @@ async fn check_quotas(
 		let current_size = counters.get(BYTES).cloned().unwrap_or_default();
 		if cnt_size_diff > 0 && current_size + cnt_size_diff > ms as i64 {
 			return Err(Error::forbidden(format!(
-				"Bucket size quota is reached, maximum total sie of objects for this bucket: {}. The bucket is already {} bytes, and this object would add {} bytes.",
+				"Bucket size quota is reached, maximum total size of objects for this bucket: {}. The bucket is already {} bytes, and this object would add {} bytes.",
 				ms, current_size, size
 			)));
 		}
