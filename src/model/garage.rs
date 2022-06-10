@@ -52,8 +52,8 @@ pub struct Garage {
 
 	/// Table containing S3 objects
 	pub object_table: Arc<Table<ObjectTable, TableShardedReplication>>,
-	/// Counting table containing object counters
-	pub object_counter_table: Arc<IndexCounter<Object>>,
+	/// Counting table containing object counters for each bucket
+	pub object_counter_table: Arc<IndexCounter<Object, TableFullReplication>>,
 	/// Table containing S3 object versions
 	pub version_table: Arc<Table<VersionTable, TableShardedReplication>>,
 	/// Table containing S3 block references (not blocks themselves)
@@ -68,7 +68,7 @@ pub struct GarageK2V {
 	/// Table containing K2V items
 	pub item_table: Arc<Table<K2VItemTable, TableShardedReplication>>,
 	/// Indexing table containing K2V item counters
-	pub counter_table: Arc<IndexCounter<K2VItem>>,
+	pub counter_table: Arc<IndexCounter<K2VItem, TableShardedReplication>>,
 	/// K2V RPC handler
 	pub rpc: Arc<K2VRpcHandler>,
 }
@@ -176,7 +176,7 @@ impl Garage {
 			&db,
 		);
 		info!("Initialize key_table_table...");
-		let key_table = Table::new(KeyTable, control_rep_param, system.clone(), &db);
+		let key_table = Table::new(KeyTable, control_rep_param.clone(), system.clone(), &db);
 
 		// ---- S3 tables ----
 		info!("Initialize block_ref_table...");
@@ -201,7 +201,7 @@ impl Garage {
 		);
 
 		info!("Initialize object counter table...");
-		let object_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
+		let object_counter_table = IndexCounter::new(system.clone(), control_rep_param, &db);
 
 		info!("Initialize object_table...");
 		#[allow(clippy::redundant_clone)]

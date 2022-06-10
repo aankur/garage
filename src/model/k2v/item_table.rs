@@ -6,6 +6,7 @@ use garage_db as db;
 use garage_util::data::*;
 
 use garage_table::crdt::*;
+use garage_table::replication::*;
 use garage_table::*;
 
 use crate::index_counter::*;
@@ -187,7 +188,7 @@ impl Entry<K2VItemPartition, String> for K2VItem {
 }
 
 pub struct K2VItemTable {
-	pub(crate) counter_table: Arc<IndexCounter<K2VItem>>,
+	pub(crate) counter_table: Arc<IndexCounter<K2VItem, TableShardedReplication>>,
 	pub(crate) subscriptions: Arc<SubscriptionManager>,
 }
 

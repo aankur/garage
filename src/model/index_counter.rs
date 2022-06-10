@@ -138,17 +138,17 @@ impl<T: CountedItem> TableSchema for CounterTable<T> {
 
 // ----
 
-pub struct IndexCounter<T: CountedItem> {
+pub struct IndexCounter<T: CountedItem, R: TableReplication + 'static> {
 	this_node: Uuid,
 	local_counter: db::Tree,
 	propagate_tx: mpsc::UnboundedSender<(T::CP, T::CS, LocalCounterEntry<T>)>,
-	pub table: Arc<Table<CounterTable<T>, TableShardedReplication>>,
+	pub table: Arc<Table<CounterTable<T>, R>>,
 }
 
-impl<T: CountedItem> IndexCounter<T> {
+impl<T: CountedItem, R: TableReplication + 'static> IndexCounter<T, R> {
 	pub fn new(
 		system: Arc<System>,
-		replication: TableShardedReplication,
+		replication: R,
 		db: &db::Db,
 	) -> Arc<Self> {
 		let background = system.background.clone();
