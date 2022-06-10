@@ -39,10 +39,7 @@ pub enum AdminRpc {
 
 	// Replies
 	Ok(String),
-	BucketList {
-		buckets: Vec<Bucket>,
-		counters: HashMap<Uuid, HashMap<String, i64>>,
-	},
+	BucketList(Vec<Bucket>),
 	BucketInfo {
 		bucket: Bucket,
 		relevant_keys: HashMap<String, Key>,
@@ -97,24 +94,7 @@ impl AdminRpcHandler {
 			)
 			.await?;
 
-		let ring = self.garage.system.ring.borrow().clone();
-		let counters = self
-			.garage
-			.object_counter_table
-			.table
-			.get_range(
-				&EmptyKey,
-				None,
-				Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
-				15000,
-				EnumerationOrder::Forward,
-			)
-			.await?
-			.iter()
-			.map(|x| (x.sk, x.filtered_values(&ring)))
-			.collect::<HashMap<_, _>>();
-
-		Ok(AdminRpc::BucketList { buckets, counters })
+		Ok(AdminRpc::BucketList(buckets))
 	}
 
 	async fn handle_bucket_info(&self, query: &BucketOpt) -> Result<AdminRpc, Error> {
@@ -135,7 +115,7 @@ impl AdminRpcHandler {
 			.garage
 			.object_counter_table
 			.table
-			.get(&EmptyKey, &bucket_id)
+			.get(&bucket_id, &EmptyKey)
 			.await?
 			.map(|x| x.filtered_values(&self.garage.system.ring.borrow()))
 			.unwrap_or_default();

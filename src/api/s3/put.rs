@@ -226,7 +226,7 @@ async fn check_quotas(
 	let key = key.to_string();
 	let (prev_object, counters) = futures::try_join!(
 		garage.object_table.get(&bucket.id, &key),
-		garage.object_counter_table.table.get(&EmptyKey, &bucket.id),
+		garage.object_counter_table.table.get(&bucket.id, &EmptyKey),
 	)?;
 
 	let counters = counters

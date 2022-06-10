@@ -302,16 +302,16 @@ impl TableSchema for ObjectTable {
 impl CountedItem for Object {
 	const COUNTER_TABLE_NAME: &'static str = "bucket_object_counter";
 
-	// Partition key = nothing
-	type CP = EmptyKey;
-	// Sort key = bucket id
-	type CS = Uuid;
+	// Partition key = bucket id
+	type CP = Uuid;
+	// Sort key = nothing
+	type CS = EmptyKey;
 
-	fn counter_partition_key(&self) -> &EmptyKey {
-		&EmptyKey
-	}
-	fn counter_sort_key(&self) -> &Uuid {
+	fn counter_partition_key(&self) -> &Uuid {
 		&self.bucket_id
+	}
+	fn counter_sort_key(&self) -> &EmptyKey {
+		&EmptyKey
 	}
 
 	fn counts(&self) -> Vec<(&'static str, i64)> {

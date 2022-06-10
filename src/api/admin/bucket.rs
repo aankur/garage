@@ -33,28 +33,10 @@ pub async fn handle_list_buckets(garage: &Arc<Garage>) -> Result<Response<Body>,
 		)
 		.await?;
 
-	let ring = garage.system.ring.borrow().clone();
-	let counters = garage
-		.object_counter_table
-		.table
-		.get_range(
-			&EmptyKey,
-			None,
-			Some((DeletedFilter::NotDeleted, ring.layout.node_id_vec.clone())),
-			15000,
-			EnumerationOrder::Forward,
-		)
-		.await?
-		.iter()
-		.map(|x| (x.sk, x.filtered_values(&ring)))
-		.collect::<HashMap<_, _>>();
-
 	let res = buckets
 		.into_iter()
 		.map(|b| {
 			let state = b.state.as_option().unwrap();
-			let empty_cnts = HashMap::new();
-			let cnts = counters.get(&b.id).unwrap_or(&empty_cnts);
 			ListBucketResultItem {
 				id: hex::encode(b.id),
 				global_aliases: state
@@ -74,9 +56,6 @@ pub async fn handle_list_buckets(garage: &Arc<Garage>) -> Result<Response<Body>,
 						alias: n.to_string(),
 					})
 					.collect::<Vec<_>>(),
-				objects: cnts.get(OBJECTS).cloned().unwrap_or_default(),
-				bytes: cnts.get(BYTES).cloned().unwrap_or_default(),
-				unfinshed_uploads: cnts.get(UNFINISHED_UPLOADS).cloned().unwrap_or_default(),
 			}
 		})
 		.collect::<Vec<_>>();
@@ -90,9 +69,6 @@ struct ListBucketResultItem {
 	id: String,
 	global_aliases: Vec<String>,
 	local_aliases: Vec<BucketLocalAlias>,
-	objects: i64,
-	bytes: i64,
-	unfinshed_uploads: i64,
 }
 
 #[derive(Serialize)]
@@ -143,7 +119,7 @@ async fn bucket_info_results(
 	let counters = garage
 		.object_counter_table
 		.table
-		.get(&EmptyKey, &bucket_id)
+		.get(&bucket_id, &EmptyKey)
 		.await?
 		.map(|x| x.filtered_values(&garage.system.ring.borrow()))
 		.unwrap_or_default();
