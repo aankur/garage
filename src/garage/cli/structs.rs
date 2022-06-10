@@ -442,6 +442,7 @@ pub struct OfflineRepairOpt {
 #[derive(Serialize, Deserialize, StructOpt, Debug, Eq, PartialEq, Clone)]
 pub enum OfflineRepairWhat {
 	/// Repair K2V item counters
+	#[cfg(feature = "k2v")]
 	#[structopt(name = "k2v_item_counters")]
 	K2VItemCounters,
 	/// Repair object counters
