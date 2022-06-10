@@ -102,7 +102,7 @@ struct BucketLocalAlias {
 	alias: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ApiBucketQuotas {
 	max_size: Option<u64>,
@@ -418,14 +418,12 @@ pub async fn handle_delete_bucket(
 		.body(Body::empty())?)
 }
 
-// ---- BUCKET WEBSITE CONFIGURATION ----
-
-pub async fn handle_put_bucket_website(
+pub async fn handle_update_bucket(
 	garage: &Arc<Garage>,
 	id: String,
 	req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-	let req = parse_json_body::<PutBucketWebsiteRequest>(req).await?;
+	let req = parse_json_body::<UpdateBucketRequest>(req).await?;
 	let bucket_id = parse_bucket_id(&id)?;
 
 	let mut bucket = garage
@@ -434,10 +432,31 @@ pub async fn handle_put_bucket_website(
 		.await?;
 
 	let state = bucket.state.as_option_mut().unwrap();
-	state.website_config.update(Some(WebsiteConfig {
-		index_document: req.index_document,
-		error_document: req.error_document,
-	}));
+
+	if let Some(wa) = req.website_access {
+		if wa.enabled {
+			state.website_config.update(Some(WebsiteConfig {
+				index_document: wa.index_document.ok_or_bad_request(
+					"Please specify indexDocument when enabling website access.",
+				)?,
+				error_document: wa.error_document,
+			}));
+		} else {
+			if wa.index_document.is_some() || wa.error_document.is_some() {
+				return Err(Error::bad_request(
+					"Cannot specify indexDocument or errorDocument when disabling website access.",
+				));
+			}
+			state.website_config.update(None);
+		}
+	}
+
+	if let Some(q) = req.quotas {
+		state.quotas.update(BucketQuotas {
+			max_size: q.max_size,
+			max_objects: q.max_objects,
+		});
+	}
 
 	garage.bucket_table.insert(&bucket).await?;
 
@@ -446,29 +465,17 @@ pub async fn handle_put_bucket_website(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PutBucketWebsiteRequest {
-	index_document: String,
-	#[serde(default)]
-	error_document: Option<String>,
+struct UpdateBucketRequest {
+	website_access: Option<UpdateBucketWebsiteAccess>,
+	quotas: Option<ApiBucketQuotas>,
 }
 
-pub async fn handle_delete_bucket_website(
-	garage: &Arc<Garage>,
-	id: String,
-) -> Result<Response<Body>, Error> {
-	let bucket_id = parse_bucket_id(&id)?;
-
-	let mut bucket = garage
-		.bucket_helper()
-		.get_existing_bucket(bucket_id)
-		.await?;
-
-	let state = bucket.state.as_option_mut().unwrap();
-	state.website_config.update(None);
-
-	garage.bucket_table.insert(&bucket).await?;
-
-	bucket_info_results(garage, bucket_id).await
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateBucketWebsiteAccess {
+	enabled: bool,
+	index_document: Option<String>,
+	error_document: Option<String>,
 }
 
 // ---- BUCKET/KEY PERMISSIONS ----

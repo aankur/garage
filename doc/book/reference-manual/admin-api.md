@@ -540,26 +540,37 @@ Deletes a storage bucket. A bucket cannot be deleted if it is not empty.
 
 Warning: this will delete all aliases associated with the bucket!
 
-#### PutBucketWebsite `PUT /v0/bucket/website?id=<bucket id>`
+#### UpdateBucket `PUT /v0/bucket?id=<bucket id>`
 
-Sets the website configuration for a bucket (this also enables website access for this bucket).
+Updates configuration of the given bucket.
 
 Request body format:
 
 ```json
 {
-	"indexDocument": "index.html",
-	"errorDocument": "404.html"
+	"websiteAccess": {
+		"enabled": true,
+		"indexDocument": "index.html",
+		"errorDocument": "404.html"
+	},
+	"quotas": {
+		"maxSize": 19029801,
+		"maxObjects": null,
+	}
 }
 ```
 
-The field `errorDocument` is optional, if no error document is set a generic error message is displayed when errors happen.
+All fields (`websiteAccess` and `quotas`) are optionnal.
+If they are present, the corresponding modifications are applied to the bucket, otherwise nothing is changed.
 
+In `websiteAccess`: if `enabled` is `true`, `indexDocument` must be specified.
+The field `errorDocument` is optional, if no error document is set a generic
+error message is displayed when errors happen. Conversely, if `enabled` is
+`false`, neither `indexDocument` nor `errorDocument` must be specified.
 
-#### DeleteBucketWebsite `DELETE /v0/bucket/website?id=<bucket id>`
-
-Deletes the website configuration for a bucket (disables website access for this bucket).
-
+In `quotas`: new values of `maxSize` and `maxObjects` must both be specified, or set to `null`
+to remove the quotas. An absent value will be considered the same as a `null`. It is not possible
+to change only one of the two quotas.
 
 ### Operations on permissions for keys on buckets
 
