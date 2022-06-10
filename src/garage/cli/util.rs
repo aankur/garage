@@ -31,23 +31,18 @@ pub fn print_bucket_list(buckets: Vec<Bucket>, counters: HashMap<Uuid, HashMap<S
 			s => format!("[{} local aliases]", s.len()),
 		};
 
-		let counters_tb = match counters.get(&bucket.id) {
-			Some(c) => format!(
-				"\t{}\t{}\t{}",
-				bytesize::ByteSize::b(c.get(BYTES).cloned().unwrap_or_default() as u64)
-					.to_string_as(true),
-				c.get(OBJECTS).cloned().unwrap_or_default(),
-				c.get(UNFINISHED_UPLOADS).cloned().unwrap_or_default(),
-			),
-			None => "".into(),
-		};
+		let empty_counters = HashMap::new();
+		let cnt = counters.get(&bucket.id).unwrap_or(&empty_counters);
 
 		table.push(format!(
-			"\t{}\t{}\t{}{}",
+			"\t{}\t{}\t{}\t{}\t{}\t{}",
 			aliases.join(","),
 			local_aliases_n,
 			hex::encode(bucket.id),
-			counters_tb
+			bytesize::ByteSize::b(cnt.get(BYTES).cloned().unwrap_or_default() as u64)
+				.to_string_as(true),
+			cnt.get(OBJECTS).cloned().unwrap_or_default(),
+			cnt.get(UNFINISHED_UPLOADS).cloned().unwrap_or_default(),
 		));
 	}
 	format_table(table);
