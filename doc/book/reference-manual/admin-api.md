@@ -134,8 +134,8 @@ Example request body:
 
 ```json
 [
-	"ec79480e0ce52ae26fd00c9da684e4fa56658d9c64cdcecb094e936de0bfe71f@10.0.0.11:3901",
-	"4a6ae5a1d0d33bf895f5bb4f0a418b7dc94c47c0dd2eb108d1158f3c8f60b0ff@10.0.0.12:3901"
+    "ec79480e0ce52ae26fd00c9da684e4fa56658d9c64cdcecb094e936de0bfe71f@10.0.0.11:3901",
+    "4a6ae5a1d0d33bf895f5bb4f0a418b7dc94c47c0dd2eb108d1158f3c8f60b0ff@10.0.0.12:3901"
 ]
 ```
 
@@ -145,14 +145,14 @@ Example response:
 
 ```json
 [
-	{
-		"success": true,
-		"error": null
-	},
-	{
-		"success": false,
-		"error": "Handshake error"
-	}
+    {
+        "success": true,
+        "error": null
+    },
+    {
+        "success": false,
+        "error": "Handshake error"
+    }
 ]
 ```
 
@@ -301,7 +301,7 @@ Request body format:
 
 ```json
 {
-	"name": "NameOfMyKey"
+    "name": "NameOfMyKey"
 }
 ```
 
@@ -313,9 +313,9 @@ Request body format:
 
 ```json
 {
-	"accessKeyId": "GK31c2f218a2e44f485b94239e",
-	"secretAccessKey": "b892c0665f0ada8a4755dae98baa3b133590e11dae3bcc1f9d769d67f16c3835",
-	"name": "NameOfMyKey"
+    "accessKeyId": "GK31c2f218a2e44f485b94239e",
+    "secretAccessKey": "b892c0665f0ada8a4755dae98baa3b133590e11dae3bcc1f9d769d67f16c3835",
+    "name": "NameOfMyKey"
 }
 ```
 
@@ -403,11 +403,11 @@ Request body format:
 
 ```json
 {
-	"name": "NameOfMyKey",
-	"allow": {
-		"createBucket": true,
-	},
-	"deny": {}
+    "name": "NameOfMyKey",
+    "allow": {
+        "createBucket": true,
+    },
+    "deny": {}
 }
 ```
 
@@ -473,24 +473,31 @@ Example response:
 
 ```json
 {
-  "id": "e6a14cd6a27f48684579ec6b381c078ab11697e6bc8513b72b2f5307e25fff9b",
-  "globalAliases": [
-    "alex"
-  ],
-  "keys": [
-    {
-      "accessKeyId": "GK31c2f218a2e44f485b94239e",
-      "name": "alex",
-      "permissions": {
-        "read": true,
-        "write": true,
-        "owner": true
-      },
-      "bucketLocalAliases": [
-        "test"
-      ]
-    }
-  ]
+    "id": "afa8f0a22b40b1247ccd0affb869b0af5cff980924a20e4b5e0720a44deb8d39",
+        "globalAliases": [],
+        "websiteAccess": false,
+        "websiteConfig": null,
+        "keys": [
+        {
+            "accessKeyId": "GK31c2f218a2e44f485b94239e",
+            "name": "Imported key",
+            "permissions": {
+                "read": true,
+                "write": true,
+                "owner": true
+            },
+            "bucketLocalAliases": [
+                "debug"
+            ]
+        }
+        ],
+        "objects": 14827,
+        "bytes": 13189855625,
+        "unfinshedUploads": 0,
+        "quotas": {
+            "maxSize": null,
+            "maxObjects": null
+        }
 }
 ```
 
@@ -502,7 +509,7 @@ Request body format:
 
 ```json
 {
-	"globalAlias": "NameOfMyBucket"
+    "globalAlias": "NameOfMyBucket"
 }
 ```
 
@@ -510,15 +517,15 @@ OR
 
 ```json
 {
-	"localAlias": {
-		"accessKeyId": "GK31c2f218a2e44f485b94239e",
-		"alias": "NameOfMyBucket",
-		"allow": {
-			"read": true,
-			"write": true,
-			"owner": false
-		}
-	}
+    "localAlias": {
+        "accessKeyId": "GK31c2f218a2e44f485b94239e",
+        "alias": "NameOfMyBucket",
+        "allow": {
+            "read": true,
+            "write": true,
+            "owner": false
+        }
+    }
 }
 ```
 
@@ -548,15 +555,15 @@ Request body format:
 
 ```json
 {
-	"websiteAccess": {
-		"enabled": true,
-		"indexDocument": "index.html",
-		"errorDocument": "404.html"
-	},
-	"quotas": {
-		"maxSize": 19029801,
-		"maxObjects": null,
-	}
+    "websiteAccess": {
+        "enabled": true,
+        "indexDocument": "index.html",
+        "errorDocument": "404.html"
+    },
+    "quotas": {
+        "maxSize": 19029801,
+        "maxObjects": null,
+    }
 }
 ```
 
@@ -582,13 +589,13 @@ Request body format:
 
 ```json
 {
-	"bucketId": "e6a14cd6a27f48684579ec6b381c078ab11697e6bc8513b72b2f5307e25fff9b",
-	"accessKeyId": "GK31c2f218a2e44f485b94239e",
-	"permissions": {
-		"read": true,
-		"write": true,
-		"owner": true
-	},
+    "bucketId": "e6a14cd6a27f48684579ec6b381c078ab11697e6bc8513b72b2f5307e25fff9b",
+    "accessKeyId": "GK31c2f218a2e44f485b94239e",
+    "permissions": {
+        "read": true,
+        "write": true,
+        "owner": true
+    },
 }
 ```
 
@@ -603,13 +610,13 @@ Request body format:
 
 ```json
 {
-	"bucketId": "e6a14cd6a27f48684579ec6b381c078ab11697e6bc8513b72b2f5307e25fff9b",
-	"accessKeyId": "GK31c2f218a2e44f485b94239e",
-	"permissions": {
-		"read": false,
-		"write": false,
-		"owner": true
-	},
+    "bucketId": "e6a14cd6a27f48684579ec6b381c078ab11697e6bc8513b72b2f5307e25fff9b",
+    "accessKeyId": "GK31c2f218a2e44f485b94239e",
+    "permissions": {
+        "read": false,
+        "write": false,
+        "owner": true
+    },
 }
 ```
 
