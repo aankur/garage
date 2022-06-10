@@ -8,7 +8,7 @@ use garage_util::background::BackgroundRunner;
 use garage_util::data::*;
 
 use garage_table::crdt::*;
-use garage_table::replication::*;
+use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
 use crate::index_counter::*;
@@ -223,7 +223,7 @@ impl Crdt for Object {
 pub struct ObjectTable {
 	pub background: Arc<BackgroundRunner>,
 	pub version_table: Arc<Table<VersionTable, TableShardedReplication>>,
-	pub object_counter_table: Arc<IndexCounter<Object, TableFullReplication>>,
+	pub object_counter_table: Arc<IndexCounter<Object>>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
