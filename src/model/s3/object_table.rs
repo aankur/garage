@@ -317,9 +317,9 @@ impl CountedItem for Object {
 	fn counts(&self) -> Vec<(&'static str, i64)> {
 		let versions = self.versions();
 		let n_objects = if versions.iter().any(|v| v.is_data()) {
-			0
-		} else {
 			1
+		} else {
+			0
 		};
 		let n_unfinished_uploads = versions
 			.iter()
