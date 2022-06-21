@@ -10,7 +10,8 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, watch, Mutex};
 
 use crate::error::Error;
-use worker::{Worker, WorkerProcessor};
+use worker::WorkerProcessor;
+pub use worker::{Worker, WorkerStatus};
 
 pub(crate) type JobOutput = Result<(), Error>;
 pub(crate) type Job = Pin<Box<dyn Future<Output = JobOutput> + Send>>;
@@ -30,9 +31,7 @@ impl BackgroundRunner {
 		let (send_worker, worker_out) = mpsc::unbounded_channel::<Box<dyn Worker>>();
 
 		let await_all_done =
-			tokio::spawn(
-				async move { WorkerProcessor::new(worker_out, stop_signal).run().await },
-			);
+			tokio::spawn(async move { WorkerProcessor::new(worker_out, stop_signal).run().await });
 
 		let (send_job, queue_out) = mpsc::unbounded_channel();
 		let queue_out = Arc::new(Mutex::new(queue_out));
@@ -40,11 +39,14 @@ impl BackgroundRunner {
 		for i in 0..n_runners {
 			let queue_out = queue_out.clone();
 
-			send_worker.send(Box::new(job_worker::JobWorker {
-				index: i,
-				job_chan: queue_out.clone(),
-				next_job: None,
-			})).ok().unwrap();
+			send_worker
+				.send(Box::new(job_worker::JobWorker {
+					index: i,
+					job_chan: queue_out.clone(),
+					next_job: None,
+				}))
+				.ok()
+				.unwrap();
 		}
 
 		let bgrunner = Arc::new(Self {

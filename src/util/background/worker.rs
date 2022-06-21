@@ -1,16 +1,16 @@
 use std::time::{Duration, Instant};
 
-use tracing::*;
 use async_trait::async_trait;
 use futures::future::*;
-use tokio::select;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use tokio::select;
 use tokio::sync::{mpsc, watch};
+use tracing::*;
 
 use crate::error::Error;
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum WorkerStatus {
 	Busy,
 	Idle,
@@ -20,8 +20,20 @@ pub enum WorkerStatus {
 #[async_trait]
 pub trait Worker: Send {
 	fn name(&self) -> String;
+
+	/// Work: do a basic unit of work, if one is available (otherwise, should return
+	/// WorkerStatus::Idle immediately).  We will do our best to not interrupt this future in the
+	/// middle of processing, it will only be interrupted at the last minute when Garage is trying
+	/// to exit and this hasn't returned yet. This function may return an error to indicate that
+	/// its unit of work could not be processed due to an error: the error will be logged and
+	/// .work() will be called again immediately.
 	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerStatus, Error>;
-	async fn wait_for_work(&mut self, must_exit: &mut watch::Receiver<bool>) -> WorkerStatus;
+
+	/// Wait for work: await for some task to become available.  This future can be interrupted in
+	/// the middle for any reason.  This future doesn't have to await on must_exit.changed(), we
+	/// are doing it for you.  Therefore it only receives a read refernce to must_exit which allows
+	/// it to check if we are exiting.
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus;
 }
 
 pub(crate) struct WorkerProcessor {
@@ -58,10 +70,12 @@ impl WorkerProcessor {
 						let task_id = next_task_id;
 						next_task_id += 1;
 						let stop_signal = self.stop_signal.clone();
+						let stop_signal_worker = self.stop_signal.clone();
 						workers.push(async move {
 							let mut worker = WorkerHandler {
 								task_id,
 								stop_signal,
+								stop_signal_worker,
 								worker: new_worker,
 								status: WorkerStatus::Busy,
 							};
@@ -91,15 +105,22 @@ impl WorkerProcessor {
 		let drain_half_time = Instant::now() + Duration::from_secs(5);
 		let drain_everything = async move {
 			while let Some(mut worker) = workers.next().await {
-				if worker.status == WorkerStatus::Busy
-					|| (worker.status == WorkerStatus::Idle && Instant::now() < drain_half_time)
-				{
-					workers.push(async move {
-						worker.step().await;
-						worker
-					}.boxed());
+				if worker.status == WorkerStatus::Done {
+					info!(
+						"Worker {} (TID {}) exited",
+						worker.worker.name(),
+						worker.task_id
+					);
+				} else if Instant::now() > drain_half_time {
+					warn!("Worker {} (TID {}) interrupted between two iterations in state {:?} (this should be fine)", worker.worker.name(), worker.task_id, worker.status);
 				} else {
-					info!("Worker {} (TID {}) exited", worker.worker.name(), worker.task_id);
+					workers.push(
+						async move {
+							worker.step().await;
+							worker
+						}
+						.boxed(),
+					);
 				}
 			}
 		};
@@ -109,7 +130,7 @@ impl WorkerProcessor {
 				info!("All workers exited in time \\o/");
 			}
 			_ = tokio::time::sleep(Duration::from_secs(9)) => {
-				warn!("Some workers could not exit in time, we are cancelling some things in the middle.");
+				error!("Some workers could not exit in time, we are cancelling some things in the middle");
 			}
 		}
 	}
@@ -119,27 +140,49 @@ impl WorkerProcessor {
 struct WorkerHandler {
 	task_id: usize,
 	stop_signal: watch::Receiver<bool>,
+	stop_signal_worker: watch::Receiver<bool>,
 	worker: Box<dyn Worker>,
 	status: WorkerStatus,
 }
 
 impl WorkerHandler {
-	async fn step(&mut self) { 
+	async fn step(&mut self) {
 		match self.status {
-			WorkerStatus::Busy => {
-				match self.worker.work(&mut self.stop_signal).await {
-					Ok(s) => {
-						self.status = s;
+			WorkerStatus::Busy => match self.worker.work(&mut self.stop_signal).await {
+				Ok(s) => {
+					self.status = s;
+				}
+				Err(e) => {
+					error!(
+						"Error in worker {} (TID {}): {}",
+						self.worker.name(),
+						self.task_id,
+						e
+					);
+				}
+			},
+			WorkerStatus::Idle => {
+				if *self.stop_signal.borrow() {
+					select! {
+						new_st = self.worker.wait_for_work(&mut self.stop_signal_worker) => {
+							self.status = new_st;
+						}
+						_ = tokio::time::sleep(Duration::from_secs(1)) => {
+							// stay in Idle state
+						}
 					}
-					Err(e) => {
-						error!("Error in worker {}: {}", self.worker.name(), e);
+				} else {
+					select! {
+						new_st = self.worker.wait_for_work(&mut self.stop_signal_worker) => {
+							self.status = new_st;
+						}
+						_ = self.stop_signal.changed() => {
+							// stay in Idle state
+						}
 					}
 				}
 			}
-			WorkerStatus::Idle => {
-				self.status = self.worker.wait_for_work(&mut self.stop_signal).await;
-			}
-			WorkerStatus::Done => unreachable!()
+			WorkerStatus::Done => unreachable!(),
 		}
 	}
 }

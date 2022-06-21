@@ -34,16 +34,15 @@ impl Worker for JobWorker {
 		}
 	}
 
-	async fn wait_for_work(&mut self, must_exit: &mut watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
 		loop {
 			match self.job_chan.lock().await.recv().await {
 				Some((job, cancellable)) => {
 					if cancellable && *must_exit.borrow() {
-						// skip job
 						continue;
 					}
 					self.next_job = Some(job);
-					return WorkerStatus::Busy
+					return WorkerStatus::Busy;
 				}
 				None => return WorkerStatus::Done,
 			}
