@@ -332,7 +332,16 @@ where
 	R: TableReplication + 'static,
 {
 	fn name(&self) -> String {
-		format!("Table GC: {}", F::TABLE_NAME)
+		format!("{} GC", F::TABLE_NAME)
+	}
+
+	fn info(&self) -> Option<String> {
+		let l = self.gc.data.gc_todo_len().unwrap_or(0);
+		if l > 0 {
+			Some(format!("{} items in queue", l))
+		} else {
+			None
+		}
 	}
 
 	async fn work(

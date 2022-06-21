@@ -45,6 +45,10 @@ pub enum Command {
 	/// Gather node statistics
 	#[structopt(name = "stats")]
 	Stats(StatsOpt),
+
+	/// Manage background workers
+	#[structopt(name = "worker")]
+	Worker(WorkerOpt),
 }
 
 #[derive(StructOpt, Debug)]
@@ -459,4 +463,21 @@ pub struct StatsOpt {
 	/// Gather detailed statistics (this can be long)
 	#[structopt(short = "d", long = "detailed")]
 	pub detailed: bool,
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug, Clone)]
+pub struct WorkerOpt {
+	#[structopt(subcommand)]
+	pub cmd: WorkerCmd,
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug, Eq, PartialEq, Clone)]
+pub enum WorkerCmd {
+	/// List all workers on Garage node
+	#[structopt(name = "list")]
+	List {
+		/// Show only busy workers
+		#[structopt(short = "b", long = "busy")]
+		busy: bool,
+	},
 }

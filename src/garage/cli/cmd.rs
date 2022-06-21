@@ -39,6 +39,7 @@ pub async fn cli_command_dispatch(
 			cmd_admin(admin_rpc_endpoint, rpc_host, AdminRpc::LaunchRepair(ro)).await
 		}
 		Command::Stats(so) => cmd_admin(admin_rpc_endpoint, rpc_host, AdminRpc::Stats(so)).await,
+		Command::Worker(wo) => cmd_admin(admin_rpc_endpoint, rpc_host, AdminRpc::Worker(wo)).await,
 		_ => unreachable!(),
 	}
 }
@@ -181,6 +182,9 @@ pub async fn cmd_admin(
 		}
 		AdminRpc::KeyInfo(key, rb) => {
 			print_key_info(&key, &rb);
+		}
+		AdminRpc::WorkerList(wi) => {
+			print_worker_info(wi);
 		}
 		r => {
 			error!("Unexpected response: {:?}", r);

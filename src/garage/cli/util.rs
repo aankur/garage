@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use garage_util::background::*;
 use garage_util::crdt::*;
 use garage_util::data::Uuid;
 use garage_util::error::*;
@@ -234,4 +235,27 @@ pub fn find_matching_node(
 	} else {
 		Ok(candidates[0])
 	}
+}
+
+pub fn print_worker_info(wi: HashMap<usize, WorkerInfo>) {
+	let mut wi = wi.into_iter().collect::<Vec<_>>();
+	wi.sort_by_key(|(tid, info)| {
+		(
+			match info.status {
+				WorkerStatus::Busy => 0,
+				WorkerStatus::Idle => 1,
+				WorkerStatus::Done => 2,
+			},
+			*tid,
+		)
+	});
+
+	let mut table = vec![];
+	for (tid, info) in wi.iter() {
+		table.push(format!("{}\t{:?}\t{}", tid, info.status, info.name));
+		if let Some(i) = &info.info {
+			table.push(format!("\t\t{}", i));
+		}
+	}
+	format_table(table);
 }

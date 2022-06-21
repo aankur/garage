@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use garage_util::background::*;
 use garage_util::crdt::*;
 use garage_util::data::*;
 use garage_util::error::Error as GarageError;
@@ -36,6 +37,7 @@ pub enum AdminRpc {
 	LaunchRepair(RepairOpt),
 	Migrate(MigrateOpt),
 	Stats(StatsOpt),
+	Worker(WorkerOpt),
 
 	// Replies
 	Ok(String),
@@ -47,6 +49,7 @@ pub enum AdminRpc {
 	},
 	KeyList(Vec<(String, String)>),
 	KeyInfo(Key, HashMap<Uuid, Bucket>),
+	WorkerList(HashMap<usize, garage_util::background::WorkerInfo>),
 }
 
 impl Rpc for AdminRpc {
@@ -822,6 +825,25 @@ impl AdminRpcHandler {
 
 		Ok(())
 	}
+
+	// ----
+
+	async fn handle_worker_cmd(&self, opt: WorkerOpt) -> Result<AdminRpc, Error> {
+		match opt.cmd {
+			WorkerCmd::List { busy } => {
+				let workers = self.garage.background.get_worker_info();
+				let workers = if busy {
+					workers
+						.into_iter()
+						.filter(|(_, w)| w.status == WorkerStatus::Busy)
+						.collect()
+				} else {
+					workers
+				};
+				Ok(AdminRpc::WorkerList(workers))
+			}
+		}
+	}
 }
 
 #[async_trait]
@@ -837,6 +859,7 @@ impl EndpointHandler<AdminRpc> for AdminRpcHandler {
 			AdminRpc::Migrate(opt) => self.handle_migrate(opt.clone()).await,
 			AdminRpc::LaunchRepair(opt) => self.handle_launch_repair(opt.clone()).await,
 			AdminRpc::Stats(opt) => self.handle_stats(opt.clone()).await,
+			AdminRpc::Worker(opt) => self.handle_worker_cmd(opt.clone()).await,
 			m => Err(GarageError::unexpected_rpc_message(m).into()),
 		}
 	}

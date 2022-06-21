@@ -574,7 +574,16 @@ impl<F: TableSchema + 'static, R: TableReplication + 'static> SyncWorker<F, R> {
 #[async_trait]
 impl<F: TableSchema + 'static, R: TableReplication + 'static> Worker for SyncWorker<F, R> {
 	fn name(&self) -> String {
-		format!("Table sync worker for {}", F::TABLE_NAME)
+		format!("{} sync", F::TABLE_NAME)
+	}
+
+	fn info(&self) -> Option<String> {
+		let l = self.todo.len();
+		if l > 0 {
+			Some(format!("{} partitions remaining", l))
+		} else {
+			None
+		}
 	}
 
 	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerStatus, Error> {

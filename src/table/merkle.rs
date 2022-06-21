@@ -310,7 +310,16 @@ where
 	R: TableReplication + 'static,
 {
 	fn name(&self) -> String {
-		format!("Merkle tree updater: {}", F::TABLE_NAME)
+		format!("{} Merkle tree updater", F::TABLE_NAME)
+	}
+
+	fn info(&self) -> Option<String> {
+		let l = self.0.todo_len().unwrap_or(0);
+		if l > 0 {
+			Some(format!("{} items in queue", l))
+		} else {
+			None
+		}
 	}
 
 	async fn work(

@@ -4,9 +4,12 @@ pub mod job_worker;
 pub mod worker;
 
 use core::future::Future;
+
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch, Mutex};
 
 use crate::error::Error;
@@ -20,6 +23,14 @@ pub(crate) type Job = Pin<Box<dyn Future<Output = JobOutput> + Send>>;
 pub struct BackgroundRunner {
 	send_job: mpsc::UnboundedSender<(Job, bool)>,
 	send_worker: mpsc::UnboundedSender<Box<dyn Worker>>,
+	worker_info: Arc<std::sync::Mutex<HashMap<usize, WorkerInfo>>>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkerInfo {
+	pub name: String,
+	pub info: Option<String>,
+	pub status: WorkerStatus,
 }
 
 impl BackgroundRunner {
@@ -30,8 +41,13 @@ impl BackgroundRunner {
 	) -> (Arc<Self>, tokio::task::JoinHandle<()>) {
 		let (send_worker, worker_out) = mpsc::unbounded_channel::<Box<dyn Worker>>();
 
-		let await_all_done =
-			tokio::spawn(async move { WorkerProcessor::new(worker_out, stop_signal).run().await });
+		let worker_info = Arc::new(std::sync::Mutex::new(HashMap::new()));
+		let mut worker_processor =
+			WorkerProcessor::new(worker_out, stop_signal, worker_info.clone());
+
+		let await_all_done = tokio::spawn(async move {
+			worker_processor.run().await;
+		});
 
 		let (send_job, queue_out) = mpsc::unbounded_channel();
 		let queue_out = Arc::new(Mutex::new(queue_out));
@@ -52,8 +68,13 @@ impl BackgroundRunner {
 		let bgrunner = Arc::new(Self {
 			send_job,
 			send_worker,
+			worker_info,
 		});
 		(bgrunner, await_all_done)
+	}
+
+	pub fn get_worker_info(&self) -> HashMap<usize, WorkerInfo> {
+		self.worker_info.lock().unwrap().clone()
 	}
 
 	/// Spawn a task to be run in background
