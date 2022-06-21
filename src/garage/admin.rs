@@ -24,7 +24,7 @@ use garage_model::migrate::Migrate;
 use garage_model::permission::*;
 
 use crate::cli::*;
-use crate::repair::online::OnlineRepair;
+use crate::repair::online::launch_online_repair;
 
 pub const ADMIN_RPC_PATH: &str = "garage/admin_rpc.rs/Rpc";
 
@@ -693,15 +693,7 @@ impl AdminRpcHandler {
 				)))
 			}
 		} else {
-			let repair = OnlineRepair {
-				garage: self.garage.clone(),
-			};
-			self.garage
-				.system
-				.background
-				.spawn_worker("Repair worker".into(), move |must_exit| async move {
-					repair.repair_worker(opt, must_exit).await
-				});
+			launch_online_repair(self.garage.clone(), opt)?;
 			Ok(AdminRpc::Ok(format!(
 				"Repair launched on {:?}",
 				self.garage.system.id
