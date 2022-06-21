@@ -193,7 +193,7 @@ impl WorkerHandler {
 			WorkerStatus::Idle => {
 				if *self.stop_signal.borrow() {
 					select! {
-						new_st = self.worker.wait_for_work(&mut self.stop_signal_worker) => {
+						new_st = self.worker.wait_for_work(&self.stop_signal_worker) => {
 							self.status = new_st;
 						}
 						_ = tokio::time::sleep(Duration::from_secs(1)) => {
@@ -202,7 +202,7 @@ impl WorkerHandler {
 					}
 				} else {
 					select! {
-						new_st = self.worker.wait_for_work(&mut self.stop_signal_worker) => {
+						new_st = self.worker.wait_for_work(&self.stop_signal_worker) => {
 							self.status = new_st;
 						}
 						_ = self.stop_signal.changed() => {
