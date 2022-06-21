@@ -86,6 +86,7 @@ impl WorkerProcessor {
 				}
 				worker = await_next_worker => {
 					if let Some(mut worker) = worker {
+						trace!("{} (TID {}): {:?}", worker.worker.name(), worker.task_id, worker.status);
 						// TODO save new worker status somewhere
 						if worker.status == WorkerStatus::Done {
 							info!("Worker {} (TID {}) exited", worker.worker.name(), worker.task_id);
