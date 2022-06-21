@@ -597,11 +597,10 @@ impl<F: TableSchema + 'static, R: TableReplication + 'static> Worker for SyncWor
 
 	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
 		select! {
-			s = self.add_full_sync_rx.recv() => match s {
-				Some(()) => {
+			s = self.add_full_sync_rx.recv() => {
+				if let Some(()) = s {
 					self.add_full_sync();
 				}
-				None => (),
 			},
 			_ = self.ring_recv.changed() => {
 				let new_ring = self.ring_recv.borrow();
