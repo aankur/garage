@@ -159,6 +159,9 @@ impl WorkerHandler {
 						self.task_id,
 						e
 					);
+					// Sleep a bit so that error won't repeat immediately
+					// (TODO good way to handle errors)
+					tokio::time::sleep(Duration::from_secs(10)).await;
 				}
 			},
 			WorkerStatus::Idle => {

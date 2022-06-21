@@ -959,6 +959,7 @@ dependencies = [
  "futures",
  "futures-util",
  "garage_api",
+ "garage_block",
  "garage_db",
  "garage_model 0.7.0",
  "garage_rpc 0.7.0",

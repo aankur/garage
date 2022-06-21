@@ -13,7 +13,7 @@ use garage_util::error::Error;
 
 use crate::*;
 
-pub fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) -> Result<(), Error> {
+pub async fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) -> Result<(), Error> {
 	match opt.what {
 		RepairWhat::Tables => {
 			info!("Launching a full sync of tables");
@@ -36,24 +36,19 @@ pub fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) -> Result<(), E
 				.spawn_worker(RepairBlockrefsWorker::new(garage.clone()));
 		}
 		RepairWhat::Blocks => {
-			unimplemented!()
-			/*
 			info!("Repairing the stored blocks");
-			self.garage
-				.block_manager
-				.repair_data_store(&must_exit)
-				.await?;
-				*/
+			garage
+				.background
+				.spawn_worker(garage_block::repair::RepairWorker::new(
+					garage.block_manager.clone(),
+				));
 		}
 		RepairWhat::Scrub { tranquility } => {
-			unimplemented!()
-			/*
 			info!("Verifying integrity of stored blocks");
-			self.garage
-				.block_manager
-				.scrub_data_store(&must_exit, tranquility)
-				.await?;
-				*/
+			garage.background.spawn_worker(
+				garage_block::repair::ScrubWorker::new(garage.block_manager.clone(), tranquility)
+					.await?,
+			);
 		}
 	}
 	Ok(())
@@ -64,7 +59,7 @@ pub fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) -> Result<(), E
 struct RepairVersionsWorker {
 	garage: Arc<Garage>,
 	pos: Vec<u8>,
-	iter: usize,
+	counter: usize,
 }
 
 impl RepairVersionsWorker {
@@ -72,7 +67,7 @@ impl RepairVersionsWorker {
 		Self {
 			garage,
 			pos: vec![],
-			iter: 0,
+			counter: 0,
 		}
 	}
 }
@@ -93,14 +88,14 @@ impl Worker for RepairVersionsWorker {
 				v
 			}
 			None => {
-				info!("repair_versions: finished, done {}", self.iter);
+				info!("repair_versions: finished, done {}", self.counter);
 				return Ok(WorkerStatus::Done);
 			}
 		};
 
-		self.iter += 1;
-		if self.iter % 1000 == 0 {
-			info!("repair_versions: {}", self.iter);
+		self.counter += 1;
+		if self.counter % 1000 == 0 {
+			info!("repair_versions: {}", self.counter);
 		}
 
 		let version = rmp_serde::decode::from_read_ref::<_, Version>(&item_bytes)?;
@@ -144,7 +139,7 @@ impl Worker for RepairVersionsWorker {
 struct RepairBlockrefsWorker {
 	garage: Arc<Garage>,
 	pos: Vec<u8>,
-	iter: usize,
+	counter: usize,
 }
 
 impl RepairBlockrefsWorker {
@@ -152,7 +147,7 @@ impl RepairBlockrefsWorker {
 		Self {
 			garage,
 			pos: vec![],
-			iter: 0,
+			counter: 0,
 		}
 	}
 }
@@ -173,14 +168,14 @@ impl Worker for RepairBlockrefsWorker {
 				v
 			}
 			None => {
-				info!("repair_block_ref: finished, done {}", self.iter);
+				info!("repair_block_ref: finished, done {}", self.counter);
 				return Ok(WorkerStatus::Done);
 			}
 		};
 
-		self.iter += 1;
-		if self.iter % 1000 == 0 {
-			info!("repair_block_ref: {}", self.iter);
+		self.counter += 1;
+		if self.counter % 1000 == 0 {
+			info!("repair_block_ref: {}", self.counter);
 		}
 
 		let block_ref = rmp_serde::decode::from_read_ref::<_, BlockRef>(&item_bytes)?;
