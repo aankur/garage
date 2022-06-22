@@ -8,6 +8,7 @@
 \usepackage{multirow}
 \usetheme{boxes}
 \usepackage{graphicx}
+\usepackage{adjustbox}
 %\useoutertheme[footline=authortitle,subsection=false]{miniframes}
 %\useoutertheme[footline=authorinstitute,subsection=false]{miniframes}
 \useoutertheme{infolines}
@@ -52,6 +53,56 @@
 	\url{https://garagehq.deuxfleurs.fr/}
 
 	Matrix channel: \texttt{\#garage:deuxfleurs.fr}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Who we are}
+	\begin{columns}[t]
+		\begin{column}{.2\textwidth}
+			\centering
+			\adjincludegraphics[width=.4\linewidth, valign=t]{assets/alex.jpg}
+		\end{column}
+		\begin{column}{.6\textwidth}
+			\textbf{Alex Auvolat}\\
+			PhD at Inria, team WIDE; co-founder of Deuxfleurs
+		\end{column}
+		\begin{column}{.2\textwidth}
+			~
+		\end{column}
+	\end{columns}
+	\vspace{1em}
+
+	\begin{columns}[t]
+		\begin{column}{.2\textwidth}
+			~
+		\end{column}
+		\begin{column}{.6\textwidth}
+			\textbf{Quentin Dufour}\\
+			PhD at Inria, team WIDE; co-founder of Deuxfleurs
+		\end{column}
+		\begin{column}{.2\textwidth}
+			\centering
+			\adjincludegraphics[width=.5\linewidth, valign=t]{assets/quentin.jpg}
+		\end{column}
+	\end{columns}
+	\vspace{2em}
+
+	\begin{columns}[t]
+		\begin{column}{.2\textwidth}
+			\centering
+			\adjincludegraphics[width=.5\linewidth, valign=t]{assets/deuxfleurs.pdf}
+		\end{column}
+		\begin{column}{.6\textwidth}
+			\textbf{Deuxfleurs}\\
+			A non-profit self-hosting collective,\\
+			member of the CHATONS network
+		\end{column}
+		\begin{column}{.2\textwidth}
+			\centering
+			\adjincludegraphics[width=.7\linewidth, valign=t]{assets/logo_chatons.png}
+		\end{column}
+	\end{columns}
+
 \end{frame}
 
 \begin{frame}
@@ -192,6 +243,14 @@
 \end{frame}
 
 \begin{frame}
+	\frametitle{Overview}
+	\begin{center}
+		\only<1>{\includegraphics[width=.45\linewidth]{assets/garage2a.drawio.pdf}}%
+		\only<2>{\includegraphics[width=.45\linewidth]{assets/garage2b.drawio.pdf}}%
+	\end{center}
+\end{frame}
+
+\begin{frame}
 	\frametitle{Garage is \emph{location-aware}}
 	\begin{center}
 		\includegraphics[width=\linewidth]{assets/location-aware.png}
@@ -272,25 +331,17 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{Storing and retrieving files}
-	\begin{center}
-		\only<1>{\includegraphics[width=.45\linewidth]{assets/garage2a.drawio.pdf}}%
-		\only<2>{\includegraphics[width=.45\linewidth]{assets/garage2b.drawio.pdf}}%
-	\end{center}
-\end{frame}
-
-\begin{frame}
 	\frametitle{Garage's internal data structures}
 	\centering
 	\includegraphics[width=.75\columnwidth]{assets/garage_tables.pdf}
 \end{frame}
 
-\begin{frame}
-	\frametitle{Garage's architecture}
-	\begin{center}
-		\includegraphics[width=.35\linewidth]{assets/garage.drawio.pdf}
-	\end{center}
-\end{frame}
+%\begin{frame}
+%	\frametitle{Garage's architecture}
+%	\begin{center}
+%		\includegraphics[width=.35\linewidth]{assets/garage.drawio.pdf}
+%	\end{center}
+%\end{frame}
 
 \begin{frame}
 	\frametitle{Garage is \emph{coordination-free}:}
@@ -306,13 +357,6 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{Impact on performances}
-		\begin{center}
-			\includegraphics[width=.8\linewidth]{assets/endpoint-latency-dc.png}
-		\end{center}
-\end{frame}
-
-\begin{frame}
 	\frametitle{Consistency model}
 	\begin{itemize}
 		\item Not ACID (not required by S3 spec) / not linearizable
@@ -320,6 +364,13 @@
 		\item \textbf{Read-after-write consistency}\\
 			{\footnotesize (stronger than eventual consistency)}
 	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Impact on performances}
+		\begin{center}
+			\includegraphics[width=.8\linewidth]{assets/endpoint-latency-dc.png}
+		\end{center}
 \end{frame}
 
 
@@ -361,16 +412,66 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{Get Garage now!}
+	\frametitle{Aerogramme data model}
 	\begin{center}
-			\includegraphics[width=.3\linewidth]{../../logo/garage_hires.png}\\
+		\only<1>{\includegraphics[width=.4\linewidth]{assets/aerogramme_datatype.drawio.pdf}}%
+		\only<2->{\includegraphics[width=.9\linewidth]{assets/aerogramme_keys.drawio.pdf}\vspace{1em}}%
+	\end{center}
+	\visible<3->{Aerogramme encrypts all stored values for privacy\\
+	(Garage server administrators can't read your mail)}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Different deployment scenarios}
+	\begin{center}
+		\only<1>{\includegraphics[width=.9\linewidth]{assets/aerogramme_components1.drawio.pdf}}%
+		\only<2>{\includegraphics[width=.9\linewidth]{assets/aerogramme_components2.drawio.pdf}}%
+	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{A new model for building resilient software}
+	\begin{itemize}
+		\item Design a data model suited to K2V\\
+			{\footnotesize (see Cassandra docs on porting SQL data models to Cassandra)}
+			\vspace{1em}
+			\begin{itemize}
+				\item Use CRDTs or other eventually consistent data types (see e.g. Bayou)
+					\vspace{1em}
+				\item Store opaque binary blobs to provide End-to-End Encryption\\
+			\end{itemize}
+			\vspace{1em}
+		\item Store big blobs (files) in S3
+			\vspace{1em}
+		\item Let Garage manage sharding, replication, failover, etc.
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Research perspectives}
+	\begin{itemize}
+		\item Write about Garage's global architecture \emph{(paper in progress)}
+			\vspace{1em}
+		\item Measure and improve Garage's performances
+			\vspace{1em}
+		\item Discuss the optimal layout algorithm, provide proofs
+			\vspace{1em}
+		\item Write about our proposed architecture for (E2EE) apps over K2V+S3
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Where to find us}
+	\begin{center}
+			\includegraphics[width=.25\linewidth]{../../logo/garage_hires.png}\\
 			\vspace{-1em}
 		\url{https://garagehq.deuxfleurs.fr/}\\
-		Matrix channel: \texttt{\#garage:deuxfleurs.fr}
+		\url{mailto:garagehq@deuxfleurs.fr}\\
+		\texttt{\#garage:deuxfleurs.fr} on Matrix
 
-		\vspace{2em}
-			\includegraphics[width=.09\linewidth]{assets/rust_logo.png}
-			\includegraphics[width=.2\linewidth]{assets/AGPLv3_Logo.png}
+		\vspace{1.5em}
+			\includegraphics[width=.06\linewidth]{assets/rust_logo.png}
+			\includegraphics[width=.13\linewidth]{assets/AGPLv3_Logo.png}
 	\end{center}
 \end{frame}
 
