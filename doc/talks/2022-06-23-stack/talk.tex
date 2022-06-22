@@ -9,6 +9,9 @@
 \usetheme{boxes}
 \usepackage{graphicx}
 %\useoutertheme[footline=authortitle,subsection=false]{miniframes}
+%\useoutertheme[footline=authorinstitute,subsection=false]{miniframes}
+\useoutertheme{infolines}
+\setbeamertemplate{headline}{}
 
 \beamertemplatenavigationsymbolsempty
 
@@ -72,9 +75,9 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{How to be resilient (the hard way)}
+	\frametitle{How to make a \underline{stable} system}
 
-	Entreprise-grade systems typically employ:
+	Enterprise-grade systems typically employ:
 	\vspace{1em}
 	\begin{itemize}
 		\item RAID
@@ -88,7 +91,7 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{How to be resilient (the \underline{\textbf{cheap}} way)}
+	\frametitle{How to make a \underline{resilient} system}
 
 	\only<1,4-5>{
 		Instead, we use:
@@ -189,9 +192,108 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{What makes Garage different?}
-	\textbf{Coordination-free:}
-			\vspace{2em}
+	\frametitle{Garage is \emph{location-aware}}
+	\begin{center}
+		\includegraphics[width=\linewidth]{assets/location-aware.png}
+	\end{center}
+	\vspace{2em}
+	Garage replicates data on different zones when possible
+\end{frame}
+
+\begin{frame}
+	\frametitle{Garage is \emph{location-aware}}
+		\begin{center}
+			\includegraphics[width=.8\linewidth]{assets/map.png}
+		\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{How to spread files over different cluster nodes?}
+	\textbf{Consistent hashing (DynamoDB):}
+	\vspace{1em}
+
+	\begin{center}
+	\only<1>{\includegraphics[width=.45\columnwidth]{assets/consistent_hashing_1.pdf}}%
+	\only<2>{\includegraphics[width=.45\columnwidth]{assets/consistent_hashing_2.pdf}}%
+	\only<3>{\includegraphics[width=.45\columnwidth]{assets/consistent_hashing_3.pdf}}%
+	\only<4>{\includegraphics[width=.45\columnwidth]{assets/consistent_hashing_4.pdf}}%
+	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{How to spread files over different cluster nodes?}
+	\textbf{Issues with consistent hashing:}
+	\vspace{1em}
+	\begin{itemize}
+		\item Doesn't dispatch data based on geographical location of nodes
+			\vspace{1em}
+		\item<2-> Geographically aware adaptation, try 1:\\
+			data quantities not well balanced between nodes
+			\vspace{1em}
+		\item<3-> Geographically aware adaptation, try 2:\\
+			too many reshuffles when adding/removing nodes
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{How to spread files over different cluster nodes?}
+	\textbf{Garage's method: build an index table}
+	\vspace{1em}
+
+	Realization: we can actually precompute an optimal solution
+	\vspace{1em}
+
+	\visible<2->{
+		\begin{center}
+		\begin{tabular}{|l|l|l|l|}
+			\hline
+			\textbf{Partition} & \textbf{Node 1} & \textbf{Node 2} & \textbf{Node 3} \\
+			\hline
+			\hline
+			Partition 0 & Io (jupiter) & Drosera (atuin) & Courgette (neptune) \\
+			\hline
+			Partition 1 & Datura (atuin) & Courgette (neptune) & Io (jupiter) \\
+			\hline
+			Partition 2 & Io(jupiter) & Celeri (neptune) & Drosera (atuin) \\
+			\hline
+			\hspace{1em}$\vdots$ & \hspace{1em}$\vdots$ & \hspace{1em}$\vdots$ & \hspace{1em}$\vdots$ \\
+			\hline
+			Partition 255 & Concombre (neptune) & Io (jupiter) & Drosera (atuin) \\
+			\hline
+		\end{tabular}
+		\end{center}
+	}
+	\vspace{1em}
+	\visible<3->{
+		The index table is built centrally using an optimal* algorithm,\\
+		then propagated to all nodes\\
+		\hfill\footnotesize *not yet optimal but will be soon
+	}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Storing and retrieving files}
+	\begin{center}
+		\only<1>{\includegraphics[width=.45\linewidth]{assets/garage2a.drawio.pdf}}%
+		\only<2>{\includegraphics[width=.45\linewidth]{assets/garage2b.drawio.pdf}}%
+	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Garage's internal data structures}
+	\centering
+	\includegraphics[width=.75\columnwidth]{assets/garage_tables.pdf}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Garage's architecture}
+	\begin{center}
+		\includegraphics[width=.35\linewidth]{assets/garage.drawio.pdf}
+	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Garage is \emph{coordination-free}:}
 	\begin{itemize}
 		\item No Raft or Paxos
 			\vspace{1em}
@@ -204,24 +306,14 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{Storing and retrieving files}
-	\begin{center}
-		\only<1>{\includegraphics[width=.5\linewidth]{assets/garage2a.drawio.pdf}}%
-		\only<2>{\includegraphics[width=.5\linewidth]{assets/garage2b.drawio.pdf}}%
-	\end{center}
-\end{frame}
-
-\begin{frame}
-	\frametitle{What makes Garage different?}
+	\frametitle{Impact on performances}
 		\begin{center}
-			\includegraphics[width=.9\linewidth]{assets/endpoint-latency-dc.png}
+			\includegraphics[width=.8\linewidth]{assets/endpoint-latency-dc.png}
 		\end{center}
 \end{frame}
 
 \begin{frame}
-	\frametitle{What makes Garage different?}
-	\textbf{Consistency model:}
-			\vspace{2em}
+	\frametitle{Consistency model}
 	\begin{itemize}
 		\item Not ACID (not required by S3 spec) / not linearizable
 			\vspace{1em}
@@ -230,56 +322,42 @@
 	\end{itemize}
 \end{frame}
 
-\begin{frame}
-	\frametitle{What makes Garage different?}
-	\textbf{Location-aware:}
-	\vspace{2em}
-		\begin{center}
-			\includegraphics[width=\linewidth]{assets/location-aware.png}
-		\end{center}
-	\vspace{2em}
-	Garage replicates data on different zones when possible
-\end{frame}
-
-\begin{frame}
-	\frametitle{What makes Garage different?}
-		\begin{center}
-			\includegraphics[width=.8\linewidth]{assets/map.png}
-		\end{center}
-\end{frame}
-
-
-\begin{frame}
-	\frametitle{Garage's architecture}
-	\begin{center}
-		\includegraphics[width=.5\linewidth]{assets/garage.drawio.pdf}
-	\end{center}
-\end{frame}
-
-\begin{frame}
-	\frametitle{Consistent Hashing (DynamoDB)}
-	\textbf{How to spred files over different cluster nodes?}
-	\vspace{1em}
-
-	\centering
-
-	\only<1>{\includegraphics[width=.55\columnwidth]{assets/consistent_hashing_1.pdf}}%
-	\only<2>{\includegraphics[width=.55\columnwidth]{assets/consistent_hashing_2.pdf}}%
-	\only<3>{\includegraphics[width=.55\columnwidth]{assets/consistent_hashing_3.pdf}}%
-	\only<4>{\includegraphics[width=.55\columnwidth]{assets/consistent_hashing_4.pdf}}%
-\end{frame}
-
-\begin{frame}
-	\frametitle{Garage data structures: 3 levels of consistent hashing}
-	\centering
-	\includegraphics[width=.85\columnwidth]{assets/garage_tables.pdf}
-\end{frame}
 
 \begin{frame}
 	\frametitle{An ever-increasing compatibility list}
 		\begin{center}
 			\includegraphics[width=.7\linewidth]{assets/compatibility.png}
 		\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Further plans for Garage}
+	\begin{center}
+		\only<1>{\includegraphics[width=.8\linewidth]{assets/slideB1.png}}%
+		\only<2>{\includegraphics[width=.8\linewidth]{assets/slideB2.png}}%
+		\only<3>{\includegraphics[width=.8\linewidth]{assets/slideB3.png}}%
+	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{K2V Design}
+	\begin{itemize}
+		\item A new, custom, minimal API
+			\vspace{1em}
+		\item<2-> Exposes the partitoning mechanism of Garage\\
+			K2V = partition key / sort key / value (like Dynamo)
+			\vspace{1em}
+		\item<3-> Coordination-free, CRDT-friendly (inspired by Riak)\\
+			\vspace{1em}
+		\item<4-> Cryptography-friendly: values are binary blobs
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Application: an e-mail storage server}
+	\begin{center}
+		\only<1>{\includegraphics[width=.9\linewidth]{assets/aerogramme.png}}%
+	\end{center}
 \end{frame}
 
 \begin{frame}
@@ -296,10 +374,6 @@
 	\end{center}
 \end{frame}
 
-\begin{frame}
-	\frametitle{Demo time!}
-\end{frame}
-
 \end{document}
 
-%% vim: set ts=4 sw=4 tw=0 noet spelllang=fr :
+%% vim: set ts=4 sw=4 tw=0 noet spelllang=en :
