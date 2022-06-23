@@ -835,7 +835,9 @@ impl AdminRpcHandler {
 				let workers = if busy {
 					workers
 						.into_iter()
-						.filter(|(_, w)| w.status == WorkerStatus::Busy)
+						.filter(|(_, w)| {
+							matches!(w.status, WorkerStatus::Busy | WorkerStatus::Throttled(_))
+						})
 						.collect()
 				} else {
 					workers

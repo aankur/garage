@@ -734,12 +734,9 @@ impl Worker for ResyncWorker {
 	) -> Result<WorkerStatus, Error> {
 		self.tranquilizer.reset();
 		match self.manager.resync_iter().await {
-			Ok(ResyncIterResult::BusyDidSomething) => {
-				self.tranquilizer
-					.tranquilize(self.manager.background_tranquility)
-					.await;
-				Ok(WorkerStatus::Busy)
-			}
+			Ok(ResyncIterResult::BusyDidSomething) => Ok(self
+				.tranquilizer
+				.tranquilize_worker(self.manager.background_tranquility)),
 			Ok(ResyncIterResult::BusyDidNothing) => Ok(WorkerStatus::Busy),
 			Ok(ResyncIterResult::IdleFor(delay)) => {
 				self.next_delay = delay;
@@ -750,10 +747,8 @@ impl Worker for ResyncWorker {
 				// We don't really know how to handle them so just ¯\_(ツ)_/¯
 				// (there is kind of an assumption that Sled won't error on us,
 				// if it does there is not much we can do -- TODO should we just panic?)
-				error!(
-					"Could not do a resync iteration: {} (this is a very bad error)",
-					e
-				);
+				// Here we just give the error to the worker manager,
+				// it will print it to the logs and increment a counter
 				Err(e.into())
 			}
 		}

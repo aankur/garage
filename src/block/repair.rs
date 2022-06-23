@@ -138,8 +138,7 @@ impl Worker for ScrubWorker {
 		self.tranquilizer.reset();
 		if let Some(hash) = self.iterator.next().await? {
 			let _ = self.manager.read_block(&hash).await;
-			self.tranquilizer.tranquilize(self.tranquility).await;
-			Ok(WorkerStatus::Busy)
+			Ok(self.tranquilizer.tranquilize_worker(self.tranquility))
 		} else {
 			Ok(WorkerStatus::Done)
 		}

@@ -242,7 +242,7 @@ pub fn print_worker_info(wi: HashMap<usize, WorkerInfo>) {
 	wi.sort_by_key(|(tid, info)| {
 		(
 			match info.status {
-				WorkerStatus::Busy => 0,
+				WorkerStatus::Busy | WorkerStatus::Throttled(_) => 0,
 				WorkerStatus::Idle => 1,
 				WorkerStatus::Done => 2,
 			},
@@ -255,6 +255,20 @@ pub fn print_worker_info(wi: HashMap<usize, WorkerInfo>) {
 		table.push(format!("{}\t{:?}\t{}", tid, info.status, info.name));
 		if let Some(i) = &info.info {
 			table.push(format!("\t\t{}", i));
+		}
+		if info.consecutive_errors > 0 {
+			table.push(format!(
+				"\t\t{} CONSECUTIVE ERRORS ({} total), last: {}",
+				info.consecutive_errors,
+				info.errors,
+				info.last_error.as_deref().unwrap_or("(?)")
+			));
+		} else if info.errors > 0 {
+			table.push(format!(
+				"\t\t{} errors, last: {}",
+				info.errors,
+				info.last_error.as_deref().unwrap_or("(?)")
+			));
 		}
 	}
 	format_table(table);
