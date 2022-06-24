@@ -728,6 +728,23 @@ impl Worker for ResyncWorker {
 		"Block resync worker".into()
 	}
 
+	fn info(&self) -> Option<String> {
+		let mut ret = vec![];
+		let qlen = self.manager.resync_queue_len().unwrap_or(0);
+		let elen = self.manager.resync_errors_len().unwrap_or(0);
+		if qlen > 0 {
+			ret.push(format!("{} blocks in queue", qlen));
+		}
+		if elen > 0 {
+			ret.push(format!("{} blocks in error state", elen));
+		}
+		if ret.len() > 0 {
+			Some(ret.join(", "))
+		} else {
+			None
+		}
+	}
+
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,

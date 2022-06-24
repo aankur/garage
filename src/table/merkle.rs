@@ -326,7 +326,18 @@ where
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
 	) -> Result<WorkerStatus, Error> {
-		self.0.updater_loop_iter()
+		let updater = self.0.clone();
+		tokio::task::spawn_blocking(move || {
+			for _i in 0..100 {
+				let s = updater.updater_loop_iter();
+				if !matches!(s, Ok(WorkerStatus::Busy)) {
+					return s;
+				}
+			}
+			Ok(WorkerStatus::Busy)
+		})
+		.await
+		.unwrap()
 	}
 
 	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
