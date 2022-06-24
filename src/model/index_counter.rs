@@ -429,7 +429,8 @@ impl<T: CountedItem> Worker for IndexPropagatorWorker<T> {
 		};
 
 		if !self.buf.is_empty() {
-			let entries = self.buf.iter().map(|(_k, v)| v);
+			let entries_k = self.buf.keys().take(100).cloned().collect::<Vec<_>>();
+			let entries = entries_k.iter().map(|k| self.buf.get(k).unwrap());
 			if let Err(e) = self.index_counter.table.insert_many(entries).await {
 				self.errors += 1;
 				if self.errors >= 2 && *must_exit.borrow() {
@@ -441,7 +442,9 @@ impl<T: CountedItem> Worker for IndexPropagatorWorker<T> {
 				// things to go back to normal
 				return Err(e);
 			} else {
-				self.buf.clear();
+				for k in entries_k {
+					self.buf.remove(&k);
+				}
 				self.errors = 0;
 			}
 

@@ -53,6 +53,7 @@ impl Worker for RepairWorker {
 				// This is mostly because the Rust bindings for SQLite assume a worst-case scenario
 				// where SQLite is not compiled in thread-safe mode, so we have to wrap everything
 				// in a mutex (see db/sqlite_adapter.rs and discussion in PR #322).
+				// TODO: maybe do this with tokio::task::spawn_blocking ?
 				let mut batch_of_hashes = vec![];
 				let start_bound = match self.next_start.as_ref() {
 					None => Bound::Unbounded,
