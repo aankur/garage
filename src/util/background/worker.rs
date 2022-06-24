@@ -13,6 +13,7 @@ use tracing::*;
 
 use crate::background::WorkerInfo;
 use crate::error::Error;
+use crate::time::now_msec;
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum WorkerStatus {
@@ -167,7 +168,7 @@ impl WorkerProcessor {
 
 		select! {
 			_ = drain_everything => {
-				info!("All workers exited in time \\o/");
+				info!("All workers exited peacefully \\o/");
 			}
 			_ = tokio::time::sleep(Duration::from_secs(9)) => {
 				error!("Some workers could not exit in time, we are cancelling some things in the middle");
@@ -176,7 +177,6 @@ impl WorkerProcessor {
 	}
 }
 
-// TODO add tranquilizer
 struct WorkerHandler {
 	task_id: usize,
 	stop_signal: watch::Receiver<bool>,
@@ -185,7 +185,7 @@ struct WorkerHandler {
 	status: WorkerStatus,
 	errors: usize,
 	consecutive_errors: usize,
-	last_error: Option<String>,
+	last_error: Option<(String, u64)>,
 }
 
 impl WorkerHandler {
@@ -205,7 +205,7 @@ impl WorkerHandler {
 					);
 					self.errors += 1;
 					self.consecutive_errors += 1;
-					self.last_error = Some(format!("{}", e));
+					self.last_error = Some((format!("{}", e), now_msec()));
 					// Sleep a bit so that error won't repeat immediately, exponential backoff
 					// strategy (min 1sec, max ~60sec)
 					self.status = WorkerStatus::Throttled(
@@ -215,7 +215,12 @@ impl WorkerHandler {
 			},
 			WorkerStatus::Throttled(delay) => {
 				// Sleep for given delay and go back to busy state
-				tokio::time::sleep(Duration::from_secs_f32(delay)).await;
+				if !*self.stop_signal.borrow() {
+					select! {
+						_ = tokio::time::sleep(Duration::from_secs_f32(delay)) => (),
+						_ = self.stop_signal.changed() => (),
+					}
+				}
 				self.status = WorkerStatus::Busy;
 			}
 			WorkerStatus::Idle => {

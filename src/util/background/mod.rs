@@ -33,7 +33,7 @@ pub struct WorkerInfo {
 	pub status: WorkerStatus,
 	pub errors: usize,
 	pub consecutive_errors: usize,
-	pub last_error: Option<String>,
+	pub last_error: Option<(String, u64)>,
 }
 
 impl BackgroundRunner {

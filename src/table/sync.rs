@@ -595,7 +595,10 @@ impl<F: TableSchema + 'static, R: TableReplication + 'static> Worker for SyncWor
 		}
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+		if *must_exit.borrow() {
+			return WorkerStatus::Done;
+		}
 		select! {
 			s = self.add_full_sync_rx.recv() => {
 				if let Some(()) = s {

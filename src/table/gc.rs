@@ -357,7 +357,10 @@ where
 		}
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+		if *must_exit.borrow() {
+			return WorkerStatus::Done;
+		}
 		tokio::time::sleep(self.wait_delay).await;
 		WorkerStatus::Busy
 	}

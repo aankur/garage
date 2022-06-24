@@ -5,7 +5,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use garage_util::background::*;
 use garage_util::crdt::*;
 use garage_util::data::*;
 use garage_util::error::Error as GarageError;
@@ -49,7 +48,10 @@ pub enum AdminRpc {
 	},
 	KeyList(Vec<(String, String)>),
 	KeyInfo(Key, HashMap<Uuid, Bucket>),
-	WorkerList(HashMap<usize, garage_util::background::WorkerInfo>),
+	WorkerList(
+		HashMap<usize, garage_util::background::WorkerInfo>,
+		WorkerListOpt,
+	),
 }
 
 impl Rpc for AdminRpc {
@@ -830,19 +832,9 @@ impl AdminRpcHandler {
 
 	async fn handle_worker_cmd(&self, opt: WorkerOpt) -> Result<AdminRpc, Error> {
 		match opt.cmd {
-			WorkerCmd::List { busy } => {
+			WorkerCmd::List { opt } => {
 				let workers = self.garage.background.get_worker_info();
-				let workers = if busy {
-					workers
-						.into_iter()
-						.filter(|(_, w)| {
-							matches!(w.status, WorkerStatus::Busy | WorkerStatus::Throttled(_))
-						})
-						.collect()
-				} else {
-					workers
-				};
-				Ok(AdminRpc::WorkerList(workers))
+				Ok(AdminRpc::WorkerList(workers, opt))
 			}
 		}
 	}

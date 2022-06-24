@@ -476,8 +476,17 @@ pub enum WorkerCmd {
 	/// List all workers on Garage node
 	#[structopt(name = "list")]
 	List {
-		/// Show only busy workers
-		#[structopt(short = "b", long = "busy")]
-		busy: bool,
+		#[structopt(flatten)]
+		opt: WorkerListOpt,
 	},
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug, Eq, PartialEq, Clone, Copy)]
+pub struct WorkerListOpt {
+	/// Show only busy workers
+	#[structopt(short = "b", long = "busy")]
+	pub busy: bool,
+	/// Show only workers with errors
+	#[structopt(short = "e", long = "errors")]
+	pub errors: bool,
 }

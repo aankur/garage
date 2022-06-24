@@ -408,7 +408,11 @@ impl<T: CountedItem> Worker for IndexPropagatorWorker<T> {
 	}
 
 	fn info(&self) -> Option<String> {
-		Some(format!("{} items in queue", self.buf.len()))
+		if !self.buf.is_empty() {
+			Some(format!("{} items in queue", self.buf.len()))
+		} else {
+			None
+		}
 	}
 
 	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerStatus, Error> {
