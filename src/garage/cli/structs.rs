@@ -427,8 +427,29 @@ pub enum RepairWhat {
 	/// Verify integrity of all blocks on disc (extremely slow, i/o intensive)
 	#[structopt(name = "scrub")]
 	Scrub {
-		/// Tranquility factor (see tranquilizer documentation)
-		#[structopt(name = "tranquility", default_value = "2")]
+		#[structopt(subcommand)]
+		cmd: ScrubCmd,
+	},
+}
+
+#[derive(Serialize, Deserialize, StructOpt, Debug, Eq, PartialEq, Clone)]
+pub enum ScrubCmd {
+	/// Start scrub
+	#[structopt(name = "start")]
+	Start,
+	/// Pause scrub (it will resume automatically after 24 hours)
+	#[structopt(name = "pause")]
+	Pause,
+	/// Resume paused scrub
+	#[structopt(name = "resume")]
+	Resume,
+	/// Cancel scrub in progress
+	#[structopt(name = "cancel")]
+	Cancel,
+	/// Set tranquility level for in-progress and future scrubs
+	#[structopt(name = "set-tranquility")]
+	SetTranquility {
+		#[structopt()]
 		tranquility: u32,
 	},
 }

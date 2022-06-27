@@ -71,4 +71,8 @@ impl Tranquilizer {
 	pub fn reset(&mut self) {
 		self.last_step_begin = Instant::now();
 	}
+
+	pub fn clear(&mut self) {
+		self.observations.clear();
+	}
 }

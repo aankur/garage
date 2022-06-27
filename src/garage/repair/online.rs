@@ -1,8 +1,10 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::watch;
 
+use garage_block::repair::ScrubWorkerCommand;
 use garage_model::garage::Garage;
 use garage_model::s3::block_ref_table::*;
 use garage_model::s3::object_table::*;
@@ -13,7 +15,7 @@ use garage_util::error::Error;
 
 use crate::*;
 
-pub fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) {
+pub async fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) {
 	match opt.what {
 		RepairWhat::Tables => {
 			info!("Launching a full sync of tables");
@@ -43,14 +45,18 @@ pub fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) {
 					garage.block_manager.clone(),
 				));
 		}
-		RepairWhat::Scrub { tranquility } => {
+		RepairWhat::Scrub { cmd } => {
 			info!("Verifying integrity of stored blocks");
-			garage
-				.background
-				.spawn_worker(garage_block::repair::ScrubWorker::new(
-					garage.block_manager.clone(),
-					tranquility,
-				));
+			let cmd = match cmd {
+				ScrubCmd::Start => ScrubWorkerCommand::Start,
+				ScrubCmd::Pause => ScrubWorkerCommand::Pause(Duration::from_secs(3600 * 24)),
+				ScrubCmd::Resume => ScrubWorkerCommand::Resume,
+				ScrubCmd::Cancel => ScrubWorkerCommand::Cancel,
+				ScrubCmd::SetTranquility { tranquility } => {
+					ScrubWorkerCommand::SetTranquility(tranquility)
+				}
+			};
+			garage.block_manager.send_scrub_command(cmd).await;
 		}
 	}
 }

@@ -1049,6 +1049,7 @@ dependencies = [
 name = "garage_block"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "bytes 1.1.0",
  "futures",
