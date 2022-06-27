@@ -698,7 +698,7 @@ impl AdminRpcHandler {
 				)))
 			}
 		} else {
-			launch_online_repair(self.garage.clone(), opt).await?;
+			launch_online_repair(self.garage.clone(), opt);
 			Ok(AdminRpc::Ok(format!(
 				"Repair launched on {:?}",
 				self.garage.system.id

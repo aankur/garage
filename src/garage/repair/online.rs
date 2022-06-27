@@ -13,7 +13,7 @@ use garage_util::error::Error;
 
 use crate::*;
 
-pub async fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) -> Result<(), Error> {
+pub fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) {
 	match opt.what {
 		RepairWhat::Tables => {
 			info!("Launching a full sync of tables");
@@ -45,13 +45,14 @@ pub async fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) -> Result
 		}
 		RepairWhat::Scrub { tranquility } => {
 			info!("Verifying integrity of stored blocks");
-			garage.background.spawn_worker(
-				garage_block::repair::ScrubWorker::new(garage.block_manager.clone(), tranquility)
-					.await?,
-			);
+			garage
+				.background
+				.spawn_worker(garage_block::repair::ScrubWorker::new(
+					garage.block_manager.clone(),
+					tranquility,
+				));
 		}
 	}
-	Ok(())
 }
 
 // ----
