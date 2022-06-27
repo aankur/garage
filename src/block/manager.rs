@@ -738,7 +738,7 @@ impl Worker for ResyncWorker {
 		if elen > 0 {
 			ret.push(format!("{} blocks in error state", elen));
 		}
-		if ret.len() > 0 {
+		if !ret.is_empty() {
 			Some(ret.join(", "))
 		} else {
 			None
