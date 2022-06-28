@@ -381,7 +381,7 @@ impl BlockStoreIterator {
 		}
 	}
 
-	/// Returns progress done, between 0% and 1%
+	/// Returns progress done, between 0 and 1
 	fn progress(&self) -> f32 {
 		if self.path.is_empty() {
 			1.0
@@ -453,7 +453,6 @@ impl BlockStoreIterator {
 			if name.len() == 2 && hex::decode(&name).is_ok() && ent_type.is_dir() {
 				let path = data_dir_ent.path();
 				self.path.push(ReadingDir::Pending(path));
-				continue;
 			} else if name.len() == 64 {
 				let hash_bytes = if let Ok(h) = hex::decode(&name) {
 					h

@@ -85,6 +85,10 @@ impl Worker for RepairVersionsWorker {
 		"Version repair worker".into()
 	}
 
+	fn info(&self) -> Option<String> {
+		Some(format!("{} items done", self.counter))
+	}
+
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
@@ -163,6 +167,10 @@ impl RepairBlockrefsWorker {
 impl Worker for RepairBlockrefsWorker {
 	fn name(&self) -> String {
 		"Block refs repair worker".into()
+	}
+
+	fn info(&self) -> Option<String> {
+		Some(format!("{} items done", self.counter))
 	}
 
 	async fn work(
