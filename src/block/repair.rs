@@ -269,7 +269,10 @@ impl Worker for ScrubWorker {
 				msec_to_rfc3339(self.persisted.time_last_complete_scrub)
 			),
 		};
-		Some(format!("{} ; corruptions detected: {}", s, self.persisted.corruptions_detected))
+		Some(format!(
+			"{} ; corruptions detected: {}",
+			s, self.persisted.corruptions_detected
+		))
 	}
 
 	async fn work(
