@@ -105,9 +105,6 @@ impl Worker for RepairVersionsWorker {
 		};
 
 		self.counter += 1;
-		if self.counter % 1000 == 0 {
-			info!("repair_versions: {}", self.counter);
-		}
 
 		let version = rmp_serde::decode::from_read_ref::<_, Version>(&item_bytes)?;
 		if !version.deleted.get() {
@@ -189,9 +186,6 @@ impl Worker for RepairBlockrefsWorker {
 		};
 
 		self.counter += 1;
-		if self.counter % 1000 == 0 {
-			info!("repair_block_ref: {}", self.counter);
-		}
 
 		let block_ref = rmp_serde::decode::from_read_ref::<_, BlockRef>(&item_bytes)?;
 		if !block_ref.deleted.get() {
