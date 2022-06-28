@@ -46,7 +46,6 @@ pub async fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) {
 				));
 		}
 		RepairWhat::Scrub { cmd } => {
-			info!("Verifying integrity of stored blocks");
 			let cmd = match cmd {
 				ScrubCmd::Start => ScrubWorkerCommand::Start,
 				ScrubCmd::Pause => ScrubWorkerCommand::Pause(Duration::from_secs(3600 * 24)),
@@ -56,6 +55,7 @@ pub async fn launch_online_repair(garage: Arc<Garage>, opt: RepairOpt) {
 					ScrubWorkerCommand::SetTranquility(tranquility)
 				}
 			};
+			info!("Sending command to scrub worker: {:?}", cmd);
 			garage.block_manager.send_scrub_command(cmd).await;
 		}
 	}

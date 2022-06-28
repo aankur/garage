@@ -263,7 +263,7 @@ pub fn print_worker_info(wi: HashMap<usize, WorkerInfo>, wlo: WorkerListOpt) {
 			continue;
 		}
 
-		table.push(format!("{}\t{:?}\t{}", tid, info.status, info.name));
+		table.push(format!("{}\t{}\t{}", tid, info.status, info.name));
 		if let Some(i) = &info.info {
 			table.push(format!("\t\t  {}", i));
 		}

@@ -15,12 +15,23 @@ use crate::background::WorkerInfo;
 use crate::error::Error;
 use crate::time::now_msec;
 
-#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum WorkerStatus {
 	Busy,
 	Throttled(f32),
 	Idle,
 	Done,
+}
+
+impl std::fmt::Display for WorkerStatus {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			WorkerStatus::Busy => write!(f, "Busy"),
+			WorkerStatus::Throttled(t) => write!(f, "Thr:{:.3}", t),
+			WorkerStatus::Idle => write!(f, "Idle"),
+			WorkerStatus::Done => write!(f, "Done"),
+		}
+	}
 }
 
 #[async_trait]

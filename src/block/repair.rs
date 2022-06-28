@@ -1,10 +1,10 @@
 use core::ops::Bound;
-use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tokio::select;
 use tokio::sync::mpsc;
@@ -13,13 +13,13 @@ use tokio::sync::watch;
 use garage_util::background::*;
 use garage_util::data::*;
 use garage_util::error::*;
+use garage_util::persister::Persister;
 use garage_util::time::*;
 use garage_util::tranquilizer::Tranquilizer;
 
 use crate::manager::*;
 
 const SCRUB_INTERVAL: Duration = Duration::from_secs(3600 * 24 * 30); // full scrub every 30 days
-const TIME_LAST_COMPLETE_SCRUB: &[u8] = b"time_last_complete_scrub";
 
 pub struct RepairWorker {
 	manager: Arc<BlockManager>,
@@ -139,8 +139,14 @@ pub struct ScrubWorker {
 
 	work: ScrubWorkerState,
 	tranquilizer: Tranquilizer,
-	tranquility: u32,
 
+	persister: Persister<ScrubWorkerPersisted>,
+	persisted: ScrubWorkerPersisted,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ScrubWorkerPersisted {
+	tranquility: u32,
 	time_last_complete_scrub: u64,
 }
 
@@ -156,6 +162,7 @@ impl Default for ScrubWorkerState {
 	}
 }
 
+#[derive(Debug)]
 pub enum ScrubWorkerCommand {
 	Start,
 	Pause(Duration),
@@ -165,30 +172,26 @@ pub enum ScrubWorkerCommand {
 }
 
 impl ScrubWorker {
-	pub fn new(
-		manager: Arc<BlockManager>,
-		rx_cmd: mpsc::Receiver<ScrubWorkerCommand>,
-		tranquility: u32,
-	) -> Self {
-		let time_last_complete_scrub = match manager
-			.state_variables_store
-			.get(TIME_LAST_COMPLETE_SCRUB)
-			.expect("DB error when initializing scrub worker")
-		{
-			Some(v) => u64::from_be_bytes(v.try_into().unwrap()),
-			None => 0,
+	pub fn new(manager: Arc<BlockManager>, rx_cmd: mpsc::Receiver<ScrubWorkerCommand>) -> Self {
+		let persister = Persister::new(&manager.system.metadata_dir, "scrub_info");
+		let persisted = match persister.load() {
+			Ok(v) => v,
+			Err(_) => ScrubWorkerPersisted {
+				time_last_complete_scrub: 0,
+				tranquility: 4,
+			},
 		};
 		Self {
 			manager,
 			rx_cmd,
 			work: ScrubWorkerState::Finished,
 			tranquilizer: Tranquilizer::new(30),
-			tranquility,
-			time_last_complete_scrub,
+			persister,
+			persisted,
 		}
 	}
 
-	fn handle_cmd(&mut self, cmd: ScrubWorkerCommand) {
+	async fn handle_cmd(&mut self, cmd: ScrubWorkerCommand) {
 		match cmd {
 			ScrubWorkerCommand::Start => {
 				self.work = match std::mem::take(&mut self.work) {
@@ -234,7 +237,10 @@ impl ScrubWorker {
 				}
 			}
 			ScrubWorkerCommand::SetTranquility(t) => {
-				self.tranquility = t;
+				self.persisted.tranquility = t;
+				if let Err(e) = self.persister.save_async(&self.persisted).await {
+					error!("Could not save new tranquilitiy value: {}", e);
+				}
 			}
 		}
 	}
@@ -248,13 +254,17 @@ impl Worker for ScrubWorker {
 
 	fn info(&self) -> Option<String> {
 		match &self.work {
-			ScrubWorkerState::Running(bsi) => Some(format!("{:.2}% done", bsi.progress() * 100.)),
+			ScrubWorkerState::Running(bsi) => Some(format!(
+				"{:.2}% done (tranquility = {})",
+				bsi.progress() * 100.,
+				self.persisted.tranquility
+			)),
 			ScrubWorkerState::Paused(_bsi, rt) => {
 				Some(format!("Paused, resumes at {}", msec_to_rfc3339(*rt)))
 			}
 			ScrubWorkerState::Finished => Some(format!(
 				"Last completed scrub: {}",
-				msec_to_rfc3339(self.time_last_complete_scrub)
+				msec_to_rfc3339(self.persisted.time_last_complete_scrub)
 			)),
 		}
 	}
@@ -264,7 +274,7 @@ impl Worker for ScrubWorker {
 		_must_exit: &mut watch::Receiver<bool>,
 	) -> Result<WorkerStatus, Error> {
 		match self.rx_cmd.try_recv() {
-			Ok(cmd) => self.handle_cmd(cmd),
+			Ok(cmd) => self.handle_cmd(cmd).await,
 			Err(mpsc::error::TryRecvError::Disconnected) => return Ok(WorkerStatus::Done),
 			Err(mpsc::error::TryRecvError::Empty) => (),
 		};
@@ -274,13 +284,12 @@ impl Worker for ScrubWorker {
 				self.tranquilizer.reset();
 				if let Some(hash) = bsi.next().await? {
 					let _ = self.manager.read_block(&hash).await;
-					Ok(self.tranquilizer.tranquilize_worker(self.tranquility))
+					Ok(self
+						.tranquilizer
+						.tranquilize_worker(self.persisted.tranquility))
 				} else {
-					self.time_last_complete_scrub = now_msec(); // TODO save to file
-					self.manager.state_variables_store.insert(
-						TIME_LAST_COMPLETE_SCRUB,
-						u64::to_be_bytes(self.time_last_complete_scrub),
-					)?;
+					self.persisted.time_last_complete_scrub = now_msec();
+					self.persister.save_async(&self.persisted).await?;
 					self.work = ScrubWorkerState::Finished;
 					self.tranquilizer.clear();
 					Ok(WorkerStatus::Idle)
@@ -294,23 +303,35 @@ impl Worker for ScrubWorker {
 		match &self.work {
 			ScrubWorkerState::Running(_) => return WorkerStatus::Busy,
 			ScrubWorkerState::Paused(_, resume_time) => {
-				let delay = Duration::from_millis(resume_time - now_msec());
+				let now = now_msec();
+				if now >= *resume_time {
+					self.handle_cmd(ScrubWorkerCommand::Resume).await;
+					return WorkerStatus::Busy;
+				}
+				let delay = Duration::from_millis(*resume_time - now);
 				select! {
-					_ = tokio::time::sleep(delay) => self.handle_cmd(ScrubWorkerCommand::Resume),
+					_ = tokio::time::sleep(delay) => self.handle_cmd(ScrubWorkerCommand::Resume).await,
 					cmd = self.rx_cmd.recv() => if let Some(cmd) = cmd {
-						self.handle_cmd(cmd);
+						self.handle_cmd(cmd).await;
 					} else {
 						return WorkerStatus::Done;
 					}
 				}
 			}
 			ScrubWorkerState::Finished => {
+				let now = now_msec();
+				if now - self.persisted.time_last_complete_scrub
+					>= SCRUB_INTERVAL.as_millis() as u64
+				{
+					self.handle_cmd(ScrubWorkerCommand::Start).await;
+					return WorkerStatus::Busy;
+				}
 				let delay = SCRUB_INTERVAL
-					- Duration::from_secs(now_msec() - self.time_last_complete_scrub);
+					- Duration::from_millis(now - self.persisted.time_last_complete_scrub);
 				select! {
-					_ = tokio::time::sleep(delay) => self.handle_cmd(ScrubWorkerCommand::Start),
+					_ = tokio::time::sleep(delay) => self.handle_cmd(ScrubWorkerCommand::Start).await,
 					cmd = self.rx_cmd.recv() => if let Some(cmd) = cmd {
-						self.handle_cmd(cmd);
+						self.handle_cmd(cmd).await;
 					} else {
 						return WorkerStatus::Done;
 					}

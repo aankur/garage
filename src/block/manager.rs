@@ -88,8 +88,6 @@ pub struct BlockManager {
 	pub replication: TableShardedReplication,
 	/// Directory in which block are stored
 	pub data_dir: PathBuf,
-	/// State store (only used by scrub worker to store time of last scrub)
-	pub(crate) state_variables_store: db::Tree,
 
 	compression_level: Option<i32>,
 	background_tranquility: u32,
@@ -102,7 +100,7 @@ pub struct BlockManager {
 	resync_notify: Notify,
 	resync_errors: CountedTree,
 
-	system: Arc<System>,
+	pub(crate) system: Arc<System>,
 	endpoint: Arc<Endpoint<BlockRpc, Self>>,
 
 	metrics: BlockManagerMetrics,
@@ -147,10 +145,6 @@ impl BlockManager {
 		let resync_errors =
 			CountedTree::new(resync_errors).expect("Could not count block_local_resync_errors");
 
-		let state_variables_store = db
-			.open_tree("state_variables")
-			.expect("Unable to open state_variables tree");
-
 		let endpoint = system
 			.netapp
 			.endpoint("garage_block/manager.rs/Rpc".to_string());
@@ -169,7 +163,6 @@ impl BlockManager {
 			resync_queue,
 			resync_notify: Notify::new(),
 			resync_errors,
-			state_variables_store,
 			system,
 			endpoint,
 			metrics,
@@ -514,7 +507,7 @@ impl BlockManager {
 		// Launch a background worker for data store scrubs
 		let (scrub_tx, scrub_rx) = mpsc::channel(1);
 		self.tx_scrub_command.store(Some(Arc::new(scrub_tx)));
-		let scrub_worker = ScrubWorker::new(self.clone(), scrub_rx, 4);
+		let scrub_worker = ScrubWorker::new(self.clone(), scrub_rx);
 		self.system.background.spawn_worker(scrub_worker);
 	}
 
