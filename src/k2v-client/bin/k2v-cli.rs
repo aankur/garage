@@ -343,7 +343,9 @@ async fn main() -> Result<(), Error> {
 			causality,
 			output_kind,
 		} => {
-			let res_opt = client.poll_item(&partition_key, &sort_key, causality.into(), None).await?;
+			let res_opt = client
+				.poll_item(&partition_key, &sort_key, causality.into(), None)
+				.await?;
 			if let Some(res) = res_opt {
 				output_kind.display_output(res);
 			} else {
