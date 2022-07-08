@@ -415,11 +415,6 @@ impl BlockStoreIterator {
 				ReadingDir::Pending(_) => unreachable!(),
 			};
 
-			if *pos >= subpaths.len() {
-				self.path.pop();
-				continue;
-			}
-
 			let data_dir_ent = match subpaths.get(*pos) {
 				None => {
 					self.path.pop();
@@ -444,14 +439,11 @@ impl BlockStoreIterator {
 				let path = data_dir_ent.path();
 				self.path.push(ReadingDir::Pending(path));
 			} else if name.len() == 64 {
-				let hash_bytes = if let Ok(h) = hex::decode(&name) {
-					h
-				} else {
-					continue;
-				};
-				let mut hash = [0u8; 32];
-				hash.copy_from_slice(&hash_bytes[..]);
-				return Ok(Some(hash.into()));
+				if let Ok(h) = hex::decode(&name) {
+					let mut hash = [0u8; 32];
+					hash.copy_from_slice(&h);
+					return Ok(Some(hash.into()));
+				}
 			}
 		}
 	}
