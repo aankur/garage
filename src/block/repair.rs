@@ -261,8 +261,12 @@ impl Worker for ScrubWorker {
 				bsi.progress() * 100.,
 				self.persisted.tranquility
 			),
-			ScrubWorkerState::Paused(_bsi, rt) => {
-				format!("Paused, resumes at {}", msec_to_rfc3339(*rt))
+			ScrubWorkerState::Paused(bsi, rt) => {
+				format!(
+					"Paused, {:.2}% done, resumes at {}",
+					bsi.progress() * 100.,
+					msec_to_rfc3339(*rt)
+				)
 			}
 			ScrubWorkerState::Finished => format!(
 				"Last completed scrub: {}",
@@ -314,44 +318,30 @@ impl Worker for ScrubWorker {
 	}
 
 	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
-		match &self.work {
+		let (wait_until, command) = match &self.work {
 			ScrubWorkerState::Running(_) => return WorkerStatus::Busy,
-			ScrubWorkerState::Paused(_, resume_time) => {
-				let now = now_msec();
-				if now >= *resume_time {
-					self.handle_cmd(ScrubWorkerCommand::Resume).await;
-					return WorkerStatus::Busy;
-				}
-				let delay = Duration::from_millis(*resume_time - now);
-				select! {
-					_ = tokio::time::sleep(delay) => self.handle_cmd(ScrubWorkerCommand::Resume).await,
-					cmd = self.rx_cmd.recv() => if let Some(cmd) = cmd {
-						self.handle_cmd(cmd).await;
-					} else {
-						return WorkerStatus::Done;
-					}
-				}
-			}
-			ScrubWorkerState::Finished => {
-				let now = now_msec();
-				if now - self.persisted.time_last_complete_scrub
-					>= SCRUB_INTERVAL.as_millis() as u64
-				{
-					self.handle_cmd(ScrubWorkerCommand::Start).await;
-					return WorkerStatus::Busy;
-				}
-				let delay = SCRUB_INTERVAL
-					- Duration::from_millis(now - self.persisted.time_last_complete_scrub);
-				select! {
-					_ = tokio::time::sleep(delay) => self.handle_cmd(ScrubWorkerCommand::Start).await,
-					cmd = self.rx_cmd.recv() => if let Some(cmd) = cmd {
-						self.handle_cmd(cmd).await;
-					} else {
-						return WorkerStatus::Done;
-					}
-				}
+			ScrubWorkerState::Paused(_, resume_time) => (*resume_time, ScrubWorkerCommand::Resume),
+			ScrubWorkerState::Finished => (
+				self.persisted.time_last_complete_scrub + SCRUB_INTERVAL.as_millis() as u64,
+				ScrubWorkerCommand::Start,
+			),
+		};
+
+		let now = now_msec();
+		if now >= wait_until {
+			self.handle_cmd(command).await;
+			return WorkerStatus::Busy;
+		}
+		let delay = Duration::from_millis(wait_until - now);
+		select! {
+			_ = tokio::time::sleep(delay) => self.handle_cmd(command).await,
+			cmd = self.rx_cmd.recv() => if let Some(cmd) = cmd {
+				self.handle_cmd(cmd).await;
+			} else {
+				return WorkerStatus::Done;
 			}
 		}
+
 		match &self.work {
 			ScrubWorkerState::Running(_) => WorkerStatus::Busy,
 			_ => WorkerStatus::Idle,
