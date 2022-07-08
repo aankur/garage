@@ -47,7 +47,7 @@ pub trait Worker: Send {
 	/// middle of processing, it will only be interrupted at the last minute when Garage is trying
 	/// to exit and this hasn't returned yet. This function may return an error to indicate that
 	/// its unit of work could not be processed due to an error: the error will be logged and
-	/// .work() will be called again immediately.
+	/// .work() will be called again after a short delay.
 	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerStatus, Error>;
 
 	/// Wait for work: await for some task to become available.  This future can be interrupted in

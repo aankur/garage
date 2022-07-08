@@ -105,7 +105,7 @@ pub struct System {
 	/// The job runner of this node
 	pub background: Arc<BackgroundRunner>,
 
-	/// Path to metadata directory (usefull)
+	/// Path to metadata directory
 	pub metadata_dir: PathBuf,
 }
 
