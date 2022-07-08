@@ -21,10 +21,7 @@ impl Worker for JobWorker {
 		format!("Job worker #{}", self.index)
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		match self.next_job.take() {
 			None => return Ok(WorkerState::Idle),
 			Some(job) => {

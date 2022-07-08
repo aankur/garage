@@ -1737,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "k2v-client"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "base64",
  "clap 3.1.18",

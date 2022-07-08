@@ -62,10 +62,7 @@ impl Worker for RepairWorker {
 		}
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		match self.block_iter.as_mut() {
 			None => {
 				// Phase 1: Repair blocks from RC table.
@@ -279,10 +276,7 @@ impl Worker for ScrubWorker {
 		))
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		match self.rx_cmd.try_recv() {
 			Ok(cmd) => self.handle_cmd(cmd).await,
 			Err(mpsc::error::TryRecvError::Disconnected) => return Ok(WorkerState::Done),

@@ -773,10 +773,7 @@ impl Worker for ResyncWorker {
 		}
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		self.tranquilizer.reset();
 		match self.manager.resync_iter().await {
 			Ok(ResyncIterResult::BusyDidSomething) => Ok(self

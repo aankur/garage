@@ -344,10 +344,7 @@ where
 		}
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		match self.gc.gc_loop_iter().await? {
 			None => Ok(WorkerState::Busy),
 			Some(delay) => {

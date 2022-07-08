@@ -322,10 +322,7 @@ where
 		}
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		let updater = self.0.clone();
 		tokio::task::spawn_blocking(move || {
 			for _i in 0..100 {

@@ -89,10 +89,7 @@ impl Worker for RepairVersionsWorker {
 		Some(format!("{} items done", self.counter))
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		let item_bytes = match self.garage.version_table.data.store.get_gt(&self.pos)? {
 			Some((k, v)) => {
 				self.pos = k;
@@ -170,10 +167,7 @@ impl Worker for RepairBlockrefsWorker {
 		Some(format!("{} items done", self.counter))
 	}
 
-	async fn work(
-		&mut self,
-		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerState, Error> {
+	async fn work(&mut self, _must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		let item_bytes = match self.garage.block_ref_table.data.store.get_gt(&self.pos)? {
 			Some((k, v)) => {
 				self.pos = k;
