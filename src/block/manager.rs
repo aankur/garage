@@ -494,11 +494,7 @@ impl BlockManager {
 	fn spawn_background_workers(self: Arc<Self>) {
 		// Launch a background workers for background resync loop processing
 		let background = self.system.background.clone();
-		let worker = ResyncWorker {
-			manager: self.clone(),
-			tranquilizer: Tranquilizer::new(30),
-			next_delay: Duration::from_secs(10),
-		};
+		let worker = ResyncWorker::new(self.clone());
 		tokio::spawn(async move {
 			tokio::time::sleep(Duration::from_secs(10)).await;
 			background.spawn_worker(worker);
@@ -742,6 +738,16 @@ struct ResyncWorker {
 	manager: Arc<BlockManager>,
 	tranquilizer: Tranquilizer,
 	next_delay: Duration,
+}
+
+impl ResyncWorker {
+	fn new(manager: Arc<BlockManager>) -> Self {
+		Self {
+			manager,
+			tranquilizer: Tranquilizer::new(30),
+			next_delay: Duration::from_secs(10),
+		}
+	}
 }
 
 #[async_trait]
