@@ -182,8 +182,7 @@ impl ApiHandler for S3ApiServer {
 				part_number,
 				upload_id,
 			} => {
-				let hook_awaiter = call_hook(garage.clone(), create_put_object_hook(bucket_name, &key, api_key.key_id));
-				let put_awaiter = handle_put_part(
+				handle_put_part(
 					garage,
 					req,
 					bucket_id,
@@ -191,9 +190,7 @@ impl ApiHandler for S3ApiServer {
 					part_number,
 					&upload_id,
 					content_sha256,
-				);
-				let (put_result, _hook_result) = futures::join!(put_awaiter, hook_awaiter);
-				put_result
+				).await
 			}
 			Endpoint::CopyObject { key } => {
 				handle_copy(garage, &api_key, &req, bucket_id, &key).await
@@ -215,7 +212,10 @@ impl ApiHandler for S3ApiServer {
 				.await
 			}
 			Endpoint::PutObject { key } => {
-				handle_put(garage, req, &bucket, &key, content_sha256).await
+				let hook_awaiter = call_hook(garage.clone(), create_put_object_hook(bucket_name, &key, api_key.key_id));
+				let put_awaiter = handle_put(garage, req, &bucket, &key, content_sha256);
+				let (put_result, _hook_result) = futures::join!(put_awaiter, hook_awaiter);
+				put_result
 			}
 			Endpoint::AbortMultipartUpload { key, upload_id } => {
 				handle_abort_multipart_upload(garage, bucket_id, &key, &upload_id).await
