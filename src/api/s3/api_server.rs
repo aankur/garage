@@ -30,6 +30,7 @@ use crate::s3::post_object::handle_post_object;
 use crate::s3::put::*;
 use crate::s3::router::Endpoint;
 use crate::s3::website::*;
+use crate::webhooks::*;
 
 pub struct S3ApiServer {
 	garage: Arc<Garage>,
@@ -181,7 +182,8 @@ impl ApiHandler for S3ApiServer {
 				part_number,
 				upload_id,
 			} => {
-				handle_put_part(
+				let hook_awaiter = call_hook(garage.clone(), create_put_object_hook(bucket_name, &key, api_key.key_id));
+				let put_awaiter = handle_put_part(
 					garage,
 					req,
 					bucket_id,
@@ -189,8 +191,9 @@ impl ApiHandler for S3ApiServer {
 					part_number,
 					&upload_id,
 					content_sha256,
-				)
-				.await
+				);
+				let (put_result, _hook_result) = futures::join!(put_awaiter, hook_awaiter);
+				put_result
 			}
 			Endpoint::CopyObject { key } => {
 				handle_copy(garage, &api_key, &req, bucket_id, &key).await

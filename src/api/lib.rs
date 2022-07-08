@@ -15,3 +15,4 @@ pub mod admin;
 #[cfg(feature = "k2v")]
 pub mod k2v;
 pub mod s3;
+pub mod webhooks;

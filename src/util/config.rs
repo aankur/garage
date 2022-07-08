@@ -84,6 +84,9 @@ pub struct Config {
 	#[cfg(feature = "k2v")]
 	pub k2v_api: Option<K2VApiConfig>,
 
+	/// Configuration for webhooks
+	pub webhook_uri: Option<String>,
+
 	/// Configuration for serving files as normal web server
 	pub s3_web: WebConfig,
 
