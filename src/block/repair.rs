@@ -65,7 +65,7 @@ impl Worker for RepairWorker {
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		match self.block_iter.as_mut() {
 			None => {
 				// Phase 1: Repair blocks from RC table.
@@ -101,7 +101,7 @@ impl Worker for RepairWorker {
 				if batch_of_hashes.is_empty() {
 					// move on to phase 2
 					self.block_iter = Some(BlockStoreIterator::new(&self.manager));
-					return Ok(WorkerStatus::Busy);
+					return Ok(WorkerState::Busy);
 				}
 
 				for hash in batch_of_hashes.into_iter() {
@@ -109,7 +109,7 @@ impl Worker for RepairWorker {
 					self.next_start = Some(hash)
 				}
 
-				Ok(WorkerStatus::Busy)
+				Ok(WorkerState::Busy)
 			}
 			Some(bi) => {
 				// Phase 2: Repair blocks actually on disk
@@ -118,15 +118,15 @@ impl Worker for RepairWorker {
 				// so that we can offload them if necessary and then delete them locally.
 				if let Some(hash) = bi.next().await? {
 					self.manager.put_to_resync(&hash, Duration::from_secs(0))?;
-					Ok(WorkerStatus::Busy)
+					Ok(WorkerState::Busy)
 				} else {
-					Ok(WorkerStatus::Done)
+					Ok(WorkerState::Done)
 				}
 			}
 		}
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerState {
 		unreachable!()
 	}
 }
@@ -282,10 +282,10 @@ impl Worker for ScrubWorker {
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		match self.rx_cmd.try_recv() {
 			Ok(cmd) => self.handle_cmd(cmd).await,
-			Err(mpsc::error::TryRecvError::Disconnected) => return Ok(WorkerStatus::Done),
+			Err(mpsc::error::TryRecvError::Disconnected) => return Ok(WorkerState::Done),
 			Err(mpsc::error::TryRecvError::Empty) => (),
 		};
 
@@ -310,16 +310,16 @@ impl Worker for ScrubWorker {
 					self.persister.save_async(&self.persisted).await?;
 					self.work = ScrubWorkerState::Finished;
 					self.tranquilizer.clear();
-					Ok(WorkerStatus::Idle)
+					Ok(WorkerState::Idle)
 				}
 			}
-			_ => Ok(WorkerStatus::Idle),
+			_ => Ok(WorkerState::Idle),
 		}
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerState {
 		let (wait_until, command) = match &self.work {
-			ScrubWorkerState::Running(_) => return WorkerStatus::Busy,
+			ScrubWorkerState::Running(_) => return WorkerState::Busy,
 			ScrubWorkerState::Paused(_, resume_time) => (*resume_time, ScrubWorkerCommand::Resume),
 			ScrubWorkerState::Finished => (
 				self.persisted.time_last_complete_scrub + SCRUB_INTERVAL.as_millis() as u64,
@@ -330,7 +330,7 @@ impl Worker for ScrubWorker {
 		let now = now_msec();
 		if now >= wait_until {
 			self.handle_cmd(command).await;
-			return WorkerStatus::Busy;
+			return WorkerState::Busy;
 		}
 		let delay = Duration::from_millis(wait_until - now);
 		select! {
@@ -338,13 +338,13 @@ impl Worker for ScrubWorker {
 			cmd = self.rx_cmd.recv() => if let Some(cmd) = cmd {
 				self.handle_cmd(cmd).await;
 			} else {
-				return WorkerStatus::Done;
+				return WorkerState::Done;
 			}
 		}
 
 		match &self.work {
-			ScrubWorkerState::Running(_) => WorkerStatus::Busy,
-			_ => WorkerStatus::Idle,
+			ScrubWorkerState::Running(_) => WorkerState::Busy,
+			_ => WorkerState::Idle,
 		}
 	}
 }

@@ -586,18 +586,18 @@ impl<F: TableSchema + 'static, R: TableReplication + 'static> Worker for SyncWor
 		}
 	}
 
-	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerStatus, Error> {
+	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		if let Some(partition) = self.pop_task() {
 			self.syncer.sync_partition(&partition, must_exit).await?;
-			Ok(WorkerStatus::Busy)
+			Ok(WorkerState::Busy)
 		} else {
-			Ok(WorkerStatus::Idle)
+			Ok(WorkerState::Idle)
 		}
 	}
 
-	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerState {
 		if *must_exit.borrow() {
-			return WorkerStatus::Done;
+			return WorkerState::Done;
 		}
 		select! {
 			s = self.add_full_sync_rx.recv() => {
@@ -619,8 +619,8 @@ impl<F: TableSchema + 'static, R: TableReplication + 'static> Worker for SyncWor
 			}
 		}
 		match self.todo.is_empty() {
-			false => WorkerStatus::Busy,
-			true => WorkerStatus::Idle,
+			false => WorkerState::Busy,
+			true => WorkerState::Idle,
 		}
 	}
 }

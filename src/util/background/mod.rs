@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, watch, Mutex};
 
 use crate::error::Error;
 use worker::WorkerProcessor;
-pub use worker::{Worker, WorkerStatus};
+pub use worker::{Worker, WorkerState};
 
 pub(crate) type JobOutput = Result<(), Error>;
 pub(crate) type Job = Pin<Box<dyn Future<Output = JobOutput> + Send>>;
@@ -30,7 +30,7 @@ pub struct BackgroundRunner {
 pub struct WorkerInfo {
 	pub name: String,
 	pub info: Option<String>,
-	pub status: WorkerStatus,
+	pub state: WorkerState,
 	pub errors: usize,
 	pub consecutive_errors: usize,
 	pub last_error: Option<(String, u64)>,

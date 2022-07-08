@@ -415,7 +415,7 @@ impl<T: CountedItem> Worker for IndexPropagatorWorker<T> {
 		}
 	}
 
-	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerStatus, Error> {
+	async fn work(&mut self, must_exit: &mut watch::Receiver<bool>) -> Result<WorkerState, Error> {
 		// This loop batches updates to counters to be sent all at once.
 		// They are sent once the propagate_rx channel has been emptied (or is closed).
 		let closed = loop {
@@ -435,7 +435,7 @@ impl<T: CountedItem> Worker for IndexPropagatorWorker<T> {
 				self.errors += 1;
 				if self.errors >= 2 && *must_exit.borrow() {
 					error!("({}) Could not propagate {} counter values: {}, these counters will not be updated correctly.", T::COUNTER_TABLE_NAME, self.buf.len(), e);
-					return Ok(WorkerStatus::Done);
+					return Ok(WorkerState::Done);
 				}
 				// Propagate error up to worker manager, it will log it, increment a counter,
 				// and sleep for a certain delay (with exponential backoff), waiting for
@@ -448,23 +448,23 @@ impl<T: CountedItem> Worker for IndexPropagatorWorker<T> {
 				self.errors = 0;
 			}
 
-			return Ok(WorkerStatus::Busy);
+			return Ok(WorkerState::Busy);
 		} else if closed {
-			return Ok(WorkerStatus::Done);
+			return Ok(WorkerState::Done);
 		} else {
-			return Ok(WorkerStatus::Idle);
+			return Ok(WorkerState::Idle);
 		}
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerState {
 		match self.propagate_rx.recv().await {
 			Some((pk, sk, counters)) => {
 				self.add_ent(pk, sk, counters);
-				WorkerStatus::Busy
+				WorkerState::Busy
 			}
 			None => match self.buf.is_empty() {
-				false => WorkerStatus::Busy,
-				true => WorkerStatus::Done,
+				false => WorkerState::Busy,
+				true => WorkerState::Done,
 			},
 		}
 	}

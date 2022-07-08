@@ -24,17 +24,17 @@ impl Worker for JobWorker {
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		match self.next_job.take() {
-			None => return Ok(WorkerStatus::Idle),
+			None => return Ok(WorkerState::Idle),
 			Some(job) => {
 				job.await?;
-				Ok(WorkerStatus::Busy)
+				Ok(WorkerState::Busy)
 			}
 		}
 	}
 
-	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerState {
 		loop {
 			match self.job_chan.lock().await.recv().await {
 				Some((job, cancellable)) => {
@@ -42,9 +42,9 @@ impl Worker for JobWorker {
 						continue;
 					}
 					self.next_job = Some(job);
-					return WorkerStatus::Busy;
+					return WorkerState::Busy;
 				}
-				None => return WorkerStatus::Done,
+				None => return WorkerState::Done,
 			}
 		}
 	}

@@ -347,22 +347,22 @@ where
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		match self.gc.gc_loop_iter().await? {
-			None => Ok(WorkerStatus::Busy),
+			None => Ok(WorkerState::Busy),
 			Some(delay) => {
 				self.wait_delay = delay;
-				Ok(WorkerStatus::Idle)
+				Ok(WorkerState::Idle)
 			}
 		}
 	}
 
-	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerState {
 		if *must_exit.borrow() {
-			return WorkerStatus::Done;
+			return WorkerState::Done;
 		}
 		tokio::time::sleep(self.wait_delay).await;
-		WorkerStatus::Busy
+		WorkerState::Busy
 	}
 }
 

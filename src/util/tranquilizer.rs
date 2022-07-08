@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use tokio::time::sleep;
 
-use crate::background::WorkerStatus;
+use crate::background::WorkerState;
 
 /// A tranquilizer is a helper object that is used to make
 /// background operations not take up too much time.
@@ -61,10 +61,10 @@ impl Tranquilizer {
 	}
 
 	#[must_use]
-	pub fn tranquilize_worker(&mut self, tranquility: u32) -> WorkerStatus {
+	pub fn tranquilize_worker(&mut self, tranquility: u32) -> WorkerState {
 		match self.tranquilize_internal(tranquility) {
-			Some(delay) => WorkerStatus::Throttled(delay.as_secs_f32()),
-			None => WorkerStatus::Busy,
+			Some(delay) => WorkerState::Throttled(delay.as_secs_f32()),
+			None => WorkerState::Busy,
 		}
 	}
 

@@ -92,7 +92,7 @@ impl Worker for RepairVersionsWorker {
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		let item_bytes = match self.garage.version_table.data.store.get_gt(&self.pos)? {
 			Some((k, v)) => {
 				self.pos = k;
@@ -100,7 +100,7 @@ impl Worker for RepairVersionsWorker {
 			}
 			None => {
 				info!("repair_versions: finished, done {}", self.counter);
-				return Ok(WorkerStatus::Done);
+				return Ok(WorkerState::Done);
 			}
 		};
 
@@ -134,10 +134,10 @@ impl Worker for RepairVersionsWorker {
 			}
 		}
 
-		Ok(WorkerStatus::Busy)
+		Ok(WorkerState::Busy)
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerState {
 		unreachable!()
 	}
 }
@@ -173,7 +173,7 @@ impl Worker for RepairBlockrefsWorker {
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		let item_bytes = match self.garage.block_ref_table.data.store.get_gt(&self.pos)? {
 			Some((k, v)) => {
 				self.pos = k;
@@ -181,7 +181,7 @@ impl Worker for RepairBlockrefsWorker {
 			}
 			None => {
 				info!("repair_block_ref: finished, done {}", self.counter);
-				return Ok(WorkerStatus::Done);
+				return Ok(WorkerState::Done);
 			}
 		};
 
@@ -212,10 +212,10 @@ impl Worker for RepairBlockrefsWorker {
 			}
 		}
 
-		Ok(WorkerStatus::Busy)
+		Ok(WorkerState::Busy)
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerState {
 		unreachable!()
 	}
 }

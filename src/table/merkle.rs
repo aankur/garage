@@ -82,12 +82,12 @@ where
 		ret
 	}
 
-	fn updater_loop_iter(&self) -> Result<WorkerStatus, Error> {
+	fn updater_loop_iter(&self) -> Result<WorkerState, Error> {
 		if let Some((key, valhash)) = self.data.merkle_todo.first()? {
 			self.update_item(&key, &valhash)?;
-			Ok(WorkerStatus::Busy)
+			Ok(WorkerState::Busy)
 		} else {
-			Ok(WorkerStatus::Idle)
+			Ok(WorkerState::Idle)
 		}
 	}
 
@@ -325,27 +325,27 @@ where
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		let updater = self.0.clone();
 		tokio::task::spawn_blocking(move || {
 			for _i in 0..100 {
 				let s = updater.updater_loop_iter();
-				if !matches!(s, Ok(WorkerStatus::Busy)) {
+				if !matches!(s, Ok(WorkerState::Busy)) {
 					return s;
 				}
 			}
-			Ok(WorkerStatus::Busy)
+			Ok(WorkerState::Busy)
 		})
 		.await
 		.unwrap()
 	}
 
-	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, must_exit: &watch::Receiver<bool>) -> WorkerState {
 		if *must_exit.borrow() {
-			return WorkerStatus::Done;
+			return WorkerState::Done;
 		}
 		tokio::time::sleep(Duration::from_secs(10)).await;
-		WorkerStatus::Busy
+		WorkerState::Busy
 	}
 }
 

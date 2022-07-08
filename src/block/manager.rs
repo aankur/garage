@@ -776,16 +776,16 @@ impl Worker for ResyncWorker {
 	async fn work(
 		&mut self,
 		_must_exit: &mut watch::Receiver<bool>,
-	) -> Result<WorkerStatus, Error> {
+	) -> Result<WorkerState, Error> {
 		self.tranquilizer.reset();
 		match self.manager.resync_iter().await {
 			Ok(ResyncIterResult::BusyDidSomething) => Ok(self
 				.tranquilizer
 				.tranquilize_worker(self.manager.background_tranquility)),
-			Ok(ResyncIterResult::BusyDidNothing) => Ok(WorkerStatus::Busy),
+			Ok(ResyncIterResult::BusyDidNothing) => Ok(WorkerState::Busy),
 			Ok(ResyncIterResult::IdleFor(delay)) => {
 				self.next_delay = delay;
-				Ok(WorkerStatus::Idle)
+				Ok(WorkerState::Idle)
 			}
 			Err(e) => {
 				// The errors that we have here are only Sled errors
@@ -799,12 +799,12 @@ impl Worker for ResyncWorker {
 		}
 	}
 
-	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerStatus {
+	async fn wait_for_work(&mut self, _must_exit: &watch::Receiver<bool>) -> WorkerState {
 		select! {
 			_ = tokio::time::sleep(self.next_delay) => (),
 			_ = self.manager.resync_notify.notified() => (),
 		};
-		WorkerStatus::Busy
+		WorkerState::Busy
 	}
 }
 

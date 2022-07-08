@@ -245,10 +245,10 @@ pub fn print_worker_info(wi: HashMap<usize, WorkerInfo>, wlo: WorkerListOpt) {
 	let mut wi = wi.into_iter().collect::<Vec<_>>();
 	wi.sort_by_key(|(tid, info)| {
 		(
-			match info.status {
-				WorkerStatus::Busy | WorkerStatus::Throttled(_) => 0,
-				WorkerStatus::Idle => 1,
-				WorkerStatus::Done => 2,
+			match info.state {
+				WorkerState::Busy | WorkerState::Throttled(_) => 0,
+				WorkerState::Idle => 1,
+				WorkerState::Done => 2,
 			},
 			*tid,
 		)
@@ -256,14 +256,14 @@ pub fn print_worker_info(wi: HashMap<usize, WorkerInfo>, wlo: WorkerListOpt) {
 
 	let mut table = vec![];
 	for (tid, info) in wi.iter() {
-		if wlo.busy && !matches!(info.status, WorkerStatus::Busy | WorkerStatus::Throttled(_)) {
+		if wlo.busy && !matches!(info.state, WorkerState::Busy | WorkerState::Throttled(_)) {
 			continue;
 		}
 		if wlo.errors && info.errors == 0 {
 			continue;
 		}
 
-		table.push(format!("{}\t{}\t{}", tid, info.status, info.name));
+		table.push(format!("{}\t{}\t{}", tid, info.state, info.name));
 		if let Some(i) = &info.info {
 			table.push(format!("\t\t  {}", i));
 		}
