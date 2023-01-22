@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -11,6 +10,7 @@ use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use futures::{join, select};
 use futures_util::future::*;
+use opentelemetry::{Context, KeyValue};
 use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::sign::ed25519;
 use tokio::sync::watch;
@@ -248,7 +248,12 @@ impl System {
 		replication_mode: ReplicationMode,
 		config: &Config,
 	) -> Result<Arc<Self>, Error> {
+		let metrics = SystemMetrics::new();
+
 		let replication_factor = replication_mode.replication_factor();
+		metrics
+			._replication_factor
+			.observe(&Context::current(), replication_factor as u64, &[]);
 
 		let node_key =
 			gen_node_key(&config.metadata_dir).expect("Unable to read or generate node ID");
@@ -281,7 +286,14 @@ impl System {
 			}
 		};
 
-		let metrics = SystemMetrics::new(replication_factor);
+		metrics._garage_build_info.observe(
+			&Context::current(),
+			1,
+			&[KeyValue::new(
+				"version",
+				garage_util::version::garage_version(),
+			)],
+		);
 
 		let mut local_status = NodeStatus::initial(replication_factor, &cluster_layout);
 		local_status.update_disk_usage(&config.metadata_dir, &config.data_dir, &metrics);
@@ -892,6 +904,7 @@ impl NodeStatus {
 
 	fn update_disk_usage(&mut self, meta_dir: &Path, data_dir: &Path, metrics: &SystemMetrics) {
 		use systemstat::{Platform, System};
+
 		let mounts = System::new().mounts().unwrap_or_default();
 
 		let mount_avail = |path: &Path| {
@@ -906,24 +919,28 @@ impl NodeStatus {
 		self.data_disk_avail = mount_avail(data_dir);
 
 		if let Some((avail, total)) = self.meta_disk_avail {
-			metrics
-				.values
-				.meta_disk_avail
-				.store(avail, Ordering::Relaxed);
-			metrics
-				.values
-				.meta_disk_total
-				.store(total, Ordering::Relaxed);
+			metrics._disk_avail.observe(
+				&Context::current(),
+				avail,
+				&[KeyValue::new("volume", "meta")],
+			);
+			metrics._disk_total.observe(
+				&Context::current(),
+				total,
+				&[KeyValue::new("volume", "meta")],
+			);
 		}
 		if let Some((avail, total)) = self.data_disk_avail {
-			metrics
-				.values
-				.data_disk_avail
-				.store(avail, Ordering::Relaxed);
-			metrics
-				.values
-				.data_disk_total
-				.store(total, Ordering::Relaxed);
+			metrics._disk_avail.observe(
+				&Context::current(),
+				avail,
+				&[KeyValue::new("volume", "data")],
+			);
+			metrics._disk_total.observe(
+				&Context::current(),
+				total,
+				&[KeyValue::new("volume", "data")],
+			);
 		}
 	}
 }
