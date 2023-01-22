@@ -44,7 +44,7 @@ futures = "0.3"
 futures-util = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["rt", "rt-multi-thread", "io-util", "net", "time", "macros", "sync", "signal", "fs"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-opentelemetry = "0.17"
+opentelemetry = "0.18"
 
 netapp = { version = "0.5.2", features = ["telemetry"] }
 

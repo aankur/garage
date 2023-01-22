@@ -45,7 +45,7 @@ netapp = "0.5"
 http = "0.2"
 hyper = "0.14"
 
-opentelemetry = { version = "0.17", features = [ "rt-tokio", "metrics", "trace" ] }
+opentelemetry = { version = "0.18", features = [ "rt-tokio", "metrics", "trace" ] }
 
 [dev-dependencies]
 mktemp = "0.5"

@@ -18,7 +18,7 @@ garage_db = { version = "0.8.1", path = "../db" }
 garage_rpc = { version = "0.8.1", path = "../rpc" }
 garage_util = { version = "0.8.1", path = "../util" }
 
-opentelemetry = "0.17"
+opentelemetry = "0.18"
 
 async-trait = "0.1.7"
 arc-swap = "1.0"
