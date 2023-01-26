@@ -22,11 +22,11 @@ impl SystemMetrics {
 				.with_description("Garage replication factor setting")
 				.init(),
 			_disk_avail: meter
-				.u64_observable_gauge("garage_local_disk_avail")
+				.u64_observable_gauge("garage_local_disk_avail_bytes")
 				.with_description("Garage available disk space on each node")
 				.init(),
 			_disk_total: meter
-				.u64_observable_gauge("garage_local_disk_total")
+				.u64_observable_gauge("garage_local_size_bytes")
 				.with_description("Garage total disk space on each node")
 				.init(),
 		}
