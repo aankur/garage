@@ -13,7 +13,7 @@ use hyper::{HeaderMap, StatusCode};
 
 use opentelemetry::{
 	global,
-	metrics::{Counter, ValueRecorder},
+	metrics::{Counter, Histogram},
 	trace::{FutureExt, SpanRef, TraceContextExt, Tracer},
 	Context, KeyValue,
 };
@@ -55,7 +55,7 @@ pub(crate) struct ApiServer<A: ApiHandler> {
 	// Metrics
 	request_counter: Counter<u64>,
 	error_counter: Counter<u64>,
-	request_duration: ValueRecorder<f64>,
+	request_duration: Histogram<f64>,
 }
 
 impl<A: ApiHandler> ApiServer<A> {
@@ -79,7 +79,7 @@ impl<A: ApiHandler> ApiServer<A> {
 				))
 				.init(),
 			request_duration: meter
-				.f64_value_recorder(format!("api.{}.request_duration", A::API_NAME))
+				.f64_histogram(format!("api.{}.request_duration", A::API_NAME))
 				.with_description(format!(
 					"Duration of API calls to the various {} API endpoints",
 					A::API_NAME_DISPLAY
@@ -190,7 +190,8 @@ impl<A: ApiHandler> ApiServer<A> {
 			.record_duration(&self.request_duration, &metrics_tags[..])
 			.await;
 
-		self.request_counter.add(1, &metrics_tags[..]);
+		self.request_counter
+			.add(&current_context, 1, &metrics_tags[..]);
 
 		let status_code = match &res {
 			Ok(r) => r.status(),
@@ -198,6 +199,7 @@ impl<A: ApiHandler> ApiServer<A> {
 		};
 		if status_code.is_client_error() || status_code.is_server_error() {
 			self.error_counter.add(
+				&current_context,
 				1,
 				&[
 					metrics_tags[0].clone(),
