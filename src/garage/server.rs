@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use opentelemetry::sdk::export::metrics::aggregation;
+use opentelemetry::sdk::metrics::{controllers, processors, selectors};
 use tokio::sync::watch;
 
 use garage_util::background::*;
@@ -33,7 +35,15 @@ pub async fn run_server(config_file: PathBuf) -> Result<(), Error> {
 	// ---- Initialize Garage internals ----
 
 	#[cfg(feature = "metrics")]
-	let metrics_exporter = opentelemetry_prometheus::exporter().init();
+	let controller = controllers::basic(
+		processors::factory(
+			selectors::simple::histogram([1.0, 2.0, 5.0, 10.0, 20.0, 50.0]),
+			aggregation::cumulative_temporality_selector(),
+		)
+		.with_memory(true),
+	)
+	.build();
+	let metrics_exporter = opentelemetry_prometheus::exporter(controller).init();
 
 	info!("Initializing Garage main data store...");
 	let garage = Garage::new(config.clone())?;
