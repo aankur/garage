@@ -11,7 +11,7 @@ use hyper::{
 
 use opentelemetry::{
 	global,
-	metrics::{Counter, ValueRecorder},
+	metrics::{Counter, Histogram},
 	trace::{FutureExt, TraceContextExt, Tracer},
 	Context, KeyValue,
 };
@@ -34,7 +34,7 @@ use garage_util::metrics::{gen_trace_id, RecordDuration};
 struct WebMetrics {
 	request_counter: Counter<u64>,
 	error_counter: Counter<u64>,
-	request_duration: ValueRecorder<f64>,
+	request_duration: Histogram<f64>,
 }
 
 impl WebMetrics {
@@ -50,7 +50,7 @@ impl WebMetrics {
 				.with_description("Number of requests to the web endpoint resulting in errors")
 				.init(),
 			request_duration: meter
-				.f64_value_recorder("web.request_duration")
+				.f64_histogram("web.request_duration")
 				.with_description("Duration of requests to the web endpoint")
 				.init(),
 		}
@@ -127,7 +127,9 @@ impl WebServer {
 			.await;
 
 		// More instrumentation
-		self.metrics.request_counter.add(1, &metrics_tags[..]);
+		self.metrics
+			.request_counter
+			.add(&Context::current(), 1, &metrics_tags[..]);
 
 		// Returning the result
 		match res {
@@ -144,6 +146,7 @@ impl WebServer {
 					error
 				);
 				self.metrics.error_counter.add(
+					&Context::current(),
 					1,
 					&[
 						metrics_tags[0].clone(),
