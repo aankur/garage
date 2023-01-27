@@ -136,7 +136,10 @@ impl RpcHelper {
 			KeyValue::new("to", format!("{:?}", to)),
 		];
 
-		self.0.metrics.rpc_counter.add(1, &metric_tags);
+		self.0
+			.metrics
+			.rpc_counter
+			.add(&Context::current(), 1, &metric_tags);
 
 		let node_id = to.into();
 		let rpc_call = endpoint
@@ -154,18 +157,18 @@ impl RpcHelper {
 		select! {
 			res = rpc_call => {
 				if res.is_err() {
-					self.0.metrics.rpc_netapp_error_counter.add(1, &metric_tags);
+					self.0.metrics.rpc_netapp_error_counter.add(&Context::current(), 1, &metric_tags);
 				}
 				let res = res?.into_msg();
 
 				if res.is_err() {
-					self.0.metrics.rpc_garage_error_counter.add(1, &metric_tags);
+					self.0.metrics.rpc_garage_error_counter.add(&Context::current(), 1, &metric_tags);
 				}
 
 				Ok(res?)
 			}
 			() = timeout => {
-				self.0.metrics.rpc_timeout_counter.add(1, &metric_tags);
+				self.0.metrics.rpc_timeout_counter.add(&Context::current(), 1, &metric_tags);
 				Err(Error::Timeout)
 			}
 		}
