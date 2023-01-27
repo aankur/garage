@@ -302,10 +302,16 @@ impl BlockResyncManager {
 					.bound_record_duration(&manager.metrics.resync_duration)
 					.await;
 
-				manager.metrics.resync_counter.add(1);
+				manager
+					.metrics
+					.resync_counter
+					.add(&Context::current(), 1, &[]);
 
 				if let Err(e) = &res {
-					manager.metrics.resync_error_counter.add(1);
+					manager
+						.metrics
+						.resync_error_counter
+						.add(&Context::current(), 1, &[]);
 					error!("Error when resyncing {:?}: {}", hash, e);
 
 					let err_counter = match self.errors.get(hash.as_slice())? {
@@ -413,10 +419,11 @@ impl BlockResyncManager {
 				);
 
 				for node in need_nodes.iter() {
-					manager
-						.metrics
-						.resync_send_counter
-						.add(1, &[KeyValue::new("to", format!("{:?}", node))]);
+					manager.metrics.resync_send_counter.add(
+						&Context::current(),
+						1,
+						&[KeyValue::new("to", format!("{:?}", node))],
+					);
 				}
 
 				let block = manager.read_block(hash).await?;
@@ -459,7 +466,10 @@ impl BlockResyncManager {
 
 			let block_data = manager.rpc_get_raw_block(hash, None).await?;
 
-			manager.metrics.resync_recv_counter.add(1);
+			manager
+				.metrics
+				.resync_recv_counter
+				.add(&Context::current(), 1, &[]);
 
 			manager.write_block(hash, &block_data).await?;
 		}

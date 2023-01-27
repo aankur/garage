@@ -129,12 +129,17 @@ impl BlockManager {
 			.netapp
 			.endpoint("garage_block/manager.rs/Rpc".to_string());
 
-		let metrics = BlockManagerMetrics::new(
-			compression_level,
-			rc.rc.clone(),
-			resync.queue.clone(),
-			resync.errors.clone(),
-		);
+		let metrics =
+			BlockManagerMetrics::new(rc.rc.clone(), resync.queue.clone(), resync.errors.clone());
+
+		match compression_level {
+			Some(v) => metrics
+				.compression_level
+				.observe(&Context::current(), v as u64, &[]),
+			None => metrics
+				.compression_level
+				.observe(&Context::current(), 0_u64, &[]),
+		}
 
 		let scrub_persister = PersisterShared::new(&system.metadata_dir, "scrub_info");
 
@@ -475,7 +480,9 @@ impl BlockManager {
 			))
 			.await?;
 
-		self.metrics.bytes_written.add(write_size);
+		self.metrics
+			.bytes_written
+			.add(&Context::current(), write_size, &[]);
 
 		Ok(())
 	}
@@ -510,7 +517,7 @@ impl BlockManager {
 
 		self.metrics
 			.bytes_read
-			.add(data.inner_buffer().len() as u64);
+			.add(&Context::current(), data.inner_buffer().len() as u64, &[]);
 
 		Ok(data)
 	}
@@ -542,7 +549,9 @@ impl BlockManager {
 		};
 
 		if data.verify(*hash).is_err() {
-			self.metrics.corruption_counter.add(1);
+			self.metrics
+				.corruption_counter
+				.add(&Context::current(), 1, &[]);
 
 			self.lock_mutate(hash)
 				.await
@@ -742,7 +751,7 @@ impl BlockManagerLocked {
 				path.set_extension("zst");
 			}
 			fs::remove_file(path).await?;
-			mgr.metrics.delete_counter.add(1);
+			mgr.metrics.delete_counter.add(&Context::current(), 1, &[]);
 		}
 		Ok(())
 	}
