@@ -2,6 +2,8 @@ use core::borrow::Borrow;
 use std::convert::TryInto;
 use std::sync::Arc;
 
+use opentelemetry::Context;
+
 use serde_bytes::ByteBuf;
 use tokio::sync::Notify;
 
@@ -242,7 +244,9 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 		})?;
 
 		if let Some((new_entry, new_bytes_hash)) = changed {
-			self.metrics.internal_update_counter.add(1);
+			self.metrics
+				.internal_update_counter
+				.add(&Context::current(), 1, &[]);
 
 			let is_tombstone = new_entry.is_tombstone();
 			self.merkle_todo_notify.notify_one();
@@ -284,7 +288,9 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 			})?;
 
 		if removed {
-			self.metrics.internal_delete_counter.add(1);
+			self.metrics
+				.internal_delete_counter
+				.add(&Context::current(), 1, &[]);
 			self.merkle_todo_notify.notify_one();
 		}
 		Ok(removed)
@@ -312,7 +318,9 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 			})?;
 
 		if removed {
-			self.metrics.internal_delete_counter.add(1);
+			self.metrics
+				.internal_delete_counter
+				.add(&Context::current(), 1, &[]);
 			self.merkle_todo_notify.notify_one();
 		}
 		Ok(removed)

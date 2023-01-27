@@ -9,7 +9,7 @@ use serde_bytes::ByteBuf;
 
 use opentelemetry::{
 	trace::{FutureExt, TraceContextExt, Tracer},
-	Context,
+	Context, KeyValue,
 };
 
 use garage_db as db;
@@ -110,7 +110,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 			.with_context(Context::current_with_span(span))
 			.await?;
 
-		self.data.metrics.put_request_counter.add(1);
+		self.data.metrics.put_request_counter.add(
+			&Context::current(),
+			1,
+			&[KeyValue::new("table_name", F::TABLE_NAME)],
+		);
 
 		Ok(())
 	}
@@ -154,7 +158,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 			.with_context(Context::current_with_span(span))
 			.await?;
 
-		self.data.metrics.put_request_counter.add(1);
+		self.data.metrics.put_request_counter.add(
+			&Context::current(),
+			1,
+			&[KeyValue::new("table_name", F::TABLE_NAME)],
+		);
 
 		Ok(())
 	}
@@ -220,7 +228,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 			.with_context(Context::current_with_span(span))
 			.await?;
 
-		self.data.metrics.get_request_counter.add(1);
+		self.data.metrics.get_request_counter.add(
+			&Context::current(),
+			1,
+			&[KeyValue::new("table_name", F::TABLE_NAME)],
+		);
 
 		Ok(res)
 	}
@@ -306,7 +318,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 			.with_context(Context::current_with_span(span))
 			.await?;
 
-		self.data.metrics.get_request_counter.add(1);
+		self.data.metrics.get_request_counter.add(
+			&Context::current(),
+			1,
+			&[KeyValue::new("table_name", F::TABLE_NAME)],
+		);
 
 		Ok(res)
 	}

@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use futures_util::stream::*;
-use opentelemetry::KeyValue;
+use opentelemetry::{Context, KeyValue};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -235,6 +235,7 @@ impl<F: TableSchema, R: TableReplication> TableSyncer<F, R> {
 
 		for to in nodes.iter() {
 			self.data.metrics.sync_items_sent.add(
+				&Context::current(),
 				values.len() as u64,
 				&[
 					KeyValue::new("table_name", F::TABLE_NAME),
@@ -428,6 +429,7 @@ impl<F: TableSchema, R: TableReplication> TableSyncer<F, R> {
 			.collect::<Vec<_>>();
 
 		self.data.metrics.sync_items_sent.add(
+			&Context::current(),
 			values.len() as u64,
 			&[
 				KeyValue::new("table_name", F::TABLE_NAME),
@@ -470,6 +472,7 @@ impl<F: TableSchema, R: TableReplication> EndpointHandler<SyncRpc> for TableSync
 			}
 			SyncRpc::Items(items) => {
 				self.data.metrics.sync_items_received.add(
+					&Context::current(),
 					items.len() as u64,
 					&[
 						KeyValue::new("table_name", F::TABLE_NAME),
