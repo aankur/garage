@@ -59,7 +59,7 @@ opentelemetry-otlp = { version = "0.10", optional = true }
 prometheus = { version = "0.13", optional = true }
 
 [dev-dependencies]
-aws-sdk-s3 = "0.19"
+aws-sdk-s3 = { version = "0.19", default-features = false, features = ["rt-tokio"] }
 chrono = "0.4"
 http = "0.2"
 hmac = "0.12"
@@ -95,6 +95,6 @@ telemetry-otlp = [ "opentelemetry-otlp" ]
 # exactly one of them should be enabled.
 
 # Use bundled libsqlite instead of linking against system-provided.
-bundled-libs = [ "garage_db/bundled-libs" ]
-# Link against system-provided libsodium and libzstd.
-system-libs = [ "garage_block/system-libs", "garage_rpc/system-libs", "sodiumoxide/use-pkg-config" ]
+bundled-libs = [ "garage_db/bundled-libs", "aws-sdk-s3/rustls" ]
+# Link against system-provided libsodium, libzstd and TLS library.
+system-libs = [ "garage_block/system-libs", "garage_rpc/system-libs", "sodiumoxide/use-pkg-config", "aws-sdk-s3/native-tls" ]
