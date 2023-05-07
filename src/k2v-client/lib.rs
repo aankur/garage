@@ -19,6 +19,12 @@ mod error;
 
 pub use error::Error;
 
+#[cfg(all(feature = "tls-native", feature = "tls-rustls"))]
+compile_error!("Features \"tls-native\" and \"tls-rustls\" are mutually exclusive.");
+
+#[cfg(not(any(feature = "tls-native", feature = "tls-rustls")))]
+compile_error!("Either feature \"tls-native\" or \"tls-rustls\" must be enabled for this crate.");
+
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_POLL_TIMEOUT: Duration = Duration::from_secs(300);
 const SERVICE: &str = "k2v";
@@ -40,12 +46,16 @@ impl K2vClient {
 		creds: AwsCredentials,
 		user_agent: Option<String>,
 	) -> Result<Self, Error> {
+		#[cfg(feature = "tls-rustls")]
 		let connector = hyper_rustls::HttpsConnectorBuilder::new()
 			.with_native_roots()
 			.https_or_http()
 			.enable_http1()
 			.enable_http2()
 			.build();
+		#[cfg(feature = "tls-native")]
+		let connector = hyper_tls::HttpsConnector::new();
+
 		let mut client = HttpClient::from_connector(connector);
 		if let Some(ua) = user_agent {
 			client.local_agent_prepend(ua);

@@ -12,10 +12,11 @@ readme = "../../README.md"
 base64 = "0.21"
 http = "0.2"
 log = "0.4"
-rusoto_core = { version = "0.48.0", default-features = false, features = ["rustls"] }
+rusoto_core = { version = "0.48.0", default-features = false }
 rusoto_credential = "0.48.0"
 rusoto_signature = "0.48.0"
-hyper-rustls = { version = "0.23", default-features = false, features = [ "http1", "http2", "tls12" ] }
+hyper-rustls = { version = "0.23", default-features = false, features = [ "http1", "http2", "tls12" ], optional = true }
+hyper-tls = { version = "0.5.0", optional = true }
 serde = "1.0"
 serde_json = "1.0"
 thiserror = "1.0"
@@ -28,6 +29,9 @@ garage_util = { version = "0.8.2", path = "../util", optional = true }
 
 [features]
 cli = ["clap", "tokio/fs", "tokio/io-std", "garage_util"]
+# tls-native and tls-rustls are mutually exclusive.
+tls-native = ["rusoto_core/native-tls", "hyper-tls"]
+tls-rustls = ["rusoto_core/rustls", "hyper-rustls"]
 
 [lib]
 path = "lib.rs"

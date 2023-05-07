@@ -37,19 +37,19 @@ api_bind_addr = "<ip>:<port>"
 Please select a port number that is not already in use by another API
 endpoint (S3 api, admin API) or by the RPC server.
 
-We provide an early-stage K2V client library for Rust which can be imported by adding the following to your `Cargo.toml` file:
+We provide an early-stage K2V client library for Rust which can be imported by adding the following to your `Cargo.toml` file (enable either `tls-native` or `tls-rustls`):
 
 ```toml
-k2v-client = { git = "https://git.deuxfleurs.fr/Deuxfleurs/garage.git" }
+k2v-client = { git = "https://git.deuxfleurs.fr/Deuxfleurs/garage.git", features = ["tls-rustls"] }
 ```
 
 There is also a simple CLI utility which can be built from source in the
-following way:
+following way (enable either `tls-native` or `tls-rustls`):
 
 ```sh
 git clone https://git.deuxfleurs.fr/Deuxfleurs/garage.git
 cd garage/src/k2v-client
-cargo build --features cli --bin k2v-cli
+cargo build --features cli,tls-rustls --bin k2v-cli
 ```
 
 The CLI utility is self-documented, run `k2v-cli --help` to learn how to use
