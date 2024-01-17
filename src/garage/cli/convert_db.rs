@@ -22,16 +22,20 @@ pub struct ConvertDbOpt {
 	/// Output database engine
 	#[structopt(short = "b")]
 	output_engine: String,
+
+	/// LMDB map size
+	#[structopt(long = "lmdb_map_size")]
+	lmdb_map_size: Option<usize>,
 }
 
 pub(crate) fn do_conversion(args: ConvertDbOpt) -> Result<()> {
-	let input = open_db(args.input_path, args.input_engine)?;
-	let output = open_db(args.output_path, args.output_engine)?;
+	let input = open_db(args.input_path, args.input_engine, args.lmdb_map_size)?;
+	let output = open_db(args.output_path, args.output_engine, args.lmdb_map_size)?;
 	output.import(&input)?;
 	Ok(())
 }
 
-fn open_db(path: PathBuf, engine: String) -> Result<Db> {
+fn open_db(path: PathBuf, engine: String, lmdb_map_size: Option<usize>) -> Result<Db> {
 	match engine.as_str() {
 		#[cfg(feature = "sled")]
 		"sled" => {
@@ -51,7 +55,10 @@ fn open_db(path: PathBuf, engine: String) -> Result<Db> {
 				Error(format!("Unable to create LMDB data directory: {}", e).into())
 			})?;
 
-			let map_size = lmdb_adapter::recommended_map_size();
+			let map_size = match lmdb_map_size {
+				Some(map_size) => map_size,
+				None => lmdb_adapter::recommended_map_size(),
+			};
 
 			let mut env_builder = lmdb_adapter::heed::EnvOpenOptions::new();
 			env_builder.max_dbs(100);
