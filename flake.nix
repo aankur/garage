@@ -54,6 +54,20 @@
             i386 = packageFor "i686-unknown-linux-musl";
             arm64 = packageFor "aarch64-unknown-linux-musl";
             arm = packageFor "armv6l-unknown-linux-musl";
+
+            jepsen-garage = pkgs.callPackage (
+              { runCommand, makeWrapper, fetchMavenArtifact, fetchgit, lib, clojure }:
+
+              let cljsdeps = import ./script/jepsen.garage/deps.nix { inherit (pkgs) fetchMavenArtifact fetchgit lib; };
+                  classp  = cljsdeps.makeClasspaths {};
+
+              in runCommand "jepsen.garage" {
+                nativeBuildInputs = [ makeWrapper ];
+              } ''
+                makeWrapper ${clojure}/bin/clojure $out/bin/jepsen.garage --add-flags "-Scp ${./script/jepsen.garage/src}:${classp} -m jepsen.garage"
+              ''
+
+            ) {};
           };
 
         # ---- developpment shell, for making native builds only ----
