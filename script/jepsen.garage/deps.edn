@@ -1,0 +1,7 @@
+{:paths ["src"]
+ :deps
+  {
+    org.clojure/clojure {:mvn/version "1.11.1"}
+    jepsen {:mvn/version "0.3.5"}
+    amazonica {:mvn/version "0.3.163"}
+}}
