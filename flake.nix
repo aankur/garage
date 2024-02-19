@@ -4,7 +4,7 @@
 
   # Nixpkgs 23.11 as of 2024-02-07, has rustc v1.73
   inputs.nixpkgs.url =
-    "github:NixOS/nixpkgs/9f2ee8c91ac42da3ae6c6a1d21555f283458247e";
+    "github:NixOS/nixpkgs/nixos-unstable";
 
   inputs.flake-compat.url = "github:nix-community/flake-compat";
 
