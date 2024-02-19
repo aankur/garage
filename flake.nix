@@ -46,7 +46,7 @@
               release = true;
             }).workspace.garage { compileMode = "build"; };
           in
-          {
+          rec {
             # default = native release build
             default = packageFor null;
             # other = cross-compiled, statically-linked builds
@@ -64,13 +64,95 @@
               in runCommand "jepsen.garage" {
                 nativeBuildInputs = [ makeWrapper ];
               } ''
-                makeWrapper ${clojure}/bin/clojure $out/bin/jepsen.garage --add-flags "-Scp ${./script/jepsen.garage/src}:${classp} -m jepsen.garage"
+                mkdir -p $out/share
+                cp -r ${./script/jepsen.garage/src} $out/share/src
+                substituteInPlace $out/share/src/jepsen/garage/daemon.clj --replace "https://garagehq.deuxfleurs.fr/_releases/" "http://runner/"
+                makeWrapper ${clojure}/bin/clojure $out/bin/jepsen.garage --add-flags "-Scp $out/share/src:${classp} -m jepsen.garage"
               ''
+              ) {};
 
-            ) {};
+            nixosTest = pkgs.nixosTest ({lib, pkgs, ... }: let
+
+              snakeOilPrivateKey = pkgs.writeText "privkey.snakeoil" ''
+                -----BEGIN EC PRIVATE KEY-----
+                MHcCAQEEIHQf/khLvYrQ8IOika5yqtWvI0oquHlpRLTZiJy5dRJmoAoGCCqGSM49
+                AwEHoUQDQgAEKF0DYGbBwbj06tA3fd/+yP44cvmwmHBWXZCKbS+RQlAKvLXMWkpN
+                r1lwMyJZoSGgBHoUahoYjTh9/sJL7XLJtA==
+                -----END EC PRIVATE KEY-----
+              '';
+              snakeOilPublicKey = pkgs.lib.concatStrings [
+                "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHA"
+                "yNTYAAABBBChdA2BmwcG49OrQN33f/sj+OHL5sJhwVl2Qim0vkUJQCry1zFpKTa"
+                "9ZcDMiWaEhoAR6FGoaGI04ff7CS+1yybQ= snakeoil"
+              ];
+
+              nodeFn = n: lib.nameValuePair "n${toString (1+n)}" {
+                services.openssh.enable = true;
+                users.users.root.openssh.authorizedKeys.keys = [snakeOilPublicKey];
+                environment.systemPackages = [
+                  pkgs.wget
+                  (pkgs.writeShellScriptBin "apt-get" ''
+                    exit 0
+                  '')
+                  (lib.hiPrio (pkgs.writeShellScriptBin "dpkg" ''
+                    exit 0
+                  ''))
+                  (lib.hiPrio (pkgs.writeShellScriptBin "ntpdate" ''
+                    hwclock -s
+                  ''))
+
+                  (pkgs.dpkg.overrideAttrs (old: {
+                    configureFlags = lib.remove "--disable-start-stop-daemon" old.configureFlags;
+                  }))
+
+                  pkgs.gcc
+                ];
+              };
+              nodeCount = 7;
+
+            in {
+              name = "garage-jepsen";
+
+              nodes = {
+                runner = { nodes, ... }: {
+                  environment.systemPackages = [
+                    jepsen-garage
+
+                    (pkgs.writeShellScriptBin "git" ''
+                      echo 0000000000000000000000000000000000000000
+                    '')
+
+                    pkgs.gnuplot
+                  ];
+                  networking.firewall.allowedTCPPorts = [ 80 ];
+                  environment.etc.jepsen-nodes.text = lib.concatStringsSep "\n" (lib.genList (n: nodes."n${toString (n+1)}".networking.primaryIPAddress) nodeCount);
+
+                  services.nginx = {
+                    enable = true;
+                    virtualHosts.default = {
+                      locations."/v0.9.0/x86_64-unknown-linux-musl/".alias = "${packageFor pkgs.pkgsStatic.stdenv.hostPlatform.config}/bin/";
+                    };
+                  };
+                };
+              } // lib.listToAttrs (lib.genList nodeFn nodeCount);
+
+              testScript = ''
+                start_all()
+
+                n1.wait_for_unit("sshd.service")
+
+                runner.succeed("mkdir ~/.ssh")
+                runner.succeed(
+                    "cat ${snakeOilPrivateKey} > ~/.ssh/id_ecdsa"
+                )
+                runner.succeed("chmod 600 ~/.ssh/id_ecdsa")
+
+                runner.succeed("source <(ssh-agent) && ssh-add && jepsen.garage test --nodes-file /etc/jepsen-nodes --time-limit 60 --rate 100  --concurrency 20 --workload reg1 --ops-per-key 100")
+              '';
+            });
           };
 
-        # ---- developpment shell, for making native builds only ----
+        # ---- development shell, for making native builds only ----
         devShells =
           let
             shellWithPackages = (packages: (compile {
