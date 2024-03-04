@@ -18,9 +18,9 @@ garage:
   sledCacheCapacity: "134217728"
   sledFlushEveryMs: "2000"
 
-  # Default to 3 replicas, see the replication_mode section at
-  # https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#replication-mode
-  replicationMode: "3"
+  # Default to 3 replicas, see the replication_factor section at
+  # https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#replication-factor
+  replicationFactor: 3
 
   # zstd compression level of stored blocks
   # https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#compression-level
@@ -55,7 +55,7 @@ garage:
     sled_flush_every_ms = {{ .Values.garage.sledFlushEveryMs }}
     {{- end }}
 
-    replication_mode = "{{ .Values.garage.replicationMode }}"
+    replication_factor = {{ .Values.garage.replicationFactor }}
 
     compression_level = {{ .Values.garage.compressionLevel }}
 
