@@ -14,11 +14,16 @@ use crate::signature::verify_signed_content;
 
 async fn handle_delete_internal(ctx: &ReqCtx, key: &str) -> Result<(Uuid, Uuid), Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = ctx;
+	let c = *bucket_params.consistency_mode.get();
+
 	let object = garage
 		.object_table
-		.get(bucket_id, &key.to_string())
+		.get(c, bucket_id, &key.to_string())
 		.await?
 		.ok_or(Error::NoSuchKey)?; // No need to delete
 
@@ -49,7 +54,7 @@ async fn handle_delete_internal(ctx: &ReqCtx, key: &str) -> Result<(Uuid, Uuid),
 		}],
 	);
 
-	garage.object_table.insert(&object).await?;
+	garage.object_table.insert(c, &object).await?;
 
 	Ok((deleted_version, del_uuid))
 }

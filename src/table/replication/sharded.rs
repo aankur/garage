@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use garage_rpc::layout::manager::LayoutManager;
 use garage_rpc::layout::*;
+use garage_rpc::replication_mode::*;
 use garage_util::data::*;
 
 use crate::replication::*;
@@ -20,6 +21,7 @@ pub struct TableShardedReplication {
 
 impl TableReplication for TableShardedReplication {
 	type WriteSets = WriteLock<Vec<Vec<Uuid>>>;
+	type ConsistencyParam = ConsistencyMode;
 
 	fn storage_nodes(&self, hash: &Hash) -> Vec<Uuid> {
 		self.layout_manager.layout().storage_nodes_of(hash)
@@ -28,15 +30,15 @@ impl TableReplication for TableShardedReplication {
 	fn read_nodes(&self, hash: &Hash) -> Vec<Uuid> {
 		self.layout_manager.layout().read_nodes_of(hash)
 	}
-	fn read_quorum(&self) -> usize {
-		self.layout_manager.read_quorum()
+	fn read_quorum(&self, c: ConsistencyMode) -> usize {
+		self.layout_manager.read_quorum(c)
 	}
 
 	fn write_sets(&self, hash: &Hash) -> Self::WriteSets {
 		self.layout_manager.write_sets_of(hash)
 	}
-	fn write_quorum(&self) -> usize {
-		self.layout_manager.write_quorum()
+	fn write_quorum(&self, c: ConsistencyMode) -> usize {
+		self.layout_manager.write_quorum(c)
 	}
 
 	fn partition_of(&self, hash: &Hash) -> Partition {

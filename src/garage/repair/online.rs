@@ -176,7 +176,7 @@ impl TableRepair for RepairVersions {
 			let ref_exists = match &version.backlink {
 				VersionBacklink::Object { bucket_id, key } => garage
 					.object_table
-					.get(bucket_id, key)
+					.get(Default::default(), bucket_id, key)
 					.await?
 					.map(|o| {
 						o.versions().iter().any(|x| {
@@ -186,7 +186,7 @@ impl TableRepair for RepairVersions {
 					.unwrap_or(false),
 				VersionBacklink::MultipartUpload { upload_id } => garage
 					.mpu_table
-					.get(upload_id, &EmptyKey)
+					.get(Default::default(), upload_id, &EmptyKey)
 					.await?
 					.map(|u| !u.deleted.get())
 					.unwrap_or(false),
@@ -196,7 +196,10 @@ impl TableRepair for RepairVersions {
 				info!("Repair versions: marking version as deleted: {:?}", version);
 				garage
 					.version_table
-					.insert(&Version::new(version.uuid, version.backlink, true))
+					.insert(
+						Default::default(),
+						&Version::new(version.uuid, version.backlink, true),
+					)
 					.await?;
 				return Ok(true);
 			}
@@ -222,7 +225,7 @@ impl TableRepair for RepairBlockRefs {
 		if !block_ref.deleted.get() {
 			let ref_exists = garage
 				.version_table
-				.get(&block_ref.version, &EmptyKey)
+				.get(Default::default(), &block_ref.version, &EmptyKey)
 				.await?
 				.map(|v| !v.deleted.get())
 				.unwrap_or(false);
@@ -233,7 +236,10 @@ impl TableRepair for RepairBlockRefs {
 					block_ref
 				);
 				block_ref.deleted.set();
-				garage.block_ref_table.insert(&block_ref).await?;
+				garage
+					.block_ref_table
+					.insert(Default::default(), &block_ref)
+					.await?;
 				return Ok(true);
 			}
 		}
@@ -258,7 +264,7 @@ impl TableRepair for RepairMpu {
 		if !mpu.deleted.get() {
 			let ref_exists = garage
 				.object_table
-				.get(&mpu.bucket_id, &mpu.key)
+				.get(Default::default(), &mpu.bucket_id, &mpu.key)
 				.await?
 				.map(|o| {
 					o.versions()
@@ -274,7 +280,7 @@ impl TableRepair for RepairMpu {
 				);
 				mpu.parts.clear();
 				mpu.deleted.set();
-				garage.mpu_table.insert(&mpu).await?;
+				garage.mpu_table.insert(Default::default(), &mpu).await?;
 				return Ok(true);
 			}
 		}

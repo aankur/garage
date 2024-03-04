@@ -139,12 +139,14 @@ impl LayoutManager {
 		}
 	}
 
-	pub fn read_quorum(self: &Arc<Self>) -> usize {
-		self.replication_factor.read_quorum(self.consistency_mode)
+	pub fn read_quorum(self: &Arc<Self>, bucket_consistency_mode: ConsistencyMode) -> usize {
+		self.replication_factor
+			.read_quorum(bucket_consistency_mode.min(self.consistency_mode))
 	}
 
-	pub fn write_quorum(self: &Arc<Self>) -> usize {
-		self.replication_factor.write_quorum(self.consistency_mode)
+	pub fn write_quorum(self: &Arc<Self>, bucket_consistency_mode: ConsistencyMode) -> usize {
+		self.replication_factor
+			.write_quorum(bucket_consistency_mode.min(self.consistency_mode))
 	}
 
 	// ---- ACK LOCKING ----

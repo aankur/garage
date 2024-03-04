@@ -101,7 +101,10 @@ pub async fn handle_read_item(
 	sort_key: &String,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
 
 	let format = ReturnFormat::from(req)?;
@@ -110,6 +113,7 @@ pub async fn handle_read_item(
 		.k2v
 		.item_table
 		.get(
+			*bucket_params.consistency_mode.get(),
 			&K2VItemPartition {
 				bucket_id: *bucket_id,
 				partition_key: partition_key.to_string(),
@@ -129,7 +133,10 @@ pub async fn handle_insert_item(
 	sort_key: &str,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
 	let causal_context = req
 		.headers()
@@ -149,6 +156,7 @@ pub async fn handle_insert_item(
 		.k2v
 		.rpc
 		.insert(
+			*bucket_params.consistency_mode.get(),
 			*bucket_id,
 			partition_key.to_string(),
 			sort_key.to_string(),
@@ -169,7 +177,10 @@ pub async fn handle_delete_item(
 	sort_key: &str,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
 	let causal_context = req
 		.headers()
@@ -185,6 +196,7 @@ pub async fn handle_delete_item(
 		.k2v
 		.rpc
 		.insert(
+			*bucket_params.consistency_mode.get(),
 			*bucket_id,
 			partition_key.to_string(),
 			sort_key.to_string(),
@@ -209,7 +221,10 @@ pub async fn handle_poll_item(
 	timeout_secs: Option<u64>,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
 	let format = ReturnFormat::from(req)?;
 
@@ -222,6 +237,7 @@ pub async fn handle_poll_item(
 		.k2v
 		.rpc
 		.poll_item(
+			*bucket_params.consistency_mode.get(),
 			*bucket_id,
 			partition_key,
 			sort_key,

@@ -39,6 +39,7 @@ impl AdminRpcHandler {
 			.garage
 			.bucket_table
 			.get_range(
+				(),
 				&EmptyKey,
 				None,
 				Some(DeletedFilter::NotDeleted),
@@ -63,12 +64,14 @@ impl AdminRpcHandler {
 			.bucket_helper()
 			.get_existing_bucket(bucket_id)
 			.await?;
+		let bucket_params = bucket.state.as_option().unwrap();
+		let c = *bucket_params.consistency_mode.get();
 
 		let counters = self
 			.garage
 			.object_counter_table
 			.table
-			.get(&bucket_id, &EmptyKey)
+			.get(c, &bucket_id, &EmptyKey)
 			.await?
 			.map(|x| x.filtered_values(&self.garage.system.cluster_layout()))
 			.unwrap_or_default();
@@ -77,42 +80,28 @@ impl AdminRpcHandler {
 			.garage
 			.mpu_counter_table
 			.table
-			.get(&bucket_id, &EmptyKey)
+			.get(c, &bucket_id, &EmptyKey)
 			.await?
 			.map(|x| x.filtered_values(&self.garage.system.cluster_layout()))
 			.unwrap_or_default();
 
 		let mut relevant_keys = HashMap::new();
-		for (k, _) in bucket
-			.state
-			.as_option()
-			.unwrap()
-			.authorized_keys
-			.items()
-			.iter()
-		{
+		for (k, _) in bucket_params.authorized_keys.items().iter() {
 			if let Some(key) = self
 				.garage
 				.key_table
-				.get(&EmptyKey, k)
+				.get((), &EmptyKey, k)
 				.await?
 				.filter(|k| !k.is_deleted())
 			{
 				relevant_keys.insert(k.clone(), key);
 			}
 		}
-		for ((k, _), _, _) in bucket
-			.state
-			.as_option()
-			.unwrap()
-			.local_aliases
-			.items()
-			.iter()
-		{
+		for ((k, _), _, _) in bucket_params.local_aliases.items().iter() {
 			if relevant_keys.contains_key(k) {
 				continue;
 			}
-			if let Some(key) = self.garage.key_table.get(&EmptyKey, k).await? {
+			if let Some(key) = self.garage.key_table.get((), &EmptyKey, k).await? {
 				relevant_keys.insert(k.clone(), key);
 			}
 		}
@@ -136,7 +125,12 @@ impl AdminRpcHandler {
 
 		let helper = self.garage.locked_helper().await;
 
-		if let Some(alias) = self.garage.bucket_alias_table.get(&EmptyKey, name).await? {
+		if let Some(alias) = self
+			.garage
+			.bucket_alias_table
+			.get((), &EmptyKey, name)
+			.await?
+		{
 			if alias.state.get().is_some() {
 				return Err(Error::BadRequest(format!("Bucket {} already exists", name)));
 			}
@@ -145,7 +139,7 @@ impl AdminRpcHandler {
 		// ---- done checking, now commit ----
 
 		let bucket = Bucket::new();
-		self.garage.bucket_table.insert(&bucket).await?;
+		self.garage.bucket_table.insert((), &bucket).await?;
 
 		helper.set_global_bucket_alias(bucket.id, name).await?;
 
@@ -170,7 +164,7 @@ impl AdminRpcHandler {
 		let bucket_alias = self
 			.garage
 			.bucket_alias_table
-			.get(&EmptyKey, &query.name)
+			.get((), &EmptyKey, &query.name)
 			.await?;
 
 		// Check bucket doesn't have other aliases
@@ -225,7 +219,7 @@ impl AdminRpcHandler {
 
 		// 3. delete bucket
 		bucket.state = Deletable::delete();
-		self.garage.bucket_table.insert(&bucket).await?;
+		self.garage.bucket_table.insert((), &bucket).await?;
 
 		Ok(AdminRpc::Ok(format!("Bucket {} was deleted.", query.name)))
 	}
@@ -405,7 +399,7 @@ impl AdminRpcHandler {
 		};
 
 		bucket_state.website_config.update(website);
-		self.garage.bucket_table.insert(&bucket).await?;
+		self.garage.bucket_table.insert((), &bucket).await?;
 
 		let msg = if query.allow {
 			format!("Website access allowed for {}", &query.bucket)
@@ -462,7 +456,7 @@ impl AdminRpcHandler {
 		}
 
 		bucket_state.quotas.update(quotas);
-		self.garage.bucket_table.insert(&bucket).await?;
+		self.garage.bucket_table.insert((), &bucket).await?;
 
 		Ok(AdminRpc::Ok(format!(
 			"Quotas updated for {}",

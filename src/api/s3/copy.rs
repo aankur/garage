@@ -9,6 +9,7 @@ use hyper::{Request, Response};
 use serde::Serialize;
 
 use garage_net::bytes_buf::BytesBuf;
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_rpc::rpc_helper::OrderTag;
 use garage_table::*;
 use garage_util::data::*;
@@ -33,13 +34,15 @@ pub async fn handle_copy(
 ) -> Result<Response<ResBody>, Error> {
 	let copy_precondition = CopyPreconditionHeaders::parse(req)?;
 
-	let source_object = get_copy_source(&ctx, req).await?;
+	let (source_object, source_c) = get_copy_source(&ctx, req).await?;
 
 	let ReqCtx {
 		garage,
 		bucket_id: dest_bucket_id,
+		bucket_params: dest_bucket_params,
 		..
 	} = ctx;
+	let dest_c = *dest_bucket_params.consistency_mode.get();
 
 	let (source_version, source_version_data, source_version_meta) =
 		extract_source_info(&source_object)?;
@@ -80,13 +83,13 @@ pub async fn handle_copy(
 				dest_key.to_string(),
 				vec![dest_object_version],
 			);
-			garage.object_table.insert(&dest_object).await?;
+			garage.object_table.insert(dest_c, &dest_object).await?;
 		}
 		ObjectVersionData::FirstBlock(_meta, first_block_hash) => {
 			// Get block list from source version
 			let source_version = garage
 				.version_table
-				.get(&source_version.uuid, &EmptyKey)
+				.get(source_c, &source_version.uuid, &EmptyKey)
 				.await?;
 			let source_version = source_version.ok_or(Error::NoSuchKey)?;
 
@@ -106,7 +109,7 @@ pub async fn handle_copy(
 				dest_key.to_string(),
 				vec![tmp_dest_object_version],
 			);
-			garage.object_table.insert(&tmp_dest_object).await?;
+			garage.object_table.insert(dest_c, &tmp_dest_object).await?;
 
 			// Write version in the version table. Even with empty block list,
 			// this means that the BlockRef entries linked to this version cannot be
@@ -120,7 +123,7 @@ pub async fn handle_copy(
 				},
 				false,
 			);
-			garage.version_table.insert(&dest_version).await?;
+			garage.version_table.insert(dest_c, &dest_version).await?;
 
 			// Fill in block list for version and insert block refs
 			for (bk, bv) in source_version.blocks.items().iter() {
@@ -137,8 +140,10 @@ pub async fn handle_copy(
 				})
 				.collect::<Vec<_>>();
 			futures::try_join!(
-				garage.version_table.insert(&dest_version),
-				garage.block_ref_table.insert_many(&dest_block_refs[..]),
+				garage.version_table.insert(dest_c, &dest_version),
+				garage
+					.block_ref_table
+					.insert_many(dest_c, &dest_block_refs[..]),
 			)?;
 
 			// Insert final object
@@ -160,7 +165,7 @@ pub async fn handle_copy(
 				dest_key.to_string(),
 				vec![dest_object_version],
 			);
-			garage.object_table.insert(&dest_object).await?;
+			garage.object_table.insert(dest_c, &dest_object).await?;
 		}
 	}
 
@@ -193,12 +198,17 @@ pub async fn handle_upload_part_copy(
 	let dest_upload_id = multipart::decode_upload_id(upload_id)?;
 
 	let dest_key = dest_key.to_string();
-	let (source_object, (_, _, mut dest_mpu)) = futures::try_join!(
+	let ((source_object, source_c), (_, _, mut dest_mpu)) = futures::try_join!(
 		get_copy_source(&ctx, req),
 		multipart::get_upload(&ctx, &dest_key, &dest_upload_id)
 	)?;
 
-	let ReqCtx { garage, .. } = ctx;
+	let ReqCtx {
+		garage,
+		bucket_params: dest_bucket_params,
+		..
+	} = ctx;
+	let dest_c = *dest_bucket_params.consistency_mode.get();
 
 	let (source_object_version, source_version_data, source_version_meta) =
 		extract_source_info(&source_object)?;
@@ -244,7 +254,7 @@ pub async fn handle_upload_part_copy(
 	// and destination version to check part hasn't yet been uploaded
 	let source_version = garage
 		.version_table
-		.get(&source_object_version.uuid, &EmptyKey)
+		.get(source_c, &source_object_version.uuid, &EmptyKey)
 		.await?
 		.ok_or(Error::NoSuchKey)?;
 
@@ -304,7 +314,7 @@ pub async fn handle_upload_part_copy(
 			size: None,
 		},
 	);
-	garage.mpu_table.insert(&dest_mpu).await?;
+	garage.mpu_table.insert(dest_c, &dest_mpu).await?;
 
 	let mut dest_version = Version::new(
 		dest_version_id,
@@ -390,7 +400,7 @@ pub async fn handle_upload_part_copy(
 				if must_upload {
 					garage2
 						.block_manager
-						.rpc_put_block(final_hash, data, None)
+						.rpc_put_block(dest_c, final_hash, data, None)
 						.await
 				} else {
 					Ok(())
@@ -398,9 +408,9 @@ pub async fn handle_upload_part_copy(
 			},
 			async {
 				// Thing 2: we need to insert the block in the version
-				garage.version_table.insert(&dest_version).await?;
+				garage.version_table.insert(dest_c, &dest_version).await?;
 				// Thing 3: we need to add a block reference
-				garage.block_ref_table.insert(&block_ref).await
+				garage.block_ref_table.insert(dest_c, &block_ref).await
 			},
 			// Thing 4: we need to prefetch the next block
 			defragmenter.next(),
@@ -422,7 +432,7 @@ pub async fn handle_upload_part_copy(
 			size: Some(current_offset),
 		},
 	);
-	garage.mpu_table.insert(&dest_mpu).await?;
+	garage.mpu_table.insert(dest_c, &dest_mpu).await?;
 
 	// LGTM
 	let resp_xml = s3_xml::to_xml_with_header(&CopyPartResult {
@@ -440,24 +450,33 @@ pub async fn handle_upload_part_copy(
 		.body(string_body(resp_xml))?)
 }
 
-async fn get_copy_source(ctx: &ReqCtx, req: &Request<ReqBody>) -> Result<Object, Error> {
+async fn get_copy_source(
+	ctx: &ReqCtx,
+	req: &Request<ReqBody>,
+) -> Result<(Object, ConsistencyMode), Error> {
 	let ReqCtx {
 		garage, api_key, ..
 	} = ctx;
-
 	let copy_source = req.headers().get("x-amz-copy-source").unwrap().to_str()?;
 	let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;
 
-	let (source_bucket, source_key) = parse_bucket_key(&copy_source, None)?;
+	let (source_bucket_name, source_key) = parse_bucket_key(&copy_source, None)?;
 	let source_bucket_id = garage
 		.bucket_helper()
-		.resolve_bucket(&source_bucket.to_string(), api_key)
+		.resolve_bucket(&source_bucket_name.to_string(), api_key)
 		.await?;
+
+	let source_bucket = garage
+		.bucket_helper()
+		.get_existing_bucket(source_bucket_id)
+		.await?;
+	let source_bucket_state = source_bucket.state.as_option().unwrap();
+	let source_c = *source_bucket_state.consistency_mode.get();
 
 	if !api_key.allow_read(&source_bucket_id) {
 		return Err(Error::forbidden(format!(
 			"Reading from bucket {} not allowed for this key",
-			source_bucket
+			source_bucket_name
 		)));
 	}
 
@@ -465,11 +484,11 @@ async fn get_copy_source(ctx: &ReqCtx, req: &Request<ReqBody>) -> Result<Object,
 
 	let source_object = garage
 		.object_table
-		.get(&source_bucket_id, &source_key.to_string())
+		.get(source_c, &source_bucket_id, &source_key.to_string())
 		.await?
 		.ok_or(Error::NoSuchKey)?;
 
-	Ok(source_object)
+	Ok((source_object, source_c))
 }
 
 fn extract_source_info(

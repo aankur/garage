@@ -29,6 +29,7 @@ use garage_util::metrics::RecordDuration;
 use garage_util::persister::{Persister, PersisterShared};
 use garage_util::time::msec_to_rfc3339;
 
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_rpc::rpc_helper::OrderTag;
 use garage_rpc::system::System;
 use garage_rpc::*;
@@ -343,6 +344,7 @@ impl BlockManager {
 	/// Send block to nodes that should have it
 	pub async fn rpc_put_block(
 		&self,
+		consistency_mode: ConsistencyMode,
 		hash: Hash,
 		data: Bytes,
 		order_tag: Option<OrderTag>,
@@ -367,7 +369,7 @@ impl BlockManager {
 				who.as_ref(),
 				put_block_rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL | PRIO_SECONDARY)
-					.with_quorum(self.system.layout_manager.write_quorum()),
+					.with_quorum(self.system.layout_manager.write_quorum(consistency_mode)),
 			)
 			.await?;
 

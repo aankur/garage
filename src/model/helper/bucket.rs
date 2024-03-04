@@ -36,7 +36,7 @@ impl<'a> BucketHelper<'a> {
 			Ok(self
 				.0
 				.bucket_table
-				.get(&EmptyKey, &bucket_id)
+				.get((), &EmptyKey, &bucket_id)
 				.await?
 				.filter(|x| !x.state.is_deleted())
 				.map(|_| bucket_id))
@@ -44,7 +44,7 @@ impl<'a> BucketHelper<'a> {
 			Ok(self
 				.0
 				.bucket_alias_table
-				.get(&EmptyKey, bucket_name)
+				.get((), &EmptyKey, bucket_name)
 				.await?
 				.and_then(|x| *x.state.get()))
 		}
@@ -74,7 +74,7 @@ impl<'a> BucketHelper<'a> {
 		Ok(self
 			.0
 			.bucket_table
-			.get(&EmptyKey, &bucket_id)
+			.get((), &EmptyKey, &bucket_id)
 			.await?
 			.ok_or_message(format!("Bucket {:?} does not exist", bucket_id))?)
 	}
@@ -86,7 +86,7 @@ impl<'a> BucketHelper<'a> {
 	pub async fn get_existing_bucket(&self, bucket_id: Uuid) -> Result<Bucket, Error> {
 		self.0
 			.bucket_table
-			.get(&EmptyKey, &bucket_id)
+			.get((), &EmptyKey, &bucket_id)
 			.await?
 			.filter(|b| !b.is_deleted())
 			.ok_or_else(|| Error::NoSuchBucket(hex::encode(bucket_id)))
@@ -95,10 +95,20 @@ impl<'a> BucketHelper<'a> {
 	// ----
 
 	pub async fn is_bucket_empty(&self, bucket_id: Uuid) -> Result<bool, Error> {
+		let consistency_mode = *self
+			.get_existing_bucket(bucket_id)
+			.await?
+			.state
+			.as_option()
+			.unwrap()
+			.consistency_mode
+			.get();
+
 		let objects = self
 			.0
 			.object_table
 			.get_range(
+				consistency_mode,
 				&bucket_id,
 				None,
 				Some(ObjectFilter::IsData),
@@ -124,6 +134,7 @@ impl<'a> BucketHelper<'a> {
 				.counter_table
 				.table
 				.get_range(
+					consistency_mode,
 					&bucket_id,
 					None,
 					Some((DeletedFilter::NotDeleted, node_id_vec)),
@@ -151,6 +162,12 @@ impl<'a> BucketHelper<'a> {
 		older_than: Duration,
 	) -> Result<usize, Error> {
 		let older_than = now_msec() - older_than.as_millis() as u64;
+		let consistency_mode = self
+			.get_existing_bucket(*bucket_id)
+			.await?
+			.params()
+			.map(|params| *params.consistency_mode.get())
+			.unwrap_or_default();
 
 		let mut ret = 0usize;
 		let mut start = None;
@@ -160,6 +177,7 @@ impl<'a> BucketHelper<'a> {
 				.0
 				.object_table
 				.get_range(
+					consistency_mode,
 					bucket_id,
 					start,
 					Some(ObjectFilter::IsUploading {
@@ -196,7 +214,10 @@ impl<'a> BucketHelper<'a> {
 				.collect::<Vec<_>>();
 
 			ret += abortions.len();
-			self.0.object_table.insert_many(abortions).await?;
+			self.0
+				.object_table
+				.insert_many(consistency_mode, abortions)
+				.await?;
 
 			if objects.len() < 1000 {
 				break;

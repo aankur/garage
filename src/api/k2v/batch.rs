@@ -17,7 +17,10 @@ pub async fn handle_insert_batch(
 	req: Request<ReqBody>,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
 	let items = parse_json_body::<Vec<InsertBatchItem>, _, Error>(req).await?;
 
@@ -35,7 +38,11 @@ pub async fn handle_insert_batch(
 		items2.push((it.pk, it.sk, ct, v));
 	}
 
-	garage.k2v.rpc.insert_batch(*bucket_id, items2).await?;
+	garage
+		.k2v
+		.rpc
+		.insert_batch(*bucket_params.consistency_mode.get(), *bucket_id, items2)
+		.await?;
 
 	Ok(Response::builder()
 		.status(StatusCode::NO_CONTENT)
@@ -68,8 +75,12 @@ async fn handle_read_batch_query(
 	query: ReadBatchQuery,
 ) -> Result<ReadBatchResponse, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let partition = K2VItemPartition {
 		bucket_id: *bucket_id,
@@ -92,7 +103,7 @@ async fn handle_read_batch_query(
 		let item = garage
 			.k2v
 			.item_table
-			.get(&partition, sk)
+			.get(c, &partition, sk)
 			.await?
 			.filter(|e| K2VItemTable::matches_filter(e, &filter));
 		match item {
@@ -109,6 +120,7 @@ async fn handle_read_batch_query(
 			query.limit,
 			Some(filter),
 			EnumerationOrder::from_reverse(query.reverse),
+			c,
 		)
 		.await?;
 
@@ -162,8 +174,12 @@ async fn handle_delete_batch_query(
 	query: DeleteBatchQuery,
 ) -> Result<DeleteBatchResponse, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let partition = K2VItemPartition {
 		bucket_id: *bucket_id,
@@ -186,7 +202,7 @@ async fn handle_delete_batch_query(
 		let item = garage
 			.k2v
 			.item_table
-			.get(&partition, sk)
+			.get(c, &partition, sk)
 			.await?
 			.filter(|e| K2VItemTable::matches_filter(e, &filter));
 		match item {
@@ -196,6 +212,7 @@ async fn handle_delete_batch_query(
 					.k2v
 					.rpc
 					.insert(
+						c,
 						*bucket_id,
 						i.partition.partition_key,
 						i.sort_key,
@@ -217,6 +234,7 @@ async fn handle_delete_batch_query(
 			None,
 			Some(filter),
 			EnumerationOrder::Forward,
+			c,
 		)
 		.await?;
 		assert!(!more);
@@ -236,7 +254,7 @@ async fn handle_delete_batch_query(
 			.collect::<Vec<_>>();
 		let n = items.len();
 
-		garage.k2v.rpc.insert_batch(*bucket_id, items).await?;
+		garage.k2v.rpc.insert_batch(c, *bucket_id, items).await?;
 
 		n
 	};
@@ -257,7 +275,10 @@ pub(crate) async fn handle_poll_range(
 	req: Request<ReqBody>,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = ctx;
 	use garage_model::k2v::sub::PollRange;
 
@@ -269,6 +290,7 @@ pub(crate) async fn handle_poll_range(
 		.k2v
 		.rpc
 		.poll_range(
+			*bucket_params.consistency_mode.get(),
 			PollRange {
 				partition: K2VItemPartition {
 					bucket_id,

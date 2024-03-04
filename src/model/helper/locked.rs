@@ -56,7 +56,11 @@ impl<'a> LockedHelper<'a> {
 
 		let mut bucket = self.bucket().get_existing_bucket(bucket_id).await?;
 
-		let alias = self.0.bucket_alias_table.get(&EmptyKey, alias_name).await?;
+		let alias = self
+			.0
+			.bucket_alias_table
+			.get((), &EmptyKey, alias_name)
+			.await?;
 
 		if let Some(existing_alias) = alias.as_ref() {
 			if let Some(p_bucket) = existing_alias.state.get() {
@@ -88,10 +92,10 @@ impl<'a> LockedHelper<'a> {
 				a
 			}
 		};
-		self.0.bucket_alias_table.insert(&alias).await?;
+		self.0.bucket_alias_table.insert((), &alias).await?;
 
 		bucket_p.aliases = LwwMap::raw_item(alias_name.clone(), alias_ts, true);
-		self.0.bucket_table.insert(&bucket).await?;
+		self.0.bucket_table.insert((), &bucket).await?;
 
 		Ok(())
 	}
@@ -112,7 +116,7 @@ impl<'a> LockedHelper<'a> {
 		let mut alias = self
 			.0
 			.bucket_alias_table
-			.get(&EmptyKey, alias_name)
+			.get((), &EmptyKey, alias_name)
 			.await?
 			.filter(|a| a.state.get().map(|x| x == bucket_id).unwrap_or(false))
 			.ok_or_message(format!(
@@ -144,10 +148,10 @@ impl<'a> LockedHelper<'a> {
 		// writes are now done and all writes use timestamp alias_ts
 
 		alias.state = Lww::raw(alias_ts, None);
-		self.0.bucket_alias_table.insert(&alias).await?;
+		self.0.bucket_alias_table.insert((), &alias).await?;
 
 		bucket_state.aliases = LwwMap::raw_item(alias_name.clone(), alias_ts, false);
-		self.0.bucket_table.insert(&bucket).await?;
+		self.0.bucket_table.insert((), &bucket).await?;
 
 		Ok(())
 	}
@@ -168,7 +172,7 @@ impl<'a> LockedHelper<'a> {
 		let mut alias = self
 			.0
 			.bucket_alias_table
-			.get(&EmptyKey, alias_name)
+			.get((), &EmptyKey, alias_name)
 			.await?
 			.ok_or_else(|| Error::NoSuchBucket(alias_name.to_string()))?;
 
@@ -186,12 +190,12 @@ impl<'a> LockedHelper<'a> {
 
 		if alias.state.get() == &Some(bucket_id) {
 			alias.state = Lww::raw(alias_ts, None);
-			self.0.bucket_alias_table.insert(&alias).await?;
+			self.0.bucket_alias_table.insert((), &alias).await?;
 		}
 
 		if let Some(bucket_state) = bucket.state.as_option_mut() {
 			bucket_state.aliases = LwwMap::raw_item(alias_name.clone(), alias_ts, false);
-			self.0.bucket_table.insert(&bucket).await?;
+			self.0.bucket_table.insert((), &bucket).await?;
 		}
 
 		Ok(())
@@ -245,10 +249,10 @@ impl<'a> LockedHelper<'a> {
 		// writes are now done and all writes use timestamp alias_ts
 
 		key_param.local_aliases = LwwMap::raw_item(alias_name.clone(), alias_ts, Some(bucket_id));
-		self.0.key_table.insert(&key).await?;
+		self.0.key_table.insert((), &key).await?;
 
 		bucket_p.local_aliases = LwwMap::raw_item(bucket_p_local_alias_key, alias_ts, true);
-		self.0.bucket_table.insert(&bucket).await?;
+		self.0.bucket_table.insert((), &bucket).await?;
 
 		Ok(())
 	}
@@ -317,10 +321,10 @@ impl<'a> LockedHelper<'a> {
 		// writes are now done and all writes use timestamp alias_ts
 
 		key_param.local_aliases = LwwMap::raw_item(alias_name.clone(), alias_ts, None);
-		self.0.key_table.insert(&key).await?;
+		self.0.key_table.insert((), &key).await?;
 
 		bucket_p.local_aliases = LwwMap::raw_item(bucket_p_local_alias_key, alias_ts, false);
-		self.0.bucket_table.insert(&bucket).await?;
+		self.0.bucket_table.insert((), &bucket).await?;
 
 		Ok(())
 	}
@@ -365,12 +369,12 @@ impl<'a> LockedHelper<'a> {
 
 		if let Some(bstate) = bucket.state.as_option_mut() {
 			bstate.authorized_keys = Map::put_mutator(key_id.clone(), perm);
-			self.0.bucket_table.insert(&bucket).await?;
+			self.0.bucket_table.insert((), &bucket).await?;
 		}
 
 		if let Some(kstate) = key.state.as_option_mut() {
 			kstate.authorized_buckets = Map::put_mutator(bucket_id, perm);
-			self.0.key_table.insert(&key).await?;
+			self.0.key_table.insert((), &key).await?;
 		}
 
 		Ok(())
@@ -403,7 +407,7 @@ impl<'a> LockedHelper<'a> {
 
 		// 3. Actually delete key
 		key.state = Deletable::delete();
-		self.0.key_table.insert(key).await?;
+		self.0.key_table.insert((), key).await?;
 
 		Ok(())
 	}

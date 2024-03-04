@@ -370,7 +370,7 @@ pub async fn verify_v4(
 
 	let key = garage
 		.key_table
-		.get(&EmptyKey, &auth.key_id)
+		.get((), &EmptyKey, &auth.key_id)
 		.await?
 		.filter(|k| !k.state.is_deleted())
 		.ok_or_else(|| Error::forbidden(format!("No such key: {}", &auth.key_id)))?;

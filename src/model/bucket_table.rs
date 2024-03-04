@@ -1,3 +1,4 @@
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_table::crdt::*;
 use garage_table::*;
 use garage_util::data::*;
@@ -119,7 +120,94 @@ mod v08 {
 	impl garage_util::migrate::InitialFormat for Bucket {}
 }
 
-pub use v08::*;
+mod v011 {
+	use super::v08;
+	pub use super::v08::{
+		BucketQuotas, CorsRule, LifecycleExpiration, LifecycleFilter, LifecycleRule, WebsiteConfig,
+	};
+	use crate::permission::BucketKeyPerm;
+	use garage_rpc::replication_mode::ConsistencyMode;
+	use garage_util::crdt;
+	use garage_util::data::Uuid;
+	use serde::{Deserialize, Serialize};
+
+	/// A bucket is a collection of objects
+	///
+	/// Its parameters are not directly accessible as:
+	///  - It must be possible to merge paramaters, hence the use of a LWW CRDT.
+	///  - A bucket has 2 states, Present or Deleted and parameters make sense only if present.
+	#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+	pub struct Bucket {
+		/// ID of the bucket
+		pub id: Uuid,
+		/// State, and configuration if not deleted, of the bucket
+		pub state: crdt::Deletable<BucketParams>,
+	}
+
+	/// Configuration for a bucket
+	#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+	pub struct BucketParams {
+		/// Bucket's creation date
+		pub creation_date: u64,
+		/// Map of key with access to the bucket, and what kind of access they give
+		pub authorized_keys: crdt::Map<String, BucketKeyPerm>,
+
+		/// Map of aliases that are or have been given to this bucket
+		/// in the global namespace
+		/// (not authoritative: this is just used as an indication to
+		/// map back to aliases when doing ListBuckets)
+		pub aliases: crdt::LwwMap<String, bool>,
+		/// Map of aliases that are or have been given to this bucket
+		/// in namespaces local to keys
+		/// key = (access key id, alias name)
+		pub local_aliases: crdt::LwwMap<(String, String), bool>,
+
+		/// Whether to enable read-after-write consistency for this bucket
+		pub consistency_mode: crdt::Lww<ConsistencyMode>,
+		/// Whether this bucket is allowed for website access
+		/// (under all of its global alias names),
+		/// and if so, the website configuration XML document
+		pub website_config: crdt::Lww<Option<WebsiteConfig>>,
+		/// CORS rules
+		pub cors_config: crdt::Lww<Option<Vec<CorsRule>>>,
+		/// Lifecycle configuration
+		#[serde(default)]
+		pub lifecycle_config: crdt::Lww<Option<Vec<LifecycleRule>>>,
+		/// Bucket quotas
+		#[serde(default)]
+		pub quotas: crdt::Lww<BucketQuotas>,
+	}
+
+	impl garage_util::migrate::Migrate for Bucket {
+		const VERSION_MARKER: &'static [u8] = b"G011lh";
+
+		type Previous = v08::Bucket;
+
+		fn migrate(previous: Self::Previous) -> Self {
+			Self {
+				id: previous.id,
+				state: match previous.state {
+					crdt::Deletable::Present(prev_state) => {
+						crdt::Deletable::Present(BucketParams {
+							creation_date: prev_state.creation_date,
+							authorized_keys: prev_state.authorized_keys,
+							aliases: prev_state.aliases,
+							local_aliases: prev_state.local_aliases,
+							website_config: prev_state.website_config,
+							cors_config: prev_state.cors_config,
+							lifecycle_config: prev_state.lifecycle_config,
+							quotas: prev_state.quotas,
+							consistency_mode: crdt::Lww::new(ConsistencyMode::Consistent),
+						})
+					}
+					crdt::Deletable::Deleted => crdt::Deletable::Deleted,
+				},
+			}
+		}
+	}
+}
+
+pub use v011::*;
 
 impl AutoCrdt for BucketQuotas {
 	const WARN_IF_DIFFERENT: bool = true;
@@ -133,6 +221,7 @@ impl BucketParams {
 			authorized_keys: crdt::Map::new(),
 			aliases: crdt::LwwMap::new(),
 			local_aliases: crdt::LwwMap::new(),
+			consistency_mode: crdt::Lww::new(ConsistencyMode::Consistent),
 			website_config: crdt::Lww::new(None),
 			cors_config: crdt::Lww::new(None),
 			lifecycle_config: crdt::Lww::new(None),

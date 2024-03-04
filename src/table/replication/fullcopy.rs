@@ -25,6 +25,7 @@ pub struct TableFullReplication {
 
 impl TableReplication for TableFullReplication {
 	type WriteSets = Vec<Vec<Uuid>>;
+	type ConsistencyParam = ();
 
 	fn storage_nodes(&self, _hash: &Hash) -> Vec<Uuid> {
 		let layout = self.system.cluster_layout();
@@ -34,14 +35,14 @@ impl TableReplication for TableFullReplication {
 	fn read_nodes(&self, _hash: &Hash) -> Vec<Uuid> {
 		vec![self.system.id]
 	}
-	fn read_quorum(&self) -> usize {
+	fn read_quorum(&self, _: ()) -> usize {
 		1
 	}
 
 	fn write_sets(&self, hash: &Hash) -> Self::WriteSets {
 		vec![self.storage_nodes(hash)]
 	}
-	fn write_quorum(&self) -> usize {
+	fn write_quorum(&self, _: ()) -> usize {
 		let nmembers = self.system.cluster_layout().current().all_nodes().len();
 
 		let max_faults = if nmembers > 1 { 1 } else { 0 };

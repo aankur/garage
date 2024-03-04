@@ -5,6 +5,7 @@ use futures::prelude::*;
 use hyper::{Request, Response};
 use md5::{Digest as Md5Digest, Md5};
 
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_table::*;
 use garage_util::data::*;
 
@@ -32,9 +33,12 @@ pub async fn handle_create_multipart_upload(
 		garage,
 		bucket_id,
 		bucket_name,
+		bucket_params,
 		..
 	} = &ctx;
-	let existing_object = garage.object_table.get(&bucket_id, &key).await?;
+	let c = *bucket_params.consistency_mode.get();
+
+	let existing_object = garage.object_table.get(c, &bucket_id, key).await?;
 
 	let upload_id = gen_uuid();
 	let timestamp = next_timestamp(existing_object.as_ref());
@@ -51,13 +55,13 @@ pub async fn handle_create_multipart_upload(
 		},
 	};
 	let object = Object::new(*bucket_id, key.to_string(), vec![object_version]);
-	garage.object_table.insert(&object).await?;
+	garage.object_table.insert(c, &object).await?;
 
 	// Create multipart upload in mpu table
 	// This multipart upload will hold references to uploaded parts
 	// (which are entries in the Version table)
 	let mpu = MultipartUpload::new(upload_id, timestamp, *bucket_id, key.into(), false);
-	garage.mpu_table.insert(&mpu).await?;
+	garage.mpu_table.insert(c, &mpu).await?;
 
 	// Send success response
 	let result = s3_xml::InitiateMultipartUploadResult {
@@ -79,7 +83,12 @@ pub async fn handle_put_part(
 	upload_id: &str,
 	content_sha256: Option<Hash>,
 ) -> Result<Response<ResBody>, Error> {
-	let ReqCtx { garage, .. } = &ctx;
+	let ReqCtx {
+		garage,
+		bucket_params,
+		..
+	} = &ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let upload_id = decode_upload_id(upload_id)?;
 
@@ -112,6 +121,7 @@ pub async fn handle_put_part(
 	// before everything is finished (cleanup is done using the Drop trait).
 	let mut interrupted_cleanup = InterruptedCleanup(Some(InterruptedCleanupInner {
 		garage: garage.clone(),
+		consistency_mode: c,
 		upload_id,
 		version_uuid,
 	}));
@@ -126,14 +136,14 @@ pub async fn handle_put_part(
 			size: None,
 		},
 	);
-	garage.mpu_table.insert(&mpu).await?;
+	garage.mpu_table.insert(c, &mpu).await?;
 
 	let version = Version::new(
 		version_uuid,
 		VersionBacklink::MultipartUpload { upload_id },
 		false,
 	);
-	garage.version_table.insert(&version).await?;
+	garage.version_table.insert(c, &version).await?;
 
 	// Copy data to version
 	let (total_size, data_md5sum, data_sha256sum, _) =
@@ -157,7 +167,7 @@ pub async fn handle_put_part(
 			size: Some(total_size),
 		},
 	);
-	garage.mpu_table.insert(&mpu).await?;
+	garage.mpu_table.insert(c, &mpu).await?;
 
 	// We were not interrupted, everything went fine.
 	// We won't have to clean up on drop.
@@ -173,6 +183,7 @@ pub async fn handle_put_part(
 struct InterruptedCleanup(Option<InterruptedCleanupInner>);
 struct InterruptedCleanupInner {
 	garage: Arc<Garage>,
+	consistency_mode: ConsistencyMode,
 	upload_id: Uuid,
 	version_uuid: Uuid,
 }
@@ -193,7 +204,12 @@ impl Drop for InterruptedCleanup {
 					},
 					true,
 				);
-				if let Err(e) = info.garage.version_table.insert(&version).await {
+				if let Err(e) = info
+					.garage
+					.version_table
+					.insert(info.consistency_mode, &version)
+					.await
+				{
 					warn!("Cannot cleanup after aborted UploadPart: {}", e);
 				}
 			});
@@ -212,8 +228,10 @@ pub async fn handle_complete_multipart_upload(
 		garage,
 		bucket_id,
 		bucket_name,
+		bucket_params,
 		..
 	} = &ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let body = http_body_util::BodyExt::collect(req.into_body())
 		.await?
@@ -279,7 +297,7 @@ pub async fn handle_complete_multipart_upload(
 	let grg = &garage;
 	let parts_versions = futures::future::try_join_all(parts.iter().map(|p| async move {
 		grg.version_table
-			.get(&p.version, &EmptyKey)
+			.get(c, &p.version, &EmptyKey)
 			.await?
 			.ok_or_internal_error("Part version missing from version table")
 	}))
@@ -308,14 +326,14 @@ pub async fn handle_complete_multipart_upload(
 			);
 		}
 	}
-	garage.version_table.insert(&final_version).await?;
+	garage.version_table.insert(c, &final_version).await?;
 
 	let block_refs = final_version.blocks.items().iter().map(|(_, b)| BlockRef {
 		block: b.hash,
 		version: upload_id,
 		deleted: false.into(),
 	});
-	garage.block_ref_table.insert_many(block_refs).await?;
+	garage.block_ref_table.insert_many(c, block_refs).await?;
 
 	// Calculate etag of final object
 	// To understand how etags are calculated, read more here:
@@ -336,7 +354,7 @@ pub async fn handle_complete_multipart_upload(
 	if let Err(e) = check_quotas(&ctx, total_size, Some(&object)).await {
 		object_version.state = ObjectVersionState::Aborted;
 		let final_object = Object::new(*bucket_id, key.clone(), vec![object_version]);
-		garage.object_table.insert(&final_object).await?;
+		garage.object_table.insert(c, &final_object).await?;
 
 		return Err(e);
 	}
@@ -352,7 +370,7 @@ pub async fn handle_complete_multipart_upload(
 	));
 
 	let final_object = Object::new(*bucket_id, key.clone(), vec![object_version]);
-	garage.object_table.insert(&final_object).await?;
+	garage.object_table.insert(c, &final_object).await?;
 
 	// Send response saying ok we're done
 	let result = s3_xml::CompleteMultipartUploadResult {
@@ -373,8 +391,12 @@ pub async fn handle_abort_multipart_upload(
 	upload_id: &str,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let upload_id = decode_upload_id(upload_id)?;
 
@@ -382,7 +404,7 @@ pub async fn handle_abort_multipart_upload(
 
 	object_version.state = ObjectVersionState::Aborted;
 	let final_object = Object::new(*bucket_id, key.to_string(), vec![object_version]);
-	garage.object_table.insert(&final_object).await?;
+	garage.object_table.insert(c, &final_object).await?;
 
 	Ok(Response::new(empty_body()))
 }
@@ -396,13 +418,21 @@ pub(crate) async fn get_upload(
 	upload_id: &Uuid,
 ) -> Result<(Object, ObjectVersion, MultipartUpload), Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = ctx;
+	let c = *bucket_params.consistency_mode.get();
+
 	let (object, mpu) = futures::try_join!(
-		garage.object_table.get(bucket_id, key).map_err(Error::from),
+		garage
+			.object_table
+			.get(c, bucket_id, key)
+			.map_err(Error::from),
 		garage
 			.mpu_table
-			.get(upload_id, &EmptyKey)
+			.get(c, upload_id, &EmptyKey)
 			.map_err(Error::from),
 	)?;
 

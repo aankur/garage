@@ -17,6 +17,7 @@ pub async fn handle_list_keys(garage: &Arc<Garage>) -> Result<Response<ResBody>,
 	let res = garage
 		.key_table
 		.get_range(
+			(),
 			&EmptyKey,
 			None,
 			Some(KeyFilter::Deleted(DeletedFilter::NotDeleted)),
@@ -68,7 +69,7 @@ pub async fn handle_create_key(
 	let req = parse_json_body::<CreateKeyRequest, _, Error>(req).await?;
 
 	let key = Key::new(req.name.as_deref().unwrap_or("Unnamed key"));
-	garage.key_table.insert(&key).await?;
+	garage.key_table.insert((), &key).await?;
 
 	key_info_results(garage, key, true).await
 }
@@ -85,7 +86,10 @@ pub async fn handle_import_key(
 ) -> Result<Response<ResBody>, Error> {
 	let req = parse_json_body::<ImportKeyRequest, _, Error>(req).await?;
 
-	let prev_key = garage.key_table.get(&EmptyKey, &req.access_key_id).await?;
+	let prev_key = garage
+		.key_table
+		.get((), &EmptyKey, &req.access_key_id)
+		.await?;
 	if prev_key.is_some() {
 		return Err(Error::KeyAlreadyExists(req.access_key_id.to_string()));
 	}
@@ -96,7 +100,7 @@ pub async fn handle_import_key(
 		req.name.as_deref().unwrap_or("Imported key"),
 	)
 	.ok_or_bad_request("Invalid key format")?;
-	garage.key_table.insert(&imported_key).await?;
+	garage.key_table.insert((), &imported_key).await?;
 
 	key_info_results(garage, imported_key, false).await
 }
@@ -134,7 +138,7 @@ pub async fn handle_update_key(
 		}
 	}
 
-	garage.key_table.insert(&key).await?;
+	garage.key_table.insert((), &key).await?;
 
 	key_info_results(garage, key, false).await
 }
@@ -184,7 +188,7 @@ async fn key_info_results(
 				.filter_map(|(_, _, v)| v.as_ref()),
 		) {
 		if !relevant_buckets.contains_key(id) {
-			if let Some(b) = garage.bucket_table.get(&EmptyKey, id).await? {
+			if let Some(b) = garage.bucket_table.get((), &EmptyKey, id).await? {
 				if b.state.as_option().is_some() {
 					relevant_buckets.insert(*id, b);
 				}

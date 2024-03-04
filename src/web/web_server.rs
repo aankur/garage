@@ -28,6 +28,7 @@ use garage_api::s3::error::{
 };
 use garage_api::s3::get::{handle_get_without_ctx, handle_head_without_ctx};
 
+use garage_model::bucket_table::BucketParams;
 use garage_model::garage::Garage;
 
 use garage_table::*;
@@ -182,11 +183,20 @@ impl WebServer {
 		}
 	}
 
-	async fn check_key_exists(self: &Arc<Self>, bucket_id: Uuid, key: &str) -> Result<bool, Error> {
+	async fn check_key_exists(
+		self: &Arc<Self>,
+		bucket_id: Uuid,
+		bucket_params: &BucketParams,
+		key: &str,
+	) -> Result<bool, Error> {
 		let exists = self
 			.garage
 			.object_table
-			.get(&bucket_id, &key.to_string())
+			.get(
+				*bucket_params.consistency_mode.get(),
+				&bucket_id,
+				&key.to_string(),
+			)
 			.await?
 			.map(|object| object.versions().iter().any(|v| v.is_data()))
 			.unwrap_or(false);
@@ -211,7 +221,7 @@ impl WebServer {
 		let bucket_id = self
 			.garage
 			.bucket_alias_table
-			.get(&EmptyKey, &bucket_name.to_string())
+			.get((), &EmptyKey, &bucket_name.to_string())
 			.await?
 			.and_then(|x| x.state.take())
 			.ok_or(Error::NotFound)?;
@@ -246,13 +256,22 @@ impl WebServer {
 				.map_err(ApiError::from)
 				.map(|res| res.map(|_empty_body: EmptyBody| empty_body())),
 			Method::HEAD => {
-				handle_head_without_ctx(self.garage.clone(), req, bucket_id, &key, None).await
+				handle_head_without_ctx(
+					self.garage.clone(),
+					req,
+					bucket_id,
+					&bucket_params,
+					&key,
+					None,
+				)
+				.await
 			}
 			Method::GET => {
 				handle_get_without_ctx(
 					self.garage.clone(),
 					req,
 					bucket_id,
+					&bucket_params,
 					&key,
 					None,
 					Default::default(),
@@ -265,7 +284,9 @@ impl WebServer {
 		// Try implicit redirect on error
 		let ret_doc_with_redir = match (&ret_doc, may_redirect) {
 			(Err(ApiError::NoSuchKey), ImplicitRedirect::To { key, url })
-				if self.check_key_exists(bucket_id, key.as_str()).await? =>
+				if self
+					.check_key_exists(bucket_id, &bucket_params, key.as_str())
+					.await? =>
 			{
 				Ok(Response::builder()
 					.status(StatusCode::FOUND)
@@ -306,6 +327,7 @@ impl WebServer {
 					self.garage.clone(),
 					&req2,
 					bucket_id,
+					&bucket_params,
 					&error_document,
 					None,
 					Default::default(),

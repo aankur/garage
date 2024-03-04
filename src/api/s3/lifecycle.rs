@@ -44,7 +44,7 @@ pub async fn handle_delete_lifecycle(ctx: ReqCtx) -> Result<Response<ResBody>, E
 	bucket_params.lifecycle_config.update(None);
 	garage
 		.bucket_table
-		.insert(&Bucket::present(bucket_id, bucket_params))
+		.insert((), &Bucket::present(bucket_id, bucket_params))
 		.await?;
 
 	Ok(Response::builder()
@@ -78,7 +78,7 @@ pub async fn handle_put_lifecycle(
 	bucket_params.lifecycle_config.update(Some(config));
 	garage
 		.bucket_table
-		.insert(&Bucket::present(bucket_id, bucket_params))
+		.insert((), &Bucket::present(bucket_id, bucket_params))
 		.await?;
 
 	Ok(Response::builder()

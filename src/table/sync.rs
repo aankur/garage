@@ -118,7 +118,7 @@ impl<F: TableSchema, R: TableReplication> TableSyncer<F, R> {
 			);
 			let mut result_tracker = QuorumSetResultTracker::new(
 				&partition.storage_sets,
-				self.data.replication.write_quorum(),
+				self.data.replication.write_quorum(Default::default()),
 			);
 
 			let mut sync_futures = result_tracker
@@ -190,7 +190,7 @@ impl<F: TableSchema, R: TableReplication> TableSyncer<F, R> {
 					);
 					break;
 				}
-				if nodes.len() < self.data.replication.write_quorum() {
+				if nodes.len() < self.data.replication.write_quorum(Default::default()) {
 					return Err(Error::Message(
 						"Not offloading as we don't have a quorum of nodes to write to."
 							.to_string(),

@@ -70,10 +70,10 @@ pub async fn handle_list_buckets(
 	let mut aliases = HashMap::new();
 
 	for bucket_id in ids.iter() {
-		let bucket = garage.bucket_table.get(&EmptyKey, bucket_id).await?;
+		let bucket = garage.bucket_table.get((), &EmptyKey, bucket_id).await?;
 		if let Some(bucket) = bucket {
 			for (alias, _, _active) in bucket.aliases().iter().filter(|(_, _, active)| *active) {
-				let alias_opt = garage.bucket_alias_table.get(&EmptyKey, alias).await?;
+				let alias_opt = garage.bucket_alias_table.get((), &EmptyKey, alias).await?;
 				if let Some(alias_ent) = alias_opt {
 					if *alias_ent.state.get() == Some(*bucket_id) {
 						aliases.insert(alias_ent.name().to_string(), *bucket_id);
@@ -187,7 +187,7 @@ pub async fn handle_create_bucket(
 		}
 
 		let bucket = Bucket::new();
-		garage.bucket_table.insert(&bucket).await?;
+		garage.bucket_table.insert((), &bucket).await?;
 
 		helper
 			.set_bucket_key_permissions(bucket.id, &api_key.key_id, BucketKeyPerm::ALL_PERMISSIONS)
@@ -268,7 +268,7 @@ pub async fn handle_delete_bucket(ctx: ReqCtx) -> Result<Response<ResBody>, Erro
 			state: Deletable::delete(),
 		};
 		// 3. delete bucket
-		garage.bucket_table.insert(&bucket).await?;
+		garage.bucket_table.insert((), &bucket).await?;
 	} else if is_local_alias {
 		// Just unalias
 		helper

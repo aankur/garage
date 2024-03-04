@@ -14,11 +14,13 @@ use hyper::{body::Body, Request, Response, StatusCode};
 use tokio::sync::mpsc;
 
 use garage_net::stream::ByteStream;
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_rpc::rpc_helper::OrderTag;
 use garage_table::EmptyKey;
 use garage_util::data::*;
 use garage_util::error::OkOrMessage;
 
+use garage_model::bucket_table::BucketParams;
 use garage_model::garage::Garage;
 use garage_model::s3::object_table::*;
 use garage_model::s3::version_table::*;
@@ -136,7 +138,15 @@ pub async fn handle_head(
 	key: &str,
 	part_number: Option<u64>,
 ) -> Result<Response<ResBody>, Error> {
-	handle_head_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number).await
+	handle_head_without_ctx(
+		ctx.garage,
+		req,
+		ctx.bucket_id,
+		&ctx.bucket_params,
+		key,
+		part_number,
+	)
+	.await
 }
 
 /// Handle HEAD request for website
@@ -144,12 +154,15 @@ pub async fn handle_head_without_ctx(
 	garage: Arc<Garage>,
 	req: &Request<impl Body>,
 	bucket_id: Uuid,
+	bucket_params: &BucketParams,
 	key: &str,
 	part_number: Option<u64>,
 ) -> Result<Response<ResBody>, Error> {
+	let c = *bucket_params.consistency_mode.get();
+
 	let object = garage
 		.object_table
-		.get(&bucket_id, &key.to_string())
+		.get(c, &bucket_id, &key.to_string())
 		.await?
 		.ok_or(Error::NoSuchKey)?;
 
@@ -194,7 +207,7 @@ pub async fn handle_head_without_ctx(
 			ObjectVersionData::FirstBlock(_, _) => {
 				let version = garage
 					.version_table
-					.get(&object_version.uuid, &EmptyKey)
+					.get(c, &object_version.uuid, &EmptyKey)
 					.await?
 					.ok_or(Error::NoSuchKey)?;
 
@@ -234,7 +247,16 @@ pub async fn handle_get(
 	part_number: Option<u64>,
 	overrides: GetObjectOverrides,
 ) -> Result<Response<ResBody>, Error> {
-	handle_get_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number, overrides).await
+	handle_get_without_ctx(
+		ctx.garage,
+		req,
+		ctx.bucket_id,
+		&ctx.bucket_params,
+		key,
+		part_number,
+		overrides,
+	)
+	.await
 }
 
 /// Handle GET request
@@ -242,13 +264,16 @@ pub async fn handle_get_without_ctx(
 	garage: Arc<Garage>,
 	req: &Request<impl Body>,
 	bucket_id: Uuid,
+	bucket_params: &BucketParams,
 	key: &str,
 	part_number: Option<u64>,
 	overrides: GetObjectOverrides,
 ) -> Result<Response<ResBody>, Error> {
+	let c = *bucket_params.consistency_mode.get();
+
 	let object = garage
 		.object_table
-		.get(&bucket_id, &key.to_string())
+		.get(c, &bucket_id, &key.to_string())
 		.await?
 		.ok_or(Error::NoSuchKey)?;
 
@@ -277,10 +302,11 @@ pub async fn handle_get_without_ctx(
 		(Some(_), Some(_)) => Err(Error::bad_request(
 			"Cannot specify both partNumber and Range header",
 		)),
-		(Some(pn), None) => handle_get_part(garage, last_v, last_v_data, last_v_meta, pn).await,
+		(Some(pn), None) => handle_get_part(garage, c, last_v, last_v_data, last_v_meta, pn).await,
 		(None, Some(range)) => {
 			handle_get_range(
 				garage,
+				c,
 				last_v,
 				last_v_data,
 				last_v_meta,
@@ -289,12 +315,15 @@ pub async fn handle_get_without_ctx(
 			)
 			.await
 		}
-		(None, None) => handle_get_full(garage, last_v, last_v_data, last_v_meta, overrides).await,
+		(None, None) => {
+			handle_get_full(garage, c, last_v, last_v_data, last_v_meta, overrides).await
+		}
 	}
 }
 
 async fn handle_get_full(
 	garage: Arc<Garage>,
+	c: ConsistencyMode,
 	version: &ObjectVersion,
 	version_data: &ObjectVersionData,
 	version_meta: &ObjectVersionMeta,
@@ -321,7 +350,7 @@ async fn handle_get_full(
 				match async {
 					let garage2 = garage.clone();
 					let version_fut = tokio::spawn(async move {
-						garage2.version_table.get(&version_uuid, &EmptyKey).await
+						garage2.version_table.get(c, &version_uuid, &EmptyKey).await
 					});
 
 					let stream_block_0 = garage
@@ -362,6 +391,7 @@ async fn handle_get_full(
 
 async fn handle_get_range(
 	garage: Arc<Garage>,
+	c: ConsistencyMode,
 	version: &ObjectVersion,
 	version_data: &ObjectVersionData,
 	version_meta: &ObjectVersionMeta,
@@ -394,7 +424,7 @@ async fn handle_get_range(
 		ObjectVersionData::FirstBlock(_meta, _first_block_hash) => {
 			let version = garage
 				.version_table
-				.get(&version.uuid, &EmptyKey)
+				.get(c, &version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
 
@@ -406,6 +436,7 @@ async fn handle_get_range(
 
 async fn handle_get_part(
 	garage: Arc<Garage>,
+	c: ConsistencyMode,
 	object_version: &ObjectVersion,
 	version_data: &ObjectVersionData,
 	version_meta: &ObjectVersionMeta,
@@ -432,7 +463,7 @@ async fn handle_get_part(
 		ObjectVersionData::FirstBlock(_, _) => {
 			let version = garage
 				.version_table
-				.get(&object_version.uuid, &EmptyKey)
+				.get(c, &object_version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
 

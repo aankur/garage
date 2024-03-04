@@ -49,7 +49,7 @@ pub async fn handle_delete_website(ctx: ReqCtx) -> Result<Response<ResBody>, Err
 	bucket_params.website_config.update(None);
 	garage
 		.bucket_table
-		.insert(&Bucket::present(bucket_id, bucket_params))
+		.insert((), &Bucket::present(bucket_id, bucket_params))
 		.await?;
 
 	Ok(Response::builder()
@@ -83,7 +83,7 @@ pub async fn handle_put_website(
 		.update(Some(conf.into_garage_website_config()?));
 	garage
 		.bucket_table
-		.insert(&Bucket::present(bucket_id, bucket_params))
+		.insert((), &Bucket::present(bucket_id, bucket_params))
 		.await?;
 
 	Ok(Response::builder()

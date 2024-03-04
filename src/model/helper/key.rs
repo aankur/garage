@@ -16,7 +16,7 @@ impl<'a> KeyHelper<'a> {
 		Ok(self
 			.0
 			.key_table
-			.get(&EmptyKey, key_id)
+			.get((), &EmptyKey, key_id)
 			.await?
 			.ok_or_message(format!("Key {} does not exist", key_id))?)
 	}
@@ -28,7 +28,7 @@ impl<'a> KeyHelper<'a> {
 	pub async fn get_existing_key(&self, key_id: &String) -> Result<Key, Error> {
 		self.0
 			.key_table
-			.get(&EmptyKey, key_id)
+			.get((), &EmptyKey, key_id)
 			.await?
 			.filter(|b| !b.state.is_deleted())
 			.ok_or_else(|| Error::NoSuchAccessKey(key_id.to_string()))
@@ -44,6 +44,7 @@ impl<'a> KeyHelper<'a> {
 			.0
 			.key_table
 			.get_range(
+				(),
 				&EmptyKey,
 				None,
 				Some(KeyFilter::MatchesAndNotDeleted(pattern.to_string())),

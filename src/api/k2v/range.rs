@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_table::replication::TableShardedReplication;
 use garage_table::*;
 
@@ -22,6 +23,7 @@ pub(crate) async fn read_range<F>(
 	limit: Option<u64>,
 	filter: Option<F::Filter>,
 	enumeration_order: EnumerationOrder,
+	c: ConsistencyMode,
 ) -> Result<(Vec<F::E>, bool, Option<String>), Error>
 where
 	F: TableSchema<S = String> + 'static,
@@ -54,6 +56,7 @@ where
 		);
 		let get_ret = table
 			.get_range(
+				c,
 				partition_key,
 				start.clone(),
 				filter.clone(),

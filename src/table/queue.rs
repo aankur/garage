@@ -51,7 +51,7 @@ impl<F: TableSchema, R: TableReplication> Worker for InsertQueueWorker<F, R> {
 			return Ok(WorkerState::Idle);
 		}
 
-		self.0.insert_many(values).await?;
+		self.0.insert_many(Default::default(), values).await?;
 
 		self.0.data.insert_queue.db().transaction(|tx| {
 			for (k, v) in kv_pairs.iter() {

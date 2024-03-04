@@ -10,6 +10,8 @@ use garage_util::time::*;
 
 use garage_table::*;
 
+use garage_rpc::replication_mode::ConsistencyMode;
+
 use garage_model::bucket_alias_table::*;
 use garage_model::bucket_table::*;
 use garage_model::garage::Garage;
@@ -27,6 +29,7 @@ pub async fn handle_list_buckets(garage: &Arc<Garage>) -> Result<Response<ResBod
 	let buckets = garage
 		.bucket_table
 		.get_range(
+			(),
 			&EmptyKey,
 			None,
 			Some(DeletedFilter::NotDeleted),
@@ -117,11 +120,13 @@ async fn bucket_info_results(
 		.bucket_helper()
 		.get_existing_bucket(bucket_id)
 		.await?;
+	let bucket_state = bucket.state.as_option().unwrap();
+	let c = *bucket_state.consistency_mode.get();
 
 	let counters = garage
 		.object_counter_table
 		.table
-		.get(&bucket_id, &EmptyKey)
+		.get(c, &bucket_id, &EmptyKey)
 		.await?
 		.map(|x| x.filtered_values(&garage.system.cluster_layout()))
 		.unwrap_or_default();
@@ -129,7 +134,7 @@ async fn bucket_info_results(
 	let mpu_counters = garage
 		.mpu_counter_table
 		.table
-		.get(&bucket_id, &EmptyKey)
+		.get(c, &bucket_id, &EmptyKey)
 		.await?
 		.map(|x| x.filtered_values(&garage.system.cluster_layout()))
 		.unwrap_or_default();
@@ -145,7 +150,7 @@ async fn bucket_info_results(
 	{
 		if let Some(key) = garage
 			.key_table
-			.get(&EmptyKey, k)
+			.get((), &EmptyKey, k)
 			.await?
 			.filter(|k| !k.is_deleted())
 		{
@@ -165,7 +170,7 @@ async fn bucket_info_results(
 		if relevant_keys.contains_key(k) {
 			continue;
 		}
-		if let Some(key) = garage.key_table.get(&EmptyKey, k).await? {
+		if let Some(key) = garage.key_table.get((), &EmptyKey, k).await? {
 			if !key.state.is_deleted() {
 				relevant_keys.insert(k.clone(), key);
 			}
@@ -185,6 +190,7 @@ async fn bucket_info_results(
 				.filter(|(_, _, a)| *a)
 				.map(|(n, _, _)| n.to_string())
 				.collect::<Vec<_>>(),
+			consistency_mode: *state.consistency_mode.get(),
 			website_access: state.website_config.get().is_some(),
 			website_config: state.website_config.get().clone().map(|wsc| {
 				GetBucketInfoWebsiteResult {
@@ -238,6 +244,7 @@ async fn bucket_info_results(
 struct GetBucketInfoResult {
 	id: String,
 	global_aliases: Vec<String>,
+	consistency_mode: ConsistencyMode,
 	website_access: bool,
 	#[serde(default)]
 	website_config: Option<GetBucketInfoWebsiteResult>,
@@ -283,7 +290,7 @@ pub async fn handle_create_bucket(
 			)));
 		}
 
-		if let Some(alias) = garage.bucket_alias_table.get(&EmptyKey, ga).await? {
+		if let Some(alias) = garage.bucket_alias_table.get((), &EmptyKey, ga).await? {
 			if alias.state.get().is_some() {
 				return Err(CommonError::BucketAlreadyExists.into());
 			}
@@ -306,7 +313,7 @@ pub async fn handle_create_bucket(
 	}
 
 	let bucket = Bucket::new();
-	garage.bucket_table.insert(&bucket).await?;
+	garage.bucket_table.insert((), &bucket).await?;
 
 	if let Some(ga) = &req.global_alias {
 		helper.set_global_bucket_alias(bucket.id, ga).await?;
@@ -394,7 +401,7 @@ pub async fn handle_delete_bucket(
 
 	// 4. delete bucket
 	bucket.state = Deletable::delete();
-	garage.bucket_table.insert(&bucket).await?;
+	garage.bucket_table.insert((), &bucket).await?;
 
 	Ok(Response::builder()
 		.status(StatusCode::NO_CONTENT)
@@ -415,6 +422,10 @@ pub async fn handle_update_bucket(
 		.await?;
 
 	let state = bucket.state.as_option_mut().unwrap();
+
+	if let Some(cm) = req.consistency_mode {
+		state.consistency_mode.update(cm);
+	}
 
 	if let Some(wa) = req.website_access {
 		if wa.enabled {
@@ -441,7 +452,7 @@ pub async fn handle_update_bucket(
 		});
 	}
 
-	garage.bucket_table.insert(&bucket).await?;
+	garage.bucket_table.insert((), &bucket).await?;
 
 	bucket_info_results(garage, bucket_id).await
 }
@@ -449,6 +460,7 @@ pub async fn handle_update_bucket(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateBucketRequest {
+	consistency_mode: Option<ConsistencyMode>,
 	website_access: Option<UpdateBucketWebsiteAccess>,
 	quotas: Option<ApiBucketQuotas>,
 }

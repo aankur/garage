@@ -4,6 +4,7 @@ use garage_util::data::*;
 /// Trait to describe how a table shall be replicated
 pub trait TableReplication: Send + Sync + 'static {
 	type WriteSets: AsRef<Vec<Vec<Uuid>>> + AsMut<Vec<Vec<Uuid>>> + Send + Sync + 'static;
+	type ConsistencyParam: Send + Default;
 
 	// See examples in table_sharded.rs and table_fullcopy.rs
 	// To understand various replication methods
@@ -14,12 +15,12 @@ pub trait TableReplication: Send + Sync + 'static {
 	/// Which nodes to send read requests to
 	fn read_nodes(&self, hash: &Hash) -> Vec<Uuid>;
 	/// Responses needed to consider a read succesfull
-	fn read_quorum(&self) -> usize;
+	fn read_quorum(&self, consistency_param: Self::ConsistencyParam) -> usize;
 
 	/// Which nodes to send writes to
 	fn write_sets(&self, hash: &Hash) -> Self::WriteSets;
 	/// Responses needed to consider a write succesfull in each set
-	fn write_quorum(&self) -> usize;
+	fn write_quorum(&self, consistency_param: Self::ConsistencyParam) -> usize;
 
 	// Accessing partitions, for Merkle tree & sync
 	/// Get partition for data with given hash

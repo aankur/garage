@@ -380,7 +380,12 @@ impl BlockResyncManager {
 				.layout_manager
 				.layout()
 				.storage_nodes_of(hash);
-			if who.len() < manager.system.layout_manager.write_quorum() {
+			if who.len()
+				< manager
+					.system
+					.layout_manager
+					.write_quorum(Default::default())
+			{
 				return Err(Error::Message("Not trying to offload block because we don't have a quorum of nodes to write to".to_string()));
 			}
 			who.retain(|id| *id != manager.system.id);

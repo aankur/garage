@@ -253,7 +253,7 @@ async fn process_object(
 		_ => {
 			match garage
 				.bucket_table
-				.get(&EmptyKey, &object.bucket_id)
+				.get((), &EmptyKey, &object.bucket_id)
 				.await?
 			{
 				Some(b) => b,

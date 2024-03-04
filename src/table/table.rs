@@ -104,11 +104,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		bg.spawn_worker(InsertQueueWorker(self.clone()));
 	}
 
-	pub async fn insert(&self, e: &F::E) -> Result<(), Error> {
+	pub async fn insert(&self, c: R::ConsistencyParam, e: &F::E) -> Result<(), Error> {
 		let tracer = opentelemetry::global::tracer("garage_table");
 		let span = tracer.start(format!("{} insert", F::TABLE_NAME));
 
-		self.insert_internal(e)
+		self.insert_internal(c, e)
 			.bound_record_duration(&self.data.metrics.put_request_duration)
 			.with_context(Context::current_with_span(span))
 			.await?;
@@ -118,7 +118,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		Ok(())
 	}
 
-	async fn insert_internal(&self, e: &F::E) -> Result<(), Error> {
+	async fn insert_internal(&self, c: R::ConsistencyParam, e: &F::E) -> Result<(), Error> {
 		let hash = e.partition_key().hash();
 		let who = self.data.replication.write_sets(&hash);
 
@@ -132,7 +132,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 				who.as_ref(),
 				rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL)
-					.with_quorum(self.data.replication.write_quorum()),
+					.with_quorum(self.data.replication.write_quorum(c)),
 			)
 			.await?;
 
@@ -144,7 +144,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		self.data.queue_insert(tx, e)
 	}
 
-	pub async fn insert_many<I, IE>(self: &Arc<Self>, entries: I) -> Result<(), Error>
+	pub async fn insert_many<I, IE>(
+		self: &Arc<Self>,
+		c: R::ConsistencyParam,
+		entries: I,
+	) -> Result<(), Error>
 	where
 		I: IntoIterator<Item = IE> + Send + Sync,
 		IE: Borrow<F::E> + Send + Sync,
@@ -152,7 +156,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		let tracer = opentelemetry::global::tracer("garage_table");
 		let span = tracer.start(format!("{} insert_many", F::TABLE_NAME));
 
-		self.insert_many_internal(entries)
+		self.insert_many_internal(c, entries)
 			.bound_record_duration(&self.data.metrics.put_request_duration)
 			.with_context(Context::current_with_span(span))
 			.await?;
@@ -162,7 +166,11 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		Ok(())
 	}
 
-	async fn insert_many_internal<I, IE>(self: &Arc<Self>, entries: I) -> Result<(), Error>
+	async fn insert_many_internal<I, IE>(
+		self: &Arc<Self>,
+		c: R::ConsistencyParam,
+		entries: I,
+	) -> Result<(), Error>
 	where
 		I: IntoIterator<Item = IE> + Send + Sync,
 		IE: Borrow<F::E> + Send + Sync,
@@ -181,7 +189,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		// a quorum of nodes has answered OK, then the insert has succeeded and
 		// consistency properties (read-after-write) are preserved.
 
-		let quorum = self.data.replication.write_quorum();
+		let quorum = self.data.replication.write_quorum(c);
 
 		// Serialize all entries and compute the write sets for each of them.
 		// In the case of sharded table replication, this also takes an "ack lock"
@@ -283,6 +291,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 
 	pub async fn get(
 		self: &Arc<Self>,
+		c: R::ConsistencyParam,
 		partition_key: &F::P,
 		sort_key: &F::S,
 	) -> Result<Option<F::E>, Error> {
@@ -290,7 +299,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 		let span = tracer.start(format!("{} get", F::TABLE_NAME));
 
 		let res = self
-			.get_internal(partition_key, sort_key)
+			.get_internal(c, partition_key, sort_key)
 			.bound_record_duration(&self.data.metrics.get_request_duration)
 			.with_context(Context::current_with_span(span))
 			.await?;
@@ -302,6 +311,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 
 	async fn get_internal(
 		self: &Arc<Self>,
+		c: R::ConsistencyParam,
 		partition_key: &F::P,
 		sort_key: &F::S,
 	) -> Result<Option<F::E>, Error> {
@@ -317,7 +327,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 				&who,
 				rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL)
-					.with_quorum(self.data.replication.read_quorum()),
+					.with_quorum(self.data.replication.read_quorum(c)),
 			)
 			.await?;
 
@@ -359,6 +369,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 
 	pub async fn get_range(
 		self: &Arc<Self>,
+		c: R::ConsistencyParam,
 		partition_key: &F::P,
 		begin_sort_key: Option<F::S>,
 		filter: Option<F::Filter>,
@@ -370,6 +381,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 
 		let res = self
 			.get_range_internal(
+				c,
 				partition_key,
 				begin_sort_key,
 				filter,
@@ -387,6 +399,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 
 	async fn get_range_internal(
 		self: &Arc<Self>,
+		c: R::ConsistencyParam,
 		partition_key: &F::P,
 		begin_sort_key: Option<F::S>,
 		filter: Option<F::Filter>,
@@ -412,7 +425,7 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 				&who,
 				rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL)
-					.with_quorum(self.data.replication.read_quorum()),
+					.with_quorum(self.data.replication.read_quorum(c)),
 			)
 			.await?;
 

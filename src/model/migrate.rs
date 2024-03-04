@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_util::crdt::*;
 use garage_util::data::*;
 use garage_util::encode::nonversioned_decode;
@@ -71,19 +72,23 @@ impl Migrate {
 
 		self.garage
 			.bucket_table
-			.insert(&Bucket {
-				id: bucket_id,
-				state: Deletable::Present(BucketParams {
-					creation_date: now_msec(),
-					authorized_keys: Map::new(),
-					aliases: LwwMap::new(),
-					local_aliases: LwwMap::new(),
-					website_config: Lww::new(website),
-					cors_config: Lww::new(None),
-					lifecycle_config: Lww::new(None),
-					quotas: Lww::new(Default::default()),
-				}),
-			})
+			.insert(
+				(),
+				&Bucket {
+					id: bucket_id,
+					state: Deletable::Present(BucketParams {
+						creation_date: now_msec(),
+						authorized_keys: Map::new(),
+						aliases: LwwMap::new(),
+						local_aliases: LwwMap::new(),
+						consistency_mode: Lww::new(ConsistencyMode::Consistent),
+						website_config: Lww::new(website),
+						cors_config: Lww::new(None),
+						lifecycle_config: Lww::new(None),
+						quotas: Lww::new(Default::default()),
+					}),
+				},
+			)
 			.await?;
 
 		helper.set_global_bucket_alias(bucket_id, &new_name).await?;

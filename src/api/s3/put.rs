@@ -20,6 +20,7 @@ use opentelemetry::{
 };
 
 use garage_net::bytes_buf::BytesBuf;
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_rpc::rpc_helper::OrderTag;
 use garage_table::*;
 use garage_util::async_hash::*;
@@ -71,13 +72,20 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 	content_sha256: Option<FixedBytes32>,
 ) -> Result<(Uuid, String), Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let mut chunker = StreamChunker::new(body, garage.config.block_size);
 	let (first_block_opt, existing_object) = try_join!(
 		chunker.next(),
-		garage.object_table.get(bucket_id, key).map_err(Error::from),
+		garage
+			.object_table
+			.get(c, bucket_id, key)
+			.map_err(Error::from),
 	)?;
 
 	let first_block = first_block_opt.unwrap_or_default();
@@ -120,7 +128,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 		};
 
 		let object = Object::new(*bucket_id, key.into(), vec![object_version]);
-		garage.object_table.insert(&object).await?;
+		garage.object_table.insert(c, &object).await?;
 
 		return Ok((version_uuid, data_md5sum_hex));
 	}
@@ -131,6 +139,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 	let mut interrupted_cleanup = InterruptedCleanup(Some(InterruptedCleanupInner {
 		garage: garage.clone(),
 		bucket_id: *bucket_id,
+		consistency_mode: c,
 		key: key.into(),
 		version_uuid,
 		version_timestamp,
@@ -147,7 +156,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 		},
 	};
 	let object = Object::new(*bucket_id, key.into(), vec![object_version.clone()]);
-	garage.object_table.insert(&object).await?;
+	garage.object_table.insert(c, &object).await?;
 
 	// Initialize corresponding entry in version table
 	// Write this entry now, even with empty block list,
@@ -161,7 +170,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 		},
 		false,
 	);
-	garage.version_table.insert(&version).await?;
+	garage.version_table.insert(c, &version).await?;
 
 	// Transfer data and verify checksum
 	let (total_size, data_md5sum, data_sha256sum, first_block_hash) =
@@ -187,7 +196,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 		first_block_hash,
 	));
 	let object = Object::new(*bucket_id, key.into(), vec![object_version]);
-	garage.object_table.insert(&object).await?;
+	garage.object_table.insert(c, &object).await?;
 
 	// We were not interrupted, everything went fine.
 	// We won't have to clean up on drop.
@@ -235,6 +244,7 @@ pub(crate) async fn check_quotas(
 		bucket_params,
 		..
 	} = ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let quotas = bucket_params.quotas.get();
 	if quotas.max_objects.is_none() && quotas.max_size.is_none() {
@@ -244,7 +254,7 @@ pub(crate) async fn check_quotas(
 	let counters = garage
 		.object_counter_table
 		.table
-		.get(bucket_id, &EmptyKey)
+		.get(c, bucket_id, &EmptyKey)
 		.await?;
 
 	let counters = counters
@@ -451,7 +461,12 @@ async fn put_block_and_meta(
 	block: Bytes,
 	order_tag: OrderTag,
 ) -> Result<(), GarageError> {
-	let ReqCtx { garage, .. } = ctx;
+	let ReqCtx {
+		garage,
+		bucket_params,
+		..
+	} = ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let mut version = version.clone();
 	version.blocks.put(
@@ -474,9 +489,9 @@ async fn put_block_and_meta(
 	futures::try_join!(
 		garage
 			.block_manager
-			.rpc_put_block(hash, block, Some(order_tag)),
-		garage.version_table.insert(&version),
-		garage.block_ref_table.insert(&block_ref),
+			.rpc_put_block(c, hash, block, Some(order_tag)),
+		garage.version_table.insert(c, &version),
+		garage.block_ref_table.insert(c, &block_ref),
 	)?;
 	Ok(())
 }
@@ -529,6 +544,7 @@ struct InterruptedCleanup(Option<InterruptedCleanupInner>);
 struct InterruptedCleanupInner {
 	garage: Arc<Garage>,
 	bucket_id: Uuid,
+	consistency_mode: ConsistencyMode,
 	key: String,
 	version_uuid: Uuid,
 	version_timestamp: u64,
@@ -549,7 +565,12 @@ impl Drop for InterruptedCleanup {
 					state: ObjectVersionState::Aborted,
 				};
 				let object = Object::new(info.bucket_id, info.key, vec![object_version]);
-				if let Err(e) = info.garage.object_table.insert(&object).await {
+				if let Err(e) = info
+					.garage
+					.object_table
+					.insert(info.consistency_mode, &object)
+					.await
+				{
 					warn!("Cannot cleanup after aborted PutObject: {}", e);
 				}
 			});

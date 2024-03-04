@@ -23,6 +23,7 @@ use garage_util::data::*;
 use garage_util::error::*;
 use garage_util::time::now_msec;
 
+use garage_rpc::replication_mode::ConsistencyMode;
 use garage_rpc::system::System;
 use garage_rpc::*;
 
@@ -43,8 +44,8 @@ const TIMESTAMP_KEY: &[u8] = b"timestamp";
 #[derive(Debug, Serialize, Deserialize)]
 enum K2VRpc {
 	Ok,
-	InsertItem(InsertedItem),
-	InsertManyItems(Vec<InsertedItem>),
+	InsertItem(ConsistencyMode, InsertedItem),
+	InsertManyItems(ConsistencyMode, Vec<InsertedItem>),
 	PollItem {
 		key: PollKey,
 		causal_context: CausalContext,
@@ -113,6 +114,7 @@ impl K2VRpcHandler {
 
 	pub async fn insert(
 		&self,
+		consistency_mode: ConsistencyMode,
 		bucket_id: Uuid,
 		partition_key: String,
 		sort_key: String,
@@ -135,12 +137,15 @@ impl K2VRpcHandler {
 			.try_call_many(
 				&self.endpoint,
 				&who,
-				K2VRpc::InsertItem(InsertedItem {
-					partition,
-					sort_key,
-					causal_context,
-					value,
-				}),
+				K2VRpc::InsertItem(
+					consistency_mode,
+					InsertedItem {
+						partition,
+						sort_key,
+						causal_context,
+						value,
+					},
+				),
 				RequestStrategy::with_priority(PRIO_NORMAL).with_quorum(1),
 			)
 			.await?;
@@ -150,6 +155,7 @@ impl K2VRpcHandler {
 
 	pub async fn insert_batch(
 		&self,
+		consistency_mode: ConsistencyMode,
 		bucket_id: Uuid,
 		items: Vec<(String, String, Option<CausalContext>, DvvsValue)>,
 	) -> Result<(), Error> {
@@ -189,7 +195,7 @@ impl K2VRpcHandler {
 				.try_call_many(
 					&self.endpoint,
 					&nodes[..],
-					K2VRpc::InsertManyItems(items),
+					K2VRpc::InsertManyItems(consistency_mode, items),
 					RequestStrategy::with_priority(PRIO_NORMAL).with_quorum(1),
 				)
 				.await?;
@@ -206,6 +212,7 @@ impl K2VRpcHandler {
 
 	pub async fn poll_item(
 		&self,
+		consistency_mode: ConsistencyMode,
 		bucket_id: Uuid,
 		partition_key: String,
 		sort_key: String,
@@ -235,7 +242,12 @@ impl K2VRpcHandler {
 				timeout_msec,
 			},
 			RequestStrategy::with_priority(PRIO_NORMAL)
-				.with_quorum(self.item_table.data.replication.read_quorum())
+				.with_quorum(
+					self.item_table
+						.data
+						.replication
+						.read_quorum(consistency_mode),
+				)
 				.send_all_at_once(true)
 				.without_timeout(),
 		);
@@ -266,6 +278,7 @@ impl K2VRpcHandler {
 
 	pub async fn poll_range(
 		&self,
+		consistency_mode: ConsistencyMode,
 		range: PollRange,
 		seen_str: Option<String>,
 		timeout_msec: u64,
@@ -288,7 +301,11 @@ impl K2VRpcHandler {
 			.data
 			.replication
 			.read_nodes(&range.partition.hash());
-		let quorum = self.item_table.data.replication.read_quorum();
+		let quorum = self
+			.item_table
+			.data
+			.replication
+			.read_quorum(consistency_mode);
 		let msg = K2VRpc::PollRange {
 			range,
 			seen_str,
@@ -376,7 +393,11 @@ impl K2VRpcHandler {
 
 	// ---- internal handlers ----
 
-	async fn handle_insert(&self, item: &InsertedItem) -> Result<K2VRpc, Error> {
+	async fn handle_insert(
+		&self,
+		c: ConsistencyMode,
+		item: &InsertedItem,
+	) -> Result<K2VRpc, Error> {
 		let new = {
 			let local_timestamp_tree = self.local_timestamp_tree.lock().unwrap();
 			self.local_insert(&local_timestamp_tree, item)?
@@ -384,13 +405,17 @@ impl K2VRpcHandler {
 
 		// Propagate to rest of network
 		if let Some(updated) = new {
-			self.item_table.insert(&updated).await?;
+			self.item_table.insert(c, &updated).await?;
 		}
 
 		Ok(K2VRpc::Ok)
 	}
 
-	async fn handle_insert_many(&self, items: &[InsertedItem]) -> Result<K2VRpc, Error> {
+	async fn handle_insert_many(
+		&self,
+		c: ConsistencyMode,
+		items: &[InsertedItem],
+	) -> Result<K2VRpc, Error> {
 		let mut updated_vec = vec![];
 
 		{
@@ -406,7 +431,7 @@ impl K2VRpcHandler {
 
 		// Propagate to rest of network
 		if !updated_vec.is_empty() {
-			self.item_table.insert_many(&updated_vec).await?;
+			self.item_table.insert_many(c, &updated_vec).await?;
 		}
 
 		Ok(K2VRpc::Ok)
@@ -546,8 +571,8 @@ impl K2VRpcHandler {
 impl EndpointHandler<K2VRpc> for K2VRpcHandler {
 	async fn handle(self: &Arc<Self>, message: &K2VRpc, _from: NodeID) -> Result<K2VRpc, Error> {
 		match message {
-			K2VRpc::InsertItem(item) => self.handle_insert(item).await,
-			K2VRpc::InsertManyItems(items) => self.handle_insert_many(&items[..]).await,
+			K2VRpc::InsertItem(c, item) => self.handle_insert(*c, item).await,
+			K2VRpc::InsertManyItems(c, items) => self.handle_insert_many(*c, &items[..]).await,
 			K2VRpc::PollItem {
 				key,
 				causal_context,

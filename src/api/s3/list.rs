@@ -63,11 +63,17 @@ pub async fn handle_list(
 	ctx: ReqCtx,
 	query: &ListObjectsQuery,
 ) -> Result<Response<ResBody>, Error> {
-	let ReqCtx { garage, .. } = &ctx;
+	let ReqCtx {
+		garage,
+		bucket_params,
+		..
+	} = &ctx;
+	let c = *bucket_params.consistency_mode.get();
 	let io = |bucket, key, count| {
 		let t = &garage.object_table;
 		async move {
 			t.get_range(
+				c,
 				&bucket,
 				key,
 				Some(ObjectFilter::IsData),
@@ -169,12 +175,18 @@ pub async fn handle_list_multipart_upload(
 	ctx: ReqCtx,
 	query: &ListMultipartUploadsQuery,
 ) -> Result<Response<ResBody>, Error> {
-	let ReqCtx { garage, .. } = &ctx;
+	let ReqCtx {
+		garage,
+		bucket_params,
+		..
+	} = &ctx;
+	let c = *bucket_params.consistency_mode.get();
 
 	let io = |bucket, key, count| {
 		let t = &garage.object_table;
 		async move {
 			t.get_range(
+				c,
 				&bucket,
 				key,
 				Some(ObjectFilter::IsUploading {

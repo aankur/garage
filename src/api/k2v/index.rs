@@ -19,7 +19,10 @@ pub async fn handle_read_index(
 	reverse: Option<bool>,
 ) -> Result<Response<ResBody>, Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = &ctx;
 
 	let reverse = reverse.unwrap_or(false);
@@ -39,6 +42,7 @@ pub async fn handle_read_index(
 		limit,
 		Some((DeletedFilter::NotDeleted, node_id_vec)),
 		EnumerationOrder::from_reverse(reverse),
+		*bucket_params.consistency_mode.get(),
 	)
 	.await?;
 

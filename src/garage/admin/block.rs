@@ -30,7 +30,14 @@ impl AdminRpcHandler {
 		let block_refs = self
 			.garage
 			.block_ref_table
-			.get_range(&hash, None, None, 10000, Default::default())
+			.get_range(
+				Default::default(),
+				&hash,
+				None,
+				None,
+				10000,
+				Default::default(),
+			)
 			.await?;
 		let mut versions = vec![];
 		let mut uploads = vec![];
@@ -38,11 +45,16 @@ impl AdminRpcHandler {
 			if let Some(v) = self
 				.garage
 				.version_table
-				.get(&br.version, &EmptyKey)
+				.get(Default::default(), &br.version, &EmptyKey)
 				.await?
 			{
 				if let VersionBacklink::MultipartUpload { upload_id } = &v.backlink {
-					if let Some(u) = self.garage.mpu_table.get(upload_id, &EmptyKey).await? {
+					if let Some(u) = self
+						.garage
+						.mpu_table
+						.get(Default::default(), upload_id, &EmptyKey)
+						.await?
+					{
 						uploads.push(u);
 					}
 				}
@@ -108,14 +120,21 @@ impl AdminRpcHandler {
 			let block_refs = self
 				.garage
 				.block_ref_table
-				.get_range(&hash, None, None, 10000, Default::default())
+				.get_range(
+					Default::default(),
+					&hash,
+					None,
+					None,
+					10000,
+					Default::default(),
+				)
 				.await?;
 
 			for br in block_refs {
 				if let Some(version) = self
 					.garage
 					.version_table
-					.get(&br.version, &EmptyKey)
+					.get(Default::default(), &br.version, &EmptyKey)
 					.await?
 				{
 					self.handle_block_purge_version_backlink(
@@ -127,7 +146,10 @@ impl AdminRpcHandler {
 
 					if !version.deleted.get() {
 						let deleted_version = Version::new(version.uuid, version.backlink, true);
-						self.garage.version_table.insert(&deleted_version).await?;
+						self.garage
+							.version_table
+							.insert(Default::default(), &deleted_version)
+							.await?;
 						ver_dels += 1;
 					}
 				}
@@ -152,11 +174,19 @@ impl AdminRpcHandler {
 		let (bucket_id, key, ov_id) = match &version.backlink {
 			VersionBacklink::Object { bucket_id, key } => (*bucket_id, key.clone(), version.uuid),
 			VersionBacklink::MultipartUpload { upload_id } => {
-				if let Some(mut mpu) = self.garage.mpu_table.get(upload_id, &EmptyKey).await? {
+				if let Some(mut mpu) = self
+					.garage
+					.mpu_table
+					.get(Default::default(), upload_id, &EmptyKey)
+					.await?
+				{
 					if !mpu.deleted.get() {
 						mpu.parts.clear();
 						mpu.deleted.set();
-						self.garage.mpu_table.insert(&mpu).await?;
+						self.garage
+							.mpu_table
+							.insert(Default::default(), &mpu)
+							.await?;
 						*mpu_dels += 1;
 					}
 					(mpu.bucket_id, mpu.key.clone(), *upload_id)
@@ -166,7 +196,12 @@ impl AdminRpcHandler {
 			}
 		};
 
-		if let Some(object) = self.garage.object_table.get(&bucket_id, &key).await? {
+		if let Some(object) = self
+			.garage
+			.object_table
+			.get(Default::default(), &bucket_id, &key)
+			.await?
+		{
 			let ov = object.versions().iter().rev().find(|v| v.is_complete());
 			if let Some(ov) = ov {
 				if ov.uuid == ov_id {
@@ -180,7 +215,10 @@ impl AdminRpcHandler {
 							state: ObjectVersionState::Complete(ObjectVersionData::DeleteMarker),
 						}],
 					);
-					self.garage.object_table.insert(&deleted_object).await?;
+					self.garage
+						.object_table
+						.insert(Default::default(), &deleted_object)
+						.await?;
 					*obj_dels += 1;
 				}
 			}
