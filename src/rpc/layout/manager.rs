@@ -21,6 +21,7 @@ use crate::system::*;
 pub struct LayoutManager {
 	node_id: Uuid,
 	replication_factor: ReplicationFactor,
+	consistency_mode: ConsistencyMode,
 	persist_cluster_layout: Persister<LayoutHistory>,
 
 	layout: Arc<RwLock<LayoutHelper>>,
@@ -64,12 +65,8 @@ impl LayoutManager {
 			}
 		};
 
-		let mut cluster_layout = LayoutHelper::new(
-			replication_factor,
-			consistency_mode,
-			cluster_layout,
-			Default::default(),
-		);
+		let mut cluster_layout =
+			LayoutHelper::new(replication_factor, cluster_layout, Default::default());
 		cluster_layout.update_trackers(node_id.into());
 
 		let layout = Arc::new(RwLock::new(cluster_layout));
@@ -85,6 +82,7 @@ impl LayoutManager {
 		Ok(Arc::new(Self {
 			node_id: node_id.into(),
 			replication_factor,
+			consistency_mode,
 			persist_cluster_layout,
 			layout,
 			change_notify,
@@ -139,6 +137,14 @@ impl LayoutManager {
 				layout.update_trackers.clone(),
 			));
 		}
+	}
+
+	pub fn read_quorum(self: &Arc<Self>) -> usize {
+		self.replication_factor.read_quorum(self.consistency_mode)
+	}
+
+	pub fn write_quorum(self: &Arc<Self>) -> usize {
+		self.replication_factor.write_quorum(self.consistency_mode)
 	}
 
 	// ---- ACK LOCKING ----

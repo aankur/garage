@@ -230,18 +230,8 @@ impl Garage {
 		info!("Initialize membership management system...");
 		let system = System::new(network_key, replication_factor, consistency_mode, &config)?;
 
-		let data_rep_param = TableShardedReplication {
-			system: system.clone(),
-			replication_factor: replication_factor.into(),
-			write_quorum: replication_factor.write_quorum(consistency_mode),
-			read_quorum: 1,
-		};
-
 		let meta_rep_param = TableShardedReplication {
-			system: system.clone(),
-			replication_factor: replication_factor.into(),
-			write_quorum: replication_factor.write_quorum(consistency_mode),
-			read_quorum: replication_factor.read_quorum(consistency_mode),
+			layout_manager: system.layout_manager.clone(),
 		};
 
 		let control_rep_param = TableFullReplication {
@@ -254,7 +244,6 @@ impl Garage {
 			config.data_dir.clone(),
 			config.data_fsync,
 			config.compression_level,
-			data_rep_param,
 			system.clone(),
 		)?;
 		block_manager.register_bg_vars(&mut bg_vars);

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use garage_util::data::*;
 
 use super::*;
-use crate::replication_mode::*;
+use crate::replication_mode::ReplicationFactor;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct RpcLayoutDigest {
@@ -30,7 +30,6 @@ pub struct SyncLayoutDigest {
 
 pub struct LayoutHelper {
 	replication_factor: ReplicationFactor,
-	consistency_mode: ConsistencyMode,
 	layout: Option<LayoutHistory>,
 
 	// cached values
@@ -59,7 +58,6 @@ impl Deref for LayoutHelper {
 impl LayoutHelper {
 	pub fn new(
 		replication_factor: ReplicationFactor,
-		consistency_mode: ConsistencyMode,
 		mut layout: LayoutHistory,
 		mut ack_lock: HashMap<u64, AtomicUsize>,
 	) -> Self {
@@ -67,13 +65,6 @@ impl LayoutHelper {
 		// and calculations on the layout history to make sure things are
 		// correct and we have rapid access to important values such as
 		// the layout versions to use when reading to ensure consistency.
-
-		if consistency_mode != ConsistencyMode::Consistent {
-			// Fast path for when no consistency is required.
-			// In this case we only need to keep the last version of the layout,
-			// we don't care about coordinating stuff in the cluster.
-			layout.keep_current_version_only();
-		}
 
 		layout.cleanup_old_versions();
 
@@ -117,7 +108,6 @@ impl LayoutHelper {
 
 		LayoutHelper {
 			replication_factor,
-			consistency_mode,
 			layout: Some(layout),
 			ack_map_min,
 			sync_map_min,
@@ -143,7 +133,6 @@ impl LayoutHelper {
 		if changed {
 			*self = Self::new(
 				self.replication_factor,
-				self.consistency_mode,
 				self.layout.take().unwrap(),
 				std::mem::take(&mut self.ack_lock),
 			);

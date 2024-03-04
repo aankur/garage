@@ -33,8 +33,6 @@ use garage_rpc::rpc_helper::OrderTag;
 use garage_rpc::system::System;
 use garage_rpc::*;
 
-use garage_table::replication::{TableReplication, TableShardedReplication};
-
 use crate::block::*;
 use crate::layout::*;
 use crate::metrics::*;
@@ -74,9 +72,6 @@ impl Rpc for BlockRpc {
 
 /// The block manager, handling block exchange between nodes, and block storage on local node
 pub struct BlockManager {
-	/// Replication strategy, allowing to find on which node blocks should be located
-	pub replication: TableShardedReplication,
-
 	/// Data layout
 	pub(crate) data_layout: ArcSwap<DataLayout>,
 	/// Data layout persister
@@ -122,7 +117,6 @@ impl BlockManager {
 		data_dir: DataDirEnum,
 		data_fsync: bool,
 		compression_level: Option<i32>,
-		replication: TableShardedReplication,
 		system: Arc<System>,
 	) -> Result<Arc<Self>, Error> {
 		// Load or compute layout, i.e. assignment of data blocks to the different data directories
@@ -163,7 +157,6 @@ impl BlockManager {
 		let scrub_persister = PersisterShared::new(&system.metadata_dir, "scrub_info");
 
 		let block_manager = Arc::new(Self {
-			replication,
 			data_layout: ArcSwap::new(Arc::new(data_layout)),
 			data_layout_persister,
 			data_fsync,
@@ -354,7 +347,7 @@ impl BlockManager {
 		data: Bytes,
 		order_tag: Option<OrderTag>,
 	) -> Result<(), Error> {
-		let who = self.replication.write_sets(&hash);
+		let who = self.system.layout_manager.write_sets_of(&hash);
 
 		let (header, bytes) = DataBlock::from_buffer(data, self.compression_level)
 			.await
@@ -374,7 +367,7 @@ impl BlockManager {
 				who.as_ref(),
 				put_block_rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL | PRIO_SECONDARY)
-					.with_quorum(self.replication.write_quorum()),
+					.with_quorum(self.system.layout_manager.write_quorum()),
 			)
 			.await?;
 

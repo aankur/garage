@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use garage_rpc::layout::manager::LayoutManager;
 use garage_rpc::layout::*;
-use garage_rpc::system::System;
 use garage_util::data::*;
 
 use crate::replication::*;
@@ -15,42 +15,36 @@ use crate::replication::*;
 #[derive(Clone)]
 pub struct TableShardedReplication {
 	/// The membership manager of this node
-	pub system: Arc<System>,
-	/// How many time each data should be replicated
-	pub replication_factor: usize,
-	/// How many nodes to contact for a read, should be at most `replication_factor`
-	pub read_quorum: usize,
-	/// How many nodes to contact for a write, should be at most `replication_factor`
-	pub write_quorum: usize,
+	pub layout_manager: Arc<LayoutManager>,
 }
 
 impl TableReplication for TableShardedReplication {
 	type WriteSets = WriteLock<Vec<Vec<Uuid>>>;
 
 	fn storage_nodes(&self, hash: &Hash) -> Vec<Uuid> {
-		self.system.cluster_layout().storage_nodes_of(hash)
+		self.layout_manager.layout().storage_nodes_of(hash)
 	}
 
 	fn read_nodes(&self, hash: &Hash) -> Vec<Uuid> {
-		self.system.cluster_layout().read_nodes_of(hash)
+		self.layout_manager.layout().read_nodes_of(hash)
 	}
 	fn read_quorum(&self) -> usize {
-		self.read_quorum
+		self.layout_manager.read_quorum()
 	}
 
 	fn write_sets(&self, hash: &Hash) -> Self::WriteSets {
-		self.system.layout_manager.write_sets_of(hash)
+		self.layout_manager.write_sets_of(hash)
 	}
 	fn write_quorum(&self) -> usize {
-		self.write_quorum
+		self.layout_manager.write_quorum()
 	}
 
 	fn partition_of(&self, hash: &Hash) -> Partition {
-		self.system.cluster_layout().current().partition_of(hash)
+		self.layout_manager.layout().current().partition_of(hash)
 	}
 
 	fn sync_partitions(&self) -> SyncPartitions {
-		let layout = self.system.cluster_layout();
+		let layout = self.layout_manager.layout();
 		let layout_version = layout.ack_map_min();
 
 		let mut partitions = layout

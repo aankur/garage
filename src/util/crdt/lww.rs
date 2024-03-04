@@ -84,7 +84,7 @@ where
 		&self.v
 	}
 
-	/// Take the value inside the CRDT (discards the timesamp)
+	/// Take the value inside the CRDT (discards the timestamp)
 	pub fn take(self) -> T {
 		self.v
 	}
