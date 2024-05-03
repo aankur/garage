@@ -65,10 +65,13 @@ impl SystemMetrics {
 				.with_description("Garage build info")
 				.init(),
 			_replication_factor: {
-				let replication_factor = system.replication_factor;
+				let system = system.clone();
 				meter
 					.u64_value_observer("garage_replication_factor", move |observer| {
-						observer.observe(replication_factor.replication_factor() as u64, &[])
+						observer.observe(
+							system.cluster_layout().current().replication_factor as u64,
+							&[],
+						)
 					})
 					.with_description("Garage replication factor setting")
 					.init()

@@ -38,20 +38,11 @@ pub struct Config {
 	)]
 	pub block_size: usize,
 
-	/// Number of replicas. Can be any positive integer, but uneven numbers are more favorable.
-	/// - 1 for single-node clusters, or to disable replication
-	/// - 3 is the recommended and supported setting.
-	#[serde(default)]
-	pub replication_factor: Option<usize>,
-
 	/// Consistency mode for all for requests through this node
 	/// - Degraded -> Disable read quorum
 	/// - Dangerous -> Disable read and write quorum
 	#[serde(default = "default_consistency_mode")]
 	pub consistency_mode: String,
-
-	/// Legacy option
-	pub replication_mode: Option<String>,
 
 	/// Zstd compression level used on data blocks
 	#[serde(

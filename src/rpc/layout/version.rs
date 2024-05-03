@@ -11,6 +11,7 @@ use garage_util::error::*;
 
 use super::graph_algo::*;
 use super::*;
+use crate::replication_mode::ConsistencyMode;
 
 // The Message type will be used to collect information on the algorithm.
 pub type Message = Vec<String>;
@@ -842,5 +843,21 @@ impl LayoutVersion {
 		msg.push(format_table::format_table_to_string(table));
 
 		Ok(msg)
+	}
+
+	pub fn read_quorum(&self, consistency_mode: ConsistencyMode) -> usize {
+		match consistency_mode {
+			ConsistencyMode::Dangerous | ConsistencyMode::Degraded => 1,
+			ConsistencyMode::Consistent => self.replication_factor.div_ceil(2),
+		}
+	}
+
+	pub fn write_quorum(&self, consistency_mode: ConsistencyMode) -> usize {
+		match consistency_mode {
+			ConsistencyMode::Dangerous => 1,
+			ConsistencyMode::Degraded | ConsistencyMode::Consistent => {
+				(self.replication_factor + 1) - self.read_quorum(ConsistencyMode::Consistent)
+			}
+		}
 	}
 }

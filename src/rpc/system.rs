@@ -112,8 +112,6 @@ pub struct System {
 
 	metrics: ArcSwapOption<SystemMetrics>,
 
-	pub(crate) replication_factor: ReplicationFactor,
-
 	/// Path to metadata directory
 	pub metadata_dir: PathBuf,
 	/// Path to data directory
@@ -124,9 +122,6 @@ pub struct System {
 pub struct NodeStatus {
 	/// Hostname of the node
 	pub hostname: Option<String>,
-
-	/// Replication factor configured on the node
-	pub replication_factor: usize,
 
 	/// Cluster layout digest
 	pub layout_digest: RpcLayoutDigest,
@@ -242,7 +237,6 @@ impl System {
 	/// Create this node's membership manager
 	pub fn new(
 		network_key: NetworkKey,
-		replication_factor: ReplicationFactor,
 		consistency_mode: ConsistencyMode,
 		config: &Config,
 	) -> Result<Arc<Self>, Error> {
@@ -279,11 +273,10 @@ impl System {
 			netapp.id,
 			system_endpoint.clone(),
 			peering.clone(),
-			replication_factor,
 			consistency_mode,
 		)?;
 
-		let mut local_status = NodeStatus::initial(replication_factor, &layout_manager);
+		let mut local_status = NodeStatus::initial(&layout_manager);
 		local_status.update_disk_usage(&config.metadata_dir, &config.data_dir);
 
 		// ---- if enabled, set up additionnal peer discovery methods ----
@@ -314,7 +307,6 @@ impl System {
 			netapp: netapp.clone(),
 			peering: peering.clone(),
 			system_endpoint,
-			replication_factor,
 			rpc_listen_addr: config.rpc_bind_addr,
 			rpc_public_addr,
 			bootstrap_peers: config.bootstrap_peers.clone(),
@@ -429,10 +421,6 @@ impl System {
 	}
 
 	pub fn health(&self) -> ClusterHealth {
-		let quorum = self
-			.replication_factor
-			.write_quorum(ConsistencyMode::Consistent);
-
 		// Gather information about running nodes.
 		// Technically, `nodes` contains currently running nodes, as well
 		// as nodes that this Garage process has been connected to at least
@@ -465,6 +453,7 @@ impl System {
 		// Determine the number of partitions that have:
 		// - a quorum of up nodes for all write sets (i.e. are available)
 		// - for which all nodes in all write sets are up (i.e. are fully healthy)
+		let quorum = layout.current().write_quorum(ConsistencyMode::Consistent);
 		let partitions = layout.current().partitions().collect::<Vec<_>>();
 		let mut partitions_quorum = 0;
 		let mut partitions_all_ok = 0;
@@ -580,13 +569,6 @@ impl System {
 	) -> Result<SystemRpc, Error> {
 		let local_info = self.local_status.read().unwrap();
 
-		if local_info.replication_factor < info.replication_factor {
-			error!("Some node have a higher replication factor ({}) than this one ({}). This is not supported and will lead to data corruption. Shutting down for safety.",
-				info.replication_factor,
-				local_info.replication_factor);
-			std::process::exit(1);
-		}
-
 		self.layout_manager
 			.handle_advertise_status(from, &info.layout_digest);
 
@@ -635,7 +617,7 @@ impl System {
 				.count();
 
 			let not_configured = !self.cluster_layout().is_check_ok();
-			let no_peers = n_connected < self.replication_factor.into();
+			let no_peers = n_connected < self.cluster_layout().current().replication_factor;
 			let expected_n_nodes = self.cluster_layout().all_nodes().len();
 			let bad_peers = n_connected != expected_n_nodes;
 
@@ -781,14 +763,13 @@ impl EndpointHandler<SystemRpc> for System {
 }
 
 impl NodeStatus {
-	fn initial(replication_factor: ReplicationFactor, layout_manager: &LayoutManager) -> Self {
+	fn initial(layout_manager: &LayoutManager) -> Self {
 		NodeStatus {
 			hostname: Some(
 				gethostname::gethostname()
 					.into_string()
 					.unwrap_or_else(|_| "<invalid utf-8>".to_string()),
 			),
-			replication_factor: replication_factor.into(),
 			layout_digest: layout_manager.layout().digest(),
 			meta_disk_avail: None,
 			data_disk_avail: None,
@@ -798,7 +779,6 @@ impl NodeStatus {
 	fn unknown() -> Self {
 		NodeStatus {
 			hostname: None,
-			replication_factor: 0,
 			layout_digest: Default::default(),
 			meta_disk_avail: None,
 			data_disk_avail: None,

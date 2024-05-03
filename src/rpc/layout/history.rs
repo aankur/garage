@@ -9,8 +9,8 @@ use super::*;
 use crate::replication_mode::*;
 
 impl LayoutHistory {
-	pub fn new(replication_factor: ReplicationFactor) -> Self {
-		let version = LayoutVersion::new(replication_factor.into());
+	pub fn new() -> Self {
+		let version = LayoutVersion::new(3);
 
 		let staging = LayoutStaging {
 			parameters: Lww::<LayoutParameters>::new(version.parameters),
@@ -123,11 +123,7 @@ impl LayoutHistory {
 		}
 	}
 
-	pub(crate) fn calculate_sync_map_min_with_quorum(
-		&self,
-		replication_factor: ReplicationFactor,
-		all_nongateway_nodes: &[Uuid],
-	) -> u64 {
+	pub(crate) fn calculate_sync_map_min_with_quorum(&self, all_nongateway_nodes: &[Uuid]) -> u64 {
 		// This function calculates the minimum layout version from which
 		// it is safe to read if we want to maintain read-after-write consistency.
 		// In the general case the computation can be a bit expensive so
@@ -139,7 +135,7 @@ impl LayoutHistory {
 			return self.current().version;
 		}
 
-		let quorum = replication_factor.write_quorum(ConsistencyMode::Consistent);
+		let quorum = self.current().write_quorum(ConsistencyMode::Consistent);
 
 		let min_version = self.min_stored();
 		let global_min = self
@@ -153,7 +149,11 @@ impl LayoutHistory {
 		// This is represented by reading from the layout with version
 		// number global_min, the smallest layout version for which all nodes
 		// have completed a sync.
-		if quorum == self.current().replication_factor {
+		if self
+			.versions
+			.iter()
+			.all(|v| v.write_quorum(ConsistencyMode::Consistent) == v.replication_factor)
+		{
 			return global_min;
 		}
 

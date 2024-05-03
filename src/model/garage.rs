@@ -40,9 +40,6 @@ pub struct Garage {
 	/// The set of background variables that can be viewed/modified at runtime
 	pub bg_vars: vars::BgVars,
 
-	/// The replication factor of this cluster
-	pub replication_factor: ReplicationFactor,
-
 	/// The local database
 	pub db: db::Db,
 	/// The membership manager
@@ -143,26 +140,23 @@ impl Garage {
 		.and_then(|x| NetworkKey::from_slice(&x))
 		.ok_or_message("Invalid RPC secret key")?;
 
-		let (replication_factor, consistency_mode) = parse_replication_mode(&config)?;
+		let consistency_mode = ConsistencyMode::parse(&config.consistency_mode)
+			.ok_or_message("Invalid consistency_mode in config file.")?;
 
 		info!("Initialize background variable system...");
 		let mut bg_vars = vars::BgVars::new();
 
 		info!("Initialize membership management system...");
-		let system = System::new(network_key, replication_factor, consistency_mode, &config)?;
+		let system = System::new(network_key, consistency_mode, &config)?;
 
 		let data_rep_param = TableShardedReplication {
-			system: system.clone(),
-			replication_factor: replication_factor.into(),
-			write_quorum: replication_factor.write_quorum(consistency_mode),
-			read_quorum: 1,
+			layout_manager: system.layout_manager.clone(),
+			consistency_mode,
 		};
 
 		let meta_rep_param = TableShardedReplication {
-			system: system.clone(),
-			replication_factor: replication_factor.into(),
-			write_quorum: replication_factor.write_quorum(consistency_mode),
-			read_quorum: replication_factor.read_quorum(consistency_mode),
+			layout_manager: system.layout_manager.clone(),
+			consistency_mode,
 		};
 
 		let control_rep_param = TableFullReplication {
@@ -259,7 +253,6 @@ impl Garage {
 		Ok(Arc::new(Self {
 			config,
 			bg_vars,
-			replication_factor,
 			db,
 			system,
 			block_manager,
