@@ -44,6 +44,9 @@ pub struct Config {
 	#[serde(default = "default_consistency_mode")]
 	pub consistency_mode: String,
 
+	/// Legacy option
+	pub replication_mode: Option<String>,
+
 	/// Zstd compression level used on data blocks
 	#[serde(
 		deserialize_with = "deserialize_compression",
